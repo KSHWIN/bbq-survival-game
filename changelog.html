@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>烤肉遊戲 更新日誌</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Microsoft JhengHei', 'Noto Sans TC', sans-serif;
+      background: #1a0a00;
+      color: #f0d9b0;
+      min-height: 100vh;
+    }
+    .header {
+      background: linear-gradient(135deg, #3d1a00, #7a3300);
+      padding: 24px 32px;
+      display: flex; align-items: center; gap: 16px;
+      border-bottom: 2px solid #ff6600;
+    }
+    .header h1 { font-size: 1.6rem; color: #ffcc44; }
+    .header .sub { font-size: 0.85rem; color: #cc9966; margin-top: 4px; }
+    .back-btn {
+      margin-left: auto;
+      background: rgba(255,102,0,0.2);
+      border: 1px solid #ff6600;
+      color: #ffcc44;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      text-decoration: none;
+    }
+    .back-btn:hover { background: rgba(255,102,0,0.4); }
+    .container { max-width: 760px; margin: 0 auto; padding: 32px 24px; }
+    .timeline { position: relative; }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 16px; top: 8px; bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, #ff6600, transparent);
+    }
+    .entry {
+      position: relative;
+      margin-bottom: 32px;
+      padding-left: 48px;
+    }
+    .entry::before {
+      content: '🔥';
+      position: absolute;
+      left: 4px; top: 4px;
+      font-size: 1.1rem;
+    }
+    .entry-date {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #ffcc44;
+      margin-bottom: 10px;
+      border-bottom: 1px solid rgba(255,102,0,0.3);
+      padding-bottom: 6px;
+    }
+    .entry-body ul {
+      list-style: none;
+      padding: 0;
+    }
+    .entry-body li {
+      font-size: 0.92rem;
+      color: #ddc499;
+      padding: 4px 0 4px 20px;
+      position: relative;
+      line-height: 1.5;
+    }
+    .entry-body li::before {
+      content: '▸';
+      position: absolute;
+      left: 0;
+      color: #ff6600;
+    }
+    .loading {
+      text-align: center;
+      padding: 60px;
+      color: #cc9966;
+      font-size: 1.1rem;
+    }
+    .error { color: #ff6666; text-align: center; padding: 40px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>🥩 烤肉遊戲 更新日誌</h1>
+      <div class="sub">每次修改都會記錄在這裡</div>
+    </div>
+    <a class="back-btn" href="index.html">← 回遊戲</a>
+  </div>
+  <div class="container">
+    <div class="timeline" id="timeline">
+      <div class="loading">載入中…</div>
+    </div>
+  </div>
+
+  <script>
+    fetch('CHANGELOG.md')
+      .then(r => { if (!r.ok) throw new Error('無法載入'); return r.text(); })
+      .then(md => {
+        const tl = document.getElementById('timeline');
+        tl.innerHTML = '';
+        // 切成各版本區塊（以 ## 分割）
+        const blocks = md.split(/^## /m).filter(b => b.trim());
+        blocks.forEach(block => {
+          const lines = block.trim().split('\n');
+          const dateStr = lines[0].trim();
+          if (!dateStr) return;
+          const items = lines.slice(1)
+            .filter(l => l.trim().startsWith('-'))
+            .map(l => l.trim().replace(/^-\s*/, ''));
+          const entry = document.createElement('div');
+          entry.className = 'entry';
+          entry.innerHTML = `
+            <div class="entry-date">${dateStr}</div>
+            <div class="entry-body">
+              <ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>
+            </div>`;
+          tl.appendChild(entry);
+        });
+        if (tl.children.length === 0) tl.innerHTML = '<div class="loading">還沒有紀錄</div>';
+      })
+      .catch(() => {
+        document.getElementById('timeline').innerHTML =
+          '<div class="error">⚠ 無法載入更新日誌，請確認 CHANGELOG.md 存在。</div>';
+      });
+  </script>
+</body>
+</html>
