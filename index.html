@@ -2927,6 +2927,14 @@ class GameScene extends Phaser.Scene {
       const edx=tgt.x-e.x, edy=tgt.y-e.y;
       const edist=Math.hypot(edx,edy)||1;
       e.chargeTimer-=dt; e.pushTimer-=dt;
+      // AI 醬油自動佈陣
+      if(e.activeEffects&&e.activeEffects.sauceCharge>0){
+        const _sdist=Math.hypot(this.p.x-e.x,this.p.y-e.y);
+        if(_sdist<60||e.activeEffects.sauceCharge<=dt){
+          this._deploySaucePool(e.label,e.x,e.y);
+          e.activeEffects.sauceCharge=0;
+        }
+      }
       // activeEffects 遞減
       if(e.activeEffects) Object.keys(e.activeEffects).forEach(k=>{
         if(e.activeEffects[k]>0) e.activeEffects[k]=Math.max(0,e.activeEffects[k]-dt);
@@ -2943,14 +2951,6 @@ class GameScene extends Phaser.Scene {
             duration:300,ease:'Cubic.easeOut',
             onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this.subTxt.setText('被大蒜爆發推落！');this.endGame(false);}}});
           this.showPop('💥 '+e.label+' 大蒜爆發！');
-        }
-      }
-      // AI 醬油自動佈陣
-      if(e.activeEffects&&e.activeEffects.sauceCharge>0){
-        const _sdist=Math.hypot(this.p.x-e.x,this.p.y-e.y);
-        if(_sdist<60||e.activeEffects.sauceCharge<=dt){
-          this._deploySaucePool(e.label,e.x,e.y);
-          e.activeEffects.sauceCharge=0;
         }
       }
       // 躲火（弱遲鈍，強靈敏）
@@ -3127,6 +3127,10 @@ class GameScene extends Phaser.Scene {
     }
     // 道具效果倒計時
     const ae2=this.activeEffects;
+    // 醬油自動佈陣（倒數歸零）
+    if(ae2.sauceCharge>0&&ae2.sauceCharge-dt<=0){
+      this._deploySaucePool('player',this.p.x,this.p.y);
+    }
     Object.keys(ae2).forEach(k=>{if(ae2[k]>0)ae2[k]=Math.max(0,ae2[k]-dt);});
     if(this.enemyCC.stun>0)this.enemyCC.stun=Math.max(0,this.enemyCC.stun-dt);
     if(this.enemyCC.slow>0)this.enemyCC.slow=Math.max(0,this.enemyCC.slow-dt);
@@ -3159,10 +3163,6 @@ class GameScene extends Phaser.Scene {
     this.updateRandEvents(dt); if(!this.alive) return;
     this.updateShrink(dt);    if(!this.alive) return;
     this.updateHoles(dt);     if(!this.alive) return;
-    // 醬油自動佈陣（倒數歸零）
-    if(ae2.sauceCharge>0&&ae2.sauceCharge-dt<=0){
-      this._deploySaucePool('player',this.p.x,this.p.y);
-    }
     // 醬油灘更新
     this.saucePools=this.saucePools.filter(sp=>{
       sp.life-=dt;
