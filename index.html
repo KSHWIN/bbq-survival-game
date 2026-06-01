@@ -1413,16 +1413,18 @@ class SelectScene extends Phaser.Scene {
       mk(()=>this.add.text(PX-PW/2+34,iy,it.icon+' '+it.name,{fontSize:'15px',color:'#ffeeaa',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(100));
       mk(()=>this.add.text(PX-PW/2+34,iy+16,it.eff,{fontSize:'12px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(100));
     });
-    // 更多好道具標題
-    mk(()=>this.add.text(PX+PW/4,PY-PH/2+54,'🟢 好道具（撿到有益）',{fontSize:'14px',color:'#88ffaa',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(100));
-    const BADS=[
-      {icon:'🍶',name:'醬油',     eff:'持有 5 秒後自動，S 鍵可提前佈陣'},
-      {icon:'🌶',name:'胡椒粉',   eff:'加速 ×1.5，結束後哈啾擊退'},
+    // 右側：互動效果說明
+    mk(()=>this.add.text(PX+PW/4,PY-PH/2+54,'⚡ 互動效果',{fontSize:'14px',color:'#ffdd88',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(100));
+    const COMBOS=[
+      {icon:'🪞',name:'鋁箔反彈',  eff:'持鋁箔被大蒜玩家推 → 攻擊者飛出'},
+      {icon:'💥',name:'大蒜最後爆',eff:'大蒜倒數到 1 秒 → AOE 爆開敵人'},
+      {icon:'🔥',name:'互撞油火',  eff:'互推落地噴油漬 → 1.5 秒點燃青綠火'},
+      {icon:'🤖',name:'AI 也撿道具',eff:'AI 會撿場上道具並使用'},
     ];
-    BADS.forEach((it,i)=>{
-      const iy=PY-PH/2+76+i*30;
-      mk(()=>this.add.text(PX+14,iy,it.icon+' '+it.name,{fontSize:'15px',color:'#ffeeaa',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(100));
-      mk(()=>this.add.text(PX+14,iy+16,it.eff,{fontSize:'12px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(100));
+    COMBOS.forEach((it,i)=>{
+      const iy=PY-PH/2+76+i*32;
+      mk(()=>this.add.text(PX+14,iy,it.icon+' '+it.name,{fontSize:'14px',color:'#ffeeaa',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(100));
+      mk(()=>this.add.text(PX+14,iy+15,it.eff,{fontSize:'11px',color:'#ccbbaa',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(100));
     });
     // 場地事件
     mk(()=>this.add.text(PX,PY+76,'⚠ 場地事件（隨機觸發）',{fontSize:'14px',color:'#ffaa44',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(100));
@@ -1436,8 +1438,8 @@ class SelectScene extends Phaser.Scene {
     const ecW=PW/5;
     EVTS2.forEach((ev,i)=>{
       const ex=PX-PW/2+ecW*(i+0.5);
-      mk(()=>this.add.text(ex,PY+100,ev.icon+' '+ev.name,{fontSize:'13px',color:'#ffcc88',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(100));
-      mk(()=>this.add.text(ex,PY+118,ev.desc,{fontSize:'11px',color:'#998877',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(100));
+      mk(()=>this.add.text(ex,PY+100,ev.icon+' '+ev.name,{fontSize:'13px',color:'#ffdd88',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(100));
+      mk(()=>this.add.text(ex,PY+118,ev.desc,{fontSize:'12px',color:'#ccbbaa',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(100));
     });
     const closeAll=()=>{objs.forEach(o=>{try{o.destroy();}catch(e){}});this._guideOpen=false;};
     dim.on('pointerdown',closeAll);
