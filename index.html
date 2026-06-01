@@ -3498,7 +3498,7 @@ class GameScene extends Phaser.Scene {
     }
     if(type==='lemon'){
       // 選一個四分之一區域
-      const zW=G.w*0.52, zH=G.h*0.52;
+      const zW=G.w*0.60, zH=G.h*0.60;
       const zx=G.x+(Math.random()<0.5?0:G.w-zW);
       const zy=G.y+(Math.random()<0.5?0:G.h-zH);
       this.evtQueue.push({type:'lemonZone',
