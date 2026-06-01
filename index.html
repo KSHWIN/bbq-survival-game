@@ -2535,6 +2535,15 @@ class GameScene extends Phaser.Scene {
           dHit=true;
           const resist=(e.heat||0)<50?0.65:1.0;
           const charBst=Math.min(2.2,1+(e.heat||0)/100*1.2); // 越熟越容易被打飛
+          // foil 反彈：AI 有 foil 且玩家有 garlic → 玩家被彈回
+          if((e.activeEffects&&e.activeEffects.foil>0)&&(this.activeEffects.garlic>0)){
+            const rx=this.p.x-mx*this.dashState.force*resist*charBst*2, ry=this.p.y-my*this.dashState.force*resist*charBst*2;
+            this.tweens.add({targets:this.p,x:rx,y:ry,duration:240,ease:'Cubic.easeOut',
+              onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this.subTxt.setText('反彈落下！');this.endGame(false);}}});
+            this.showPop('🪞 反彈！');
+            this.cameras.main.shake(200,0.012);
+            this.dashState.active=false;
+          } else {
           if(charBst>1.8)this.showPop('🔥 脆了！飛出去！');
           else if(resist<1)this.showPop('💪 撐住了！');
           else this.showPop('💥 撞飛！');
@@ -2567,6 +2576,7 @@ class GameScene extends Phaser.Scene {
           const bx=this.p.x-mx*18,by=this.p.y-my*18;
           if(inGrill(bx,by)){this.p.x=bx;this.p.y=by;}
           this.dashState.active=false;
+          } // end else (no foil reflect)
         }
       });
       if(this.dashState.dist>=this.dashState.maxDist)this.dashState.active=false;
@@ -2952,6 +2962,7 @@ class GameScene extends Phaser.Scene {
                   duration:240,ease:'Cubic.easeOut',
                   onComplete:()=>this.checkEnemyFall(e,i)});
                 this.showPop('🪞 鋁箔反彈 '+e.label+'！');
+                this.cameras.main.shake(200,0.012);
                 return;
               }
             if(this.abilityActive&&this.abilityActive.pushImmune){
@@ -2972,19 +2983,10 @@ class GameScene extends Phaser.Scene {
           } else {
             const eRef=pTgt.ref, eIdx=pTgt.idx;
             const cBst=Math.min(1.5,1+(eRef.heat||0)/100*0.8);
-            // 鋁箔反彈：AI 有 foil 且玩家有 garlic → 玩家被彈回
-            if((eRef.activeEffects&&eRef.activeEffects.foil>0)&&(ae&&ae.garlic>0)){
-              const rx=this.p.x-pnx*pForce*cBst*2, ry=this.p.y-pny*pForce*cBst*2;
-              this.tweens.add({targets:this.p,x:rx,y:ry,duration:240,ease:'Cubic.easeOut',
-                onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this.subTxt.setText('反彈落下！');this.endGame(false);}}});
-              this.showPop('🪞 反彈！');
-              this.cameras.main.shake(200,0.012);
-            } else {
-              this.tweens.add({targets:eRef,
-                x:eRef.x+pnx*pForce*cBst,y:eRef.y+pny*pForce*cBst,
-                duration:240,ease:'Cubic.easeOut',
-                onComplete:()=>this.checkEnemyFall(eRef,eIdx)});
-            }
+            this.tweens.add({targets:eRef,
+              x:eRef.x+pnx*pForce*cBst,y:eRef.y+pny*pForce*cBst,
+              duration:240,ease:'Cubic.easeOut',
+              onComplete:()=>this.checkEnemyFall(eRef,eIdx)});
           }
           const gOriX=pTgt.isPlayer?this.p.x:pTgt.ref.x;
           const gOriY=pTgt.isPlayer?this.p.y:pTgt.ref.y;
