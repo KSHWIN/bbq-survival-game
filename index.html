@@ -2500,8 +2500,13 @@ class GameScene extends Phaser.Scene {
     // ── 正向循環速度加成 ──
     const _goldenSpd=this.activeEffects.goldenZone>0?1.15:1.0;   // 黃金熟度 +15%
     const _iceSpd=this.activeEffects.iceBoost>0?1.5:1.0;          // 冰塊加速 +50%
-    if(this.activeEffects.slip>0&&!this._slipInit){this._slipInit=true;}
-    if(this.activeEffects.slip<=0) this._slipInit=false;
+    // 打滑：捕捉入冰速度，滑行期間無法輸入
+    if(this.activeEffects.slip>0&&!this._slipInit){
+      this._slipInit=true;
+      this._slipVx=this.p.x-(this._lastPX||this.p.x);
+      this._slipVy=this.p.y-(this._lastPY||this.p.y);
+    }
+    if(this.activeEffects.slip<=0){this._slipInit=false;this._slipVx=0;this._slipVy=0;}
     const SPD=isDash?120:this.charData.speed*(this.activeEffects.pepBoost>0?1.5:1)*(this.activeEffects.slowpow>0?0.5:1)*ultSpd*_ultSpdMul*_goldenSpd*_iceSpd;
     let mx=0, my=0;
     const _ctrlRev=(this.ultState&&this.ultState.reversed)?-1:1;
@@ -2511,7 +2516,7 @@ class GameScene extends Phaser.Scene {
     if(this.keys.down.isDown  ||GKEYS['ArrowDown'])  my=_ctrlRev;
     if(mx&&my){mx*=0.707;my*=0.707;}
     if(this.activeEffects.stun>0){mx=0;my=0;if(isDash&&this.dashState)this.dashState.active=false;}
-    if(this.activeEffects.slip>0){mx=0;my=0;} // 打滑：無法輸入
+    if(this.activeEffects.slip>0){mx=this._slipVx/(this.charData.speed*0.016||1);my=this._slipVy/(this.charData.speed*0.016||1);} // 打滑：以捕捉速度滑行
     if(this.ultState&&this.ultState.flying){mx=0;my=0;}
     if(!isDash){
       if(this.activeEffects.oilSlick>0){
@@ -2582,6 +2587,7 @@ class GameScene extends Phaser.Scene {
         this.p.y=Phaser.Math.Clamp(ny,G.y+4,G.y+G.h-4);
       }
     } else {this.p.x=nx;this.p.y=ny;}
+    this._lastPX=this.p.x; this._lastPY=this.p.y;
     // 冰跡留下（iceBoost 期間）
     if(this.activeEffects.iceBoost>0){
       const _id=Math.hypot(this.p.x-this.iceLastPos.x,this.p.y-this.iceLastPos.y);
@@ -3077,8 +3083,11 @@ class GameScene extends Phaser.Scene {
       this.enemies.forEach(e=>{
         if(!e.alive||t.ownerId===e.label) return;
         if(Math.hypot(e.x-t.x,e.y-t.y)<22){
-          if(e.activeEffects) e.activeEffects.slip=Math.max(e.activeEffects.slip||0,1.0);
-          e.slipLastVx=e.vx; e.slipLastVy=e.vy;
+          if(e.activeEffects){
+            const wasSlip=(e.activeEffects.slip||0)>0;
+            e.activeEffects.slip=Math.max(e.activeEffects.slip||0,1.0);
+            if(!wasSlip){e.slipLastVx=e.vx;e.slipLastVy=e.vy;} // only capture on first contact
+          }
         }
       });
       return true;
