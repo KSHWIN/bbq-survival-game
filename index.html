@@ -1463,7 +1463,7 @@ class GameScene extends Phaser.Scene {
     this.heat=0; this.alive=true; this.pushCD=0; this.timeLeft=this.levelData.timer;
     this.lastDir={x:1,y:0}; this.firePhase=0; this.pushWas=false; this.wobbleTween=null; this.dashState=null; this.dashTrail=[];
     this.forkTimer=4; this.fork=null;
-    this.activeEffects={foil:0,garlic:0,sauce:0,slowpow:0,pepBoost:0,stun:0,toxic:0,oilSlick:0,slip:0,sauceCharge:0,
+    this.activeEffects={foil:0,garlic:0,slowpow:0,pepBoost:0,stun:0,toxic:0,oilSlick:0,slip:0,sauceCharge:0,
       goldenZone:0,   // 黃金熟度 50-80% buff 計時
       juicy:0,        // 擊殺排熱 buff 計時
       iceBoost:0,     // 冰塊拾取加速 buff 計時
@@ -3208,7 +3208,9 @@ class GameScene extends Phaser.Scene {
     }
     // 胡椒噴嚏（pepBoost 結束瞬間）
     if(this._pepWas&&ae2.pepBoost<=0){
-      const _snDir=this.lastDir||{x:1,y:0};
+      const _raw=this.lastDir||{x:1,y:0};
+      const _snLen=Math.hypot(_raw.x,_raw.y)||1;
+      const _snDir={x:_raw.x/_snLen,y:_raw.y/_snLen};
       this.enemies.forEach((e,i)=>{
         if(!e.alive) return;
         const dx=e.x-this.p.x, dy=e.y-this.p.y;
@@ -3230,7 +3232,6 @@ class GameScene extends Phaser.Scene {
     const eff2=[];
     if(ae2.foil>0)    eff2.push('◎险4 '+ae2.foil.toFixed(0)+'s');
     if(ae2.garlic>0)  eff2.push('★推力x2 '+ae2.garlic.toFixed(0)+'s');
-    if(ae2.sauce>0)    eff2.push('🍶降熱x0.5 '+ae2.sauce.toFixed(0)+'s');
     if(ae2.pepBoost>0) eff2.push('🌶加速x1.5 '+ae2.pepBoost.toFixed(0)+'s');
     if(ae2.slowpow>0)  eff2.push('🍋慢速 '+ae2.slowpow.toFixed(1)+'s');
     if(ae2.stun>0)    eff2.push('XX穿刺 '+ae2.stun.toFixed(1)+'s');
