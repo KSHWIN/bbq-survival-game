@@ -1406,7 +1406,7 @@ class SelectScene extends Phaser.Scene {
       {icon:'◎', name:'鋁箔紙',   eff:'7 秒隔熱；被大蒜玩家推 → 攻擊者反彈'},
       {icon:'★', name:'大蒜',     eff:'5 秒推力 ×1.7；最後 1 秒 AOE 爆發'},
       {icon:'🍶',name:'醬油',     eff:'持有 5 秒，按 S 佈下黏滯陷阱'},
-      {icon:'🌶',name:'胡椒粉',   eff:'3 秒加速 ×1.5；結束時哈啾！擊退前方敵人'},
+      {icon:'🌶',name:'胡椒粉',   eff:'走動留下辣路 6 秒，路徑擴散，踩到者減速'},
     ];
     GOODS.forEach((it,i)=>{
       const iy=PY-PH/2+76+i*30;
@@ -1483,7 +1483,8 @@ class GameScene extends Phaser.Scene {
     this.mapItems=[]; this.itemTimer=3; this.sizzleTimer=0;
     this.oilSlicks=[]; this.oilDir={x:0,y:0};
     this.iceTrail=[]; this.iceLastPos={x:0,y:0};
-    this.saucePools=[]; this.lemonPuddles=[]; this.sauceSplash=[]; this.collisionOils=[];
+    this.saucePools=[]; this.lemonPuddles=[]; this.sauceSplash=[]; this.collisionOils=[]; this.pepperTrail=[];
+    this.pepLastPos={x:0,y:0};
     this.fxTrailLayer=this.add.graphics().setDepth(6);
     this.oilLayer=this.add.graphics().setDepth(3);
     this.randOilTimer=12+Math.random()*6;
@@ -2251,7 +2252,7 @@ class GameScene extends Phaser.Scene {
     if(item.type==='foil')  {ae.foil=item.dur+3;  this.showPop('◎ 鋁箔紙！隔熱 7 秒！'); this.playSound('good');}
     if(item.type==='garlic'){ae.garlic=item.dur+2; this._garlicAoeDone=false; this.showPop('★ 大蒜！推力 ×1.7！最後 1 秒會爆發！'); this.playSound('good');}
     if(item.type==='sauce') {ae.sauceCharge=5.0; this.showPop('🍶 醬油！按 S 佈陣！5 秒後自動！'); this.playSound('good');}
-    if(item.type==='pepper'){ae.pepBoost=item.dur; this.showPop('🌶 胡椒粉！辣勁加速 3 秒！'); this.playSound('good');}
+    if(item.type==='pepper'){ae.pepBoost=6.0; this.pepLastPos={x:this.p.x,y:this.p.y}; this.showPop('🌶 胡椒粉！走動會留下辣路！'); this.playSound('good');}
   }
 
   applyItemToEnemy(e, item){
@@ -2372,7 +2373,7 @@ class GameScene extends Phaser.Scene {
   }
 
   endGame(win){
-    this.iceTrail=[]; this.saucePools=[]; this.lemonPuddles=[]; this.sauceSplash=[]; this.collisionOils=[];
+    this.iceTrail=[]; this.saucePools=[]; this.lemonPuddles=[]; this.sauceSplash=[]; this.collisionOils=[]; this.pepperTrail=[];
     this.firePts=this.firePts.filter(f=>!f.collision);
     this._garlicAoe=null; this._sneezeFx=null;
     this.alive=false;
@@ -2532,7 +2533,7 @@ class GameScene extends Phaser.Scene {
       this._slipVy=this.p.y-(this._lastPY||this.p.y);
     }
     if(this.activeEffects.slip<=0){this._slipInit=false;this._slipVx=0;this._slipVy=0;}
-    const SPD=isDash?120:this.charData.speed*(this.activeEffects.pepBoost>0?1.5:1)*(this.activeEffects.slowpow>0?0.5:1)*ultSpd*_ultSpdMul*_goldenSpd*_iceSpd;
+    const SPD=isDash?120:this.charData.speed*(this.activeEffects.slowpow>0?0.5:1)*ultSpd*_ultSpdMul*_goldenSpd*_iceSpd;
     let mx=0, my=0;
     const _ctrlRev=(this.ultState&&this.ultState.reversed)?-1:1;
     if(this.keys.left.isDown  ||GKEYS['ArrowLeft'])  mx=-_ctrlRev;
@@ -3012,7 +3013,7 @@ class GameScene extends Phaser.Scene {
       const espd=Math.hypot(e.vx,e.vy)||1;
       const capSlow=(e.capsaicinTimer||0)>0?0.25:1.0;
       const _eAE=e.activeEffects||{};
-      const _ePepSpd=_eAE.pepBoost>0?1.5:1.0;
+      const _ePepSpd=1.0; // pepper 不再加速
       const _eIceSpd=_eAE.iceBoost>0?1.5:1.0;
       const _eSauceSlow=(e._sauceSlow&&e._sauceSlow<1)?e._sauceSlow:1.0;
       const _eLemonSlow=this.lemonPuddles.some(lp=>Math.hypot(e.x-lp.x,e.y-lp.y)<lp.r)?0.7:1.0;
@@ -3302,33 +3303,40 @@ class GameScene extends Phaser.Scene {
       this._garlicAoe.life-=dt;
       if(this._garlicAoe.life<=0) this._garlicAoe=null;
     }
-    // 胡椒噴嚏（pepBoost 結束瞬間）
-    if(this._pepWas&&ae2.pepBoost<=0){
-      const _raw=this.lastDir||{x:1,y:0};
-      const _snLen=Math.hypot(_raw.x,_raw.y)||1;
-      const _snDir={x:_raw.x/_snLen,y:_raw.y/_snLen};
-      this.enemies.forEach((e,i)=>{
-        if(!e.alive) return;
-        const dx=e.x-this.p.x, dy=e.y-this.p.y;
-        const dist=Math.hypot(dx,dy)||1;
-        if(dist>80) return;
-        const dot=(dx/dist)*_snDir.x+(dy/dist)*_snDir.y;
-        if(dot<0.707) return;
-        const force=160*(1-dist/80);
-        this.tweens.add({targets:e,x:e.x+(dx/dist)*force,y:e.y+(dy/dist)*force,
-          duration:280,ease:'Cubic.easeOut',
-          onComplete:()=>this.checkEnemyFall(e,i)});
-      });
-      this.showPop('💨 哈啾！');
-      this._sneezeFx={dx:_snDir.x,dy:_snDir.y,life:0.3};
+    // 胡椒路徑（pepBoost 期間留下擴散辣路）
+    if(ae2.pepBoost>0){
+      const _pd=Math.hypot(this.p.x-this.pepLastPos.x,this.p.y-this.pepLastPos.y);
+      if(_pd>=12){
+        // 主軌跡點 + 2 個隨機散布子點
+        this.pepperTrail.push({x:this.p.x,y:this.p.y,life:4.0,r:12});
+        for(let _pi=0;_pi<2;_pi++){
+          this.pepperTrail.push({
+            x:this.p.x+(Math.random()-0.5)*28,
+            y:this.p.y+(Math.random()-0.5)*28,
+            life:3.5+Math.random()*0.5,r:7+Math.random()*6
+          });
+        }
+        this.pepLastPos={x:this.p.x,y:this.p.y};
+      }
     }
-    this._pepWas=ae2.pepBoost>0;
-    if(this._sneezeFx){this._sneezeFx.life-=dt; if(this._sneezeFx.life<=0) this._sneezeFx=null;}
+    // 胡椒路徑更新（衰減 + 減速效果）
+    this.pepperTrail=this.pepperTrail.filter(t=>{
+      t.life-=dt;
+      if(t.life<=0) return false;
+      // 擴散：r 隨時間緩慢增大到最大 28
+      t.r=Math.min(28,t.r+dt*4);
+      // 附近敵人減速
+      this.enemies.forEach(e=>{
+        if(!e.alive) return;
+        if(Math.hypot(e.x-t.x,e.y-t.y)<t.r+8) e._sauceSlow=0.65;
+      });
+      return true;
+    });
     // 效果指示器
     const eff2=[];
     if(ae2.foil>0)    eff2.push('◎隔熱 '+ae2.foil.toFixed(0)+'s');
     if(ae2.garlic>0)  eff2.push('★推力x2 '+ae2.garlic.toFixed(0)+'s');
-    if(ae2.pepBoost>0) eff2.push('🌶加速x1.5 '+ae2.pepBoost.toFixed(0)+'s');
+    if(ae2.pepBoost>0) eff2.push('🌶辣路 '+ae2.pepBoost.toFixed(0)+'s');
     if(ae2.slowpow>0)  eff2.push('🍋慢速 '+ae2.slowpow.toFixed(1)+'s');
     if(ae2.stun>0)    eff2.push('XX穿刺 '+ae2.stun.toFixed(1)+'s');
     if(ae2.toxic>0)   eff2.push('!!焦糖 '+ae2.toxic.toFixed(1)+'s');
@@ -3970,16 +3978,14 @@ class GameScene extends Phaser.Scene {
       g.fillStyle(0xccdd22,a); g.fillCircle(lp.x+wb,lp.y+wb,lp.r);
       g.lineStyle(1,0x99aa00,a+0.1); g.strokeCircle(lp.x,lp.y,lp.r);
     });
-    if(this._sneezeFx){
-      const a=this._sneezeFx.life/0.3*0.7;
-      const cx=this.p.x, cy=this.p.y;
-      const ang=Math.atan2(this._sneezeFx.dy,this._sneezeFx.dx);
-      const r=80*(1-this._sneezeFx.life/0.3)*0.8+20;
-      g.fillStyle(0xffffff,a*0.35);
-      g.beginPath(); g.moveTo(cx,cy);
-      g.arc(cx,cy,r,ang-Math.PI/4,ang+Math.PI/4,false);
-      g.closePath(); g.fillPath();
-    }
+    // 胡椒路徑繪製（暗紅棕色塵霧，隨時間擴散淡出）
+    this.pepperTrail.forEach(t=>{
+      const a=Math.min(0.55,t.life/4.0*0.55);
+      g.fillStyle(0x8B2200,a*0.7); g.fillCircle(t.x,t.y,t.r);
+      g.lineStyle(1,0xcc4400,a*0.4); g.strokeCircle(t.x,t.y,t.r);
+      // 中心亮點（辣粉感）
+      g.fillStyle(0xffaa44,a*0.4); g.fillCircle(t.x,t.y,t.r*0.35);
+    });
   }
 
   drawShrinkRing(){
