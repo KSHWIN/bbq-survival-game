@@ -1546,6 +1546,7 @@ class GameScene extends Phaser.Scene {
       }
     });
     this.otherPlayers={};
+    this._teamLabels=null;
     this.otherLayer=this.add.graphics().setDepth(18);
     this.teamRingLayer=this.add.graphics().setDepth(22);
     if(this.multiplay) this._initMultiplayer();
