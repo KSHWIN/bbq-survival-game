@@ -1473,6 +1473,8 @@ class GameScene extends Phaser.Scene {
     this.seasoningTimer=0;     // 連擊計時（超時歸零）
     this.seasoningShield=false;// 3層烤肉醬護盾（抵一次推擠）
     this.killCount=0;          // 本局擊殺計數
+    this._garlicAoeDone=true;
+    this._pepWas=false; this._sneezeFx=null;
     this._goldenActive=false;  // 上幀是否在黃金區
     this.mapItems=[]; this.itemTimer=3; this.sizzleTimer=0;
     this.oilSlicks=[]; this.oilDir={x:0,y:0};
@@ -2251,7 +2253,7 @@ class GameScene extends Phaser.Scene {
     const ae=this.activeEffects;
     if(item.type==='ice')   {this.heat=Math.max(0,this.heat-42); ae.iceBoost=5; this.showPop('❄️ 冰塊！冷卻 -42%＋加速 5秒！'); this.playSound('good');}
     if(item.type==='foil')  {ae.foil=item.dur+3;  this.showPop('◎ 鋁箔紙！隔熱 7 秒！'); this.playSound('good');}
-    if(item.type==='garlic'){ae.garlic=item.dur+2; this.showPop('★ 大蒜！推力 ×1.7！'); this.playSound('good');}
+    if(item.type==='garlic'){ae.garlic=item.dur+2; this._garlicAoeDone=false; this.showPop('★ 大蒜！推力 ×1.7！最後 1 秒會爆發！'); this.playSound('good');}
     if(item.type==='sauce') {ae.sauce=item.dur;   this.showPop('🍶 醬油！降熱減半 5 秒！'); this.playSound('good');}
     if(item.type==='pepper'){ae.pepBoost=item.dur; this.showPop('🌶 胡椒粉！辣勁加速 3 秒！'); this.playSound('good');}
   }
@@ -2890,6 +2892,20 @@ class GameScene extends Phaser.Scene {
       if(e.activeEffects) Object.keys(e.activeEffects).forEach(k=>{
         if(e.activeEffects[k]>0) e.activeEffects[k]=Math.max(0,e.activeEffects[k]-dt);
       });
+      // AI 大蒜 AOE
+      if(e.activeEffects&&e.activeEffects.garlic>0&&e.activeEffects.garlic<=1.0&&!e._garlicAoeDone){
+        e._garlicAoeDone=true;
+        const _agd=Math.hypot(this.p.x-e.x,this.p.y-e.y);
+        if(_agd<100){
+          const _anx=(this.p.x-e.x)/(_agd||1),_any=(this.p.y-e.y)/(_agd||1);
+          const _af=130*(1-_agd/100);
+          this.tweens.add({targets:this.p,
+            x:this.p.x+_anx*_af,y:this.p.y+_any*_af,
+            duration:300,ease:'Cubic.easeOut',
+            onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this.subTxt.setText('被大蒜爆發推落！');this.endGame(false);}}});
+          this.showPop('💥 '+e.label+' 大蒜爆發！');
+        }
+      }
       // 躲火（弱遲鈍，強靈敏）
       const fireW=[0.02,0.055,0.10][diff];
       let avX=0,avY=0;
@@ -3128,6 +3144,29 @@ class GameScene extends Phaser.Scene {
       item.img.setAlpha(blink?0.25:1); item.gfx.setAlpha(blink?0.25:1);
       return true;
     });
+    // 大蒜 AOE 衝擊波（最後 1 秒觸發）
+    if(ae2.garlic>0&&ae2.garlic<=1.0&&!this._garlicAoeDone){
+      this._garlicAoeDone=true;
+      this._garlicAoe={r:0,life:0.35};
+      this.enemies.forEach((e,i)=>{
+        if(!e.alive) return;
+        const d=Math.hypot(e.x-this.p.x,e.y-this.p.y);
+        if(d<100){
+          const nx=(e.x-this.p.x)/(d||1), ny=(e.y-this.p.y)/(d||1);
+          const force=130*(1-d/100);
+          this.tweens.add({targets:e,x:e.x+nx*force,y:e.y+ny*force,
+            duration:300,ease:'Cubic.easeOut',
+            onComplete:()=>this.checkEnemyFall(e,i)});
+        }
+      });
+      this.showPop('💥 大蒜爆發！');
+      this.cameras.main.flash(120,255,230,100,false);
+    }
+    if(this._garlicAoe){
+      this._garlicAoe.r+=(110-this._garlicAoe.r)*dt*8;
+      this._garlicAoe.life-=dt;
+      if(this._garlicAoe.life<=0) this._garlicAoe=null;
+    }
     // 效果指示器
     const eff2=[];
     if(ae2.foil>0)    eff2.push('◎险4 '+ae2.foil.toFixed(0)+'s');
@@ -3567,6 +3606,14 @@ class GameScene extends Phaser.Scene {
         }
       }
     });
+    // 大蒜 AOE 擴散環
+    if(this._garlicAoe){
+      const a=Math.max(0,this._garlicAoe.life/0.35*0.7);
+      g.lineStyle(3,0xffee44,a);
+      g.strokeCircle(this.p.x,this.p.y,this._garlicAoe.r);
+      g.fillStyle(0xffee44,a*0.15);
+      g.fillCircle(this.p.x,this.p.y,this._garlicAoe.r);
+    }
   }
 
   updateShrink(dt){
