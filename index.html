@@ -846,7 +846,7 @@ class SelectScene extends Phaser.Scene {
     this.add.text(W-22,HY-30,'點擊查看詳情 ▾',{fontSize:'12px',color:'#664422',fontFamily:'sans-serif'}).setOrigin(1,0.5).setDepth(5);
     const EVTS=[
       {icon:'🍴',name:'廚師叉子',  desc:'從四周射入，擊中強力擊退'},
-      {icon:'🍋',name:'檸檬雨',    desc:'酸液降落，接觸減速增熟度'},
+      {icon:'🍋',name:'檸檬雨',    desc:'4-6 顆落下，命中減速 2.5 秒＋小量加熱'},
       {icon:'❄️',name:'冰塊補給',  desc:'撿取立刻冷卻熟度 -42%'},
       {icon:'🌀',name:'場地縮小',  desc:'邊緣定時內縮，掉出淘汰'},
       {icon:'🕳',name:'烤盤破洞',  desc:'踩入隨機破洞立刻墜落'},
@@ -1411,22 +1411,22 @@ class SelectScene extends Phaser.Scene {
       mk(()=>this.add.text(PX-PW/2+34,iy,it.icon+' '+it.name,{fontSize:'15px',color:'#ffeeaa',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(100));
       mk(()=>this.add.text(PX-PW/2+34,iy+16,it.eff,{fontSize:'12px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(100));
     });
-    // 壞道具標題
-    mk(()=>this.add.text(PX+PW/4,PY-PH/2+54,'🔴 壞道具（踩到受損）',{fontSize:'14px',color:'#ff8888',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(100));
+    // 更多好道具標題
+    mk(()=>this.add.text(PX+PW/4,PY-PH/2+54,'🟢 好道具（撿到有益）',{fontSize:'14px',color:'#88ffaa',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(100));
     const BADS=[
-      {icon:'🍶',name:'醬油',     eff:'5 秒熟度累積速度加倍'},
-      {icon:'🌶',name:'胡椒粉',   eff:'3 秒移動速度 -50%'},
+      {icon:'🍶',name:'醬油',     eff:'5 秒熟度累積速度減半'},
+      {icon:'🌶',name:'胡椒粉',   eff:'3 秒移動速度 +50%'},
     ];
     BADS.forEach((it,i)=>{
       const iy=PY-PH/2+76+i*30;
-      mk(()=>this.add.text(PX+14,iy,it.icon+' '+it.name,{fontSize:'15px',color:'#ffcc88',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(100));
+      mk(()=>this.add.text(PX+14,iy,it.icon+' '+it.name,{fontSize:'15px',color:'#ffeeaa',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(100));
       mk(()=>this.add.text(PX+14,iy+16,it.eff,{fontSize:'12px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(100));
     });
     // 場地事件
     mk(()=>this.add.text(PX,PY+76,'⚠ 場地事件（隨機觸發）',{fontSize:'14px',color:'#ffaa44',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(100));
     const EVTS2=[
       {icon:'🍴',name:'廚師叉子',  desc:'從四周射入，擊中強力擊退'},
-      {icon:'🍋',name:'檸檬雨',    desc:'酸液落下，減速增熟度'},
+      {icon:'🍋',name:'檸檬雨',    desc:'4-6 顆落下，命中減速 2.5 秒＋小量加熱'},
       {icon:'🌀',name:'場地縮小',  desc:'烤盤邊緣每 30 秒內縮一圈'},
       {icon:'🕳',name:'烤盤破洞',  desc:'隨機破洞，踩入立刻墜落'},
       {icon:'❄️',name:'冰塊補給',  desc:'場上大冰塊，撿取冷卻 -42%'},
@@ -1463,9 +1463,10 @@ class GameScene extends Phaser.Scene {
     this.heat=0; this.alive=true; this.pushCD=0; this.timeLeft=this.levelData.timer;
     this.lastDir={x:1,y:0}; this.firePhase=0; this.pushWas=false; this.wobbleTween=null; this.dashState=null; this.dashTrail=[];
     this.forkTimer=4; this.fork=null;
-    this.activeEffects={foil:0,garlic:0,sauce:0,slowpow:0,stun:0,toxic:0,oilSlick:0,
+    this.activeEffects={foil:0,garlic:0,sauce:0,slowpow:0,pepBoost:0,stun:0,toxic:0,oilSlick:0,
       goldenZone:0,   // 黃金熟度 50-80% buff 計時
       juicy:0,        // 擊殺排熱 buff 計時
+      iceBoost:0,     // 冰塊拾取加速 buff 計時
     };
     // ── 正向循環系統 ─────────────────────
     this.seasoningCombo=0;     // 調味料連擊層數 0-3
@@ -1484,7 +1485,6 @@ class GameScene extends Phaser.Scene {
     this.tiltInterval=()=>(11+Math.random()*8)/this.levelData.tiltMod;
     this.abilityCD=0; this.abilityCDMax=6; this.abilityActive=null; this.abilityWas=false;
     this.ultCharge=3; this.ultMax=3; this.ultWas=false; this.ultCinema=false;
-    this.beefCharge={active:false,timer:0,maxTimer:1.2,dx:1,dy:0,gfx:null};
     this.ultSpeedTimer=0; this.ultOrbs=[]; this.ultOrbTimer=2;
     this.centerOrbTimer=45; this.centerOrb=null; this.ultState=null;
     this.enemyCC={stun:0,slow:0};
@@ -1572,6 +1572,8 @@ class GameScene extends Phaser.Scene {
       chargeTimer:1.5+Math.random()*2, charging:false, chDx:1, chDy:0, chargeTime:0,
       pushTimer:3+Math.random()*3, abilTimer:5+Math.random()*4, abilActive:false,
       team:this.aiTeams['ai'+i]||'none',
+      activeEffects:{foil:0,garlic:0,sauceCharge:0,iceBoost:0,pepBoost:0,slip:0},
+      slipLastVx:0, slipLastVy:0, iceLastX:0, iceLastY:0,
     }));
     this.enemySprites=this.enemies.map(e=>
       this.textures.exists(e.img) ? this.add.image(e.x,e.y,e.img).setScale(ES*_wScale(e.weight)).setDepth(9) : null
@@ -2109,9 +2111,12 @@ class GameScene extends Phaser.Scene {
         });
         break;}
       case 'tofu':{
-        // 吸熱護盾：吸收附近敵人營度，自身上限 130%
-        this.abilityActive={type:'shield',timer:5};
-        this.showPop('吸熱護盾！營度上限 130%！');break;}
+        this.abilityActive={type:'shield',timer:4,pushImmune:true};
+        const _tsRing={r:0};const _tsfx=this.add.graphics().setDepth(26);
+        this.tweens.add({targets:_tsRing,r:1,duration:300,ease:'Quad.easeOut',
+          onUpdate:()=>{_tsfx.clear();_tsfx.lineStyle(8*(1-_tsRing.r),0xaaddff,1-_tsRing.r);_tsfx.strokeCircle(this.p.x,this.p.y,_tsRing.r*55);},
+          onComplete:()=>_tsfx.destroy()});
+        this.showPop('🛡 護盾硬化！4秒內推不動！');break;}
       case 'bacon':{
         // 捲縮甄打：旋轉璔飛周圍
         this.abilityActive={type:'spin',timer:1.5};
@@ -2208,8 +2213,8 @@ class GameScene extends Phaser.Scene {
       {type:'ice',    label:'❌冰塊',   good:true,  dur:0},
       {type:'foil',   label:'◎鋁箔紙', good:true,  dur:4},
       {type:'garlic', label:'★大蒜',   good:true,  dur:5},
-      {type:'sauce',  label:'!醬油',   good:false, dur:5},
-      {type:'pepper', label:'!胡椒粉', good:false, dur:3},
+      {type:'sauce',  label:'★醬油',   good:true,  dur:5},
+      {type:'pepper', label:'★胡椒粉', good:true,  dur:3},
     ];
     if(this.mapItems.length>=3) return;
     const tp=TYPES[Math.floor(Math.random()*TYPES.length)];
@@ -2241,11 +2246,20 @@ class GameScene extends Phaser.Scene {
 
   applyItem(item){
     const ae=this.activeEffects;
-    if(item.type==='ice')   {this.heat=Math.max(0,this.heat-42); this.showPop('❌ 冰塊！冷卻 -42%！'); this.playSound('good');}
+    if(item.type==='ice')   {this.heat=Math.max(0,this.heat-42); ae.iceBoost=5; this.showPop('❄️ 冰塊！冷卻 -42%＋加速 5秒！'); this.playSound('good');}
     if(item.type==='foil')  {ae.foil=item.dur+3;  this.showPop('◎ 鋁箔紙！隔熱 7 秒！'); this.playSound('good');}
     if(item.type==='garlic'){ae.garlic=item.dur+2; this.showPop('★ 大蒜！推力 ×1.7！'); this.playSound('good');}
-    if(item.type==='sauce') {ae.sauce=item.dur;   this.showPop('! 醬油！營腦加速！'); this.playSound('bad');}
-    if(item.type==='pepper'){ae.slowpow=item.dur; this.showPop('! 胡椒粉！脟麻了！'); this.playSound('bad');}
+    if(item.type==='sauce') {ae.sauce=item.dur;   this.showPop('🍶 醬油！降熱減半 5 秒！'); this.playSound('good');}
+    if(item.type==='pepper'){ae.pepBoost=item.dur; this.showPop('🌶 胡椒粉！辣勁加速 3 秒！'); this.playSound('good');}
+  }
+
+  applyItemToEnemy(e, item){
+    const ae=e.activeEffects;
+    if(item.type==='ice')   { e.heat=Math.max(0,e.heat-42); ae.iceBoost=5; }
+    if(item.type==='foil')  { ae.foil=item.dur+3; }
+    if(item.type==='garlic'){ ae.garlic=item.dur+2; e._garlicAoeDone=false; }
+    if(item.type==='sauce') { ae.sauceCharge=5.0; }
+    if(item.type==='pepper'){ ae.pepBoost=item.dur; }
   }
 
   doPush(){
@@ -2294,11 +2308,10 @@ class GameScene extends Phaser.Scene {
 
       // ── 正向循環：擊殺 → 多汁排熱 ─────────────────────────
       this.killCount++;
-      this.activeEffects.juicy=4.5;                         // 4.5 秒多汁狀態
-      const heatBefore=this.heat;
-      this.heat=Math.max(0, this.heat*0.80);               // 熟度立減 20%
+      this.activeEffects.juicy=4.5;                         // 4.5 秒多汁狀態（被推距離減半）
+      this.heat=Math.max(0, this.heat*0.75);               // 熟度立減 25%（擊殺獎勵）
       // 金色畫面閃
-      this.cameras.main.flash(180,255,200,0,false);
+      this.cameras.main.flash(220,255,200,0,false);
       // Ding! 音效（Web Audio 合成）
       if(this.ac){
         const g=this.ac.createGain(), osc=this.ac.createOscillator();
@@ -2310,7 +2323,7 @@ class GameScene extends Phaser.Scene {
         osc.start(); osc.stop(this.ac.currentTime+0.4);
       }
       // 彈出文字
-      const msgs=['✨ Well Done!','🍖 Delicious!','💧 多汁！'];
+      const msgs=['🏆 推出！降熱 -25%！','🍖 Delicious！降熱 -25%！','💧 多汁！降熱 -25%！'];
       this.showPop(msgs[this.killCount%msgs.length]);
       // 調味料連擊疊加
       this.seasoningCombo=Math.min(3,this.seasoningCombo+1);
@@ -2364,9 +2377,7 @@ class GameScene extends Phaser.Scene {
     const dt=delta/1000;
     if(Phaser.Input.Keyboard.JustDown(this.keys.restart)){this.scene.restart();return;}
     if(Phaser.Input.Keyboard.JustDown(this.keys.back)){
-      const ov=document.getElementById('lobby-overlay');
-      if(ov){ov.classList.remove('hidden');if(typeof Lobby!=='undefined')Lobby.showLanding();}
-      window.setTimeout(()=>{if(gameInstance){gameInstance.destroy(true);gameInstance=null;}},16);
+      window.setTimeout(()=>{createGame();},16);
       return;
     }
     if(!this.alive) return;
@@ -2485,7 +2496,8 @@ class GameScene extends Phaser.Scene {
     const _ultSpdMul=(this.ultState&&this.ultState.spdMul)?this.ultState.spdMul:1;
     // ── 正向循環速度加成 ──
     const _goldenSpd=this.activeEffects.goldenZone>0?1.15:1.0;   // 黃金熟度 +15%
-    const SPD=isDash?120:this.charData.speed*(this.activeEffects.slowpow>0?0.5:1)*ultSpd*_ultSpdMul*_goldenSpd;
+    const _iceSpd=this.activeEffects.iceBoost>0?1.5:1.0;          // 冰塊加速 +50%
+    const SPD=isDash?120:this.charData.speed*(this.activeEffects.pepBoost>0?1.5:1)*(this.activeEffects.slowpow>0?0.5:1)*ultSpd*_ultSpdMul*_goldenSpd*_iceSpd;
     let mx=0, my=0;
     const _ctrlRev=(this.ultState&&this.ultState.reversed)?-1:1;
     if(this.keys.left.isDown  ||GKEYS['ArrowLeft'])  mx=-_ctrlRev;
@@ -2580,9 +2592,8 @@ class GameScene extends Phaser.Scene {
       else if(this.abilityCD<=0) this.useAbility();
     }
     this.abilityWas=this.keys.skill.isDown;
-    if(this.keys.ult.isDown&&!this.ultWas&&this.ultCharge>=this.ultMax&&!this.ultCinema&&!this.beefCharge.active){
-      if(this.charData.key==='beef') this.startBeefCharge();
-      else this.doUltimate();
+    if(this.keys.ult.isDown&&!this.ultWas&&this.ultCharge>=this.ultMax&&!this.ultCinema){
+      this.doUltimate();
     }
     this.ultWas=this.keys.ult.isDown;
 
@@ -2591,7 +2602,7 @@ class GameScene extends Phaser.Scene {
     const aa=this.abilityActive;
     const armorOn=aa&&aa.type==='armor', glideOn=aa&&aa.type==='glide', shieldOn=aa&&aa.type==='shield';
     const _hsMul=(this.ultState&&this.ultState.heatStop)?0:1;
-    const mult=_hsMul*this.charData.heatMult*(ae.sauce>0?2:1)*(armorOn?0.5:1)*this.levelData.heatMod;
+    const mult=_hsMul*this.charData.heatMult*(ae.sauce>0?0.5:1)*(armorOn?0.5:1)*this.levelData.heatMod;
     const fireImmune=ae.foil>0||glideOn;
     const heatCap=(this.ultState&&this.ultState.heatMax)?this.ultState.heatMax:(shieldOn?130:100);
     if(this.onFire(this.p.x,this.p.y)){
@@ -2845,6 +2856,10 @@ class GameScene extends Phaser.Scene {
       const edx=tgt.x-e.x, edy=tgt.y-e.y;
       const edist=Math.hypot(edx,edy)||1;
       e.chargeTimer-=dt; e.pushTimer-=dt;
+      // activeEffects 遞減
+      if(e.activeEffects) Object.keys(e.activeEffects).forEach(k=>{
+        if(e.activeEffects[k]>0) e.activeEffects[k]=Math.max(0,e.activeEffects[k]-dt);
+      });
       // 躲火（弱遲鈍，強靈敏）
       const fireW=[0.02,0.055,0.10][diff];
       let avX=0,avY=0;
@@ -2890,7 +2905,10 @@ class GameScene extends Phaser.Scene {
       }
       const espd=Math.hypot(e.vx,e.vy)||1;
       const capSlow=(e.capsaicinTimer||0)>0?0.25:1.0;
-      const maxSpd=(e.charging?4.5:2.8)*sSlow*capSlow*(onOil?0.7:1);
+      const _eAE=e.activeEffects||{};
+      const _ePepSpd=_eAE.pepBoost>0?1.5:1.0;
+      const _eIceSpd=_eAE.iceBoost>0?1.5:1.0;
+      const maxSpd=(e.charging?4.5:2.8)*sSlow*capSlow*(onOil?0.7:1)*_ePepSpd*_eIceSpd;
       if(espd>maxSpd){e.vx=(e.vx/espd)*maxSpd;e.vy=(e.vy/espd)*maxSpd;}
       // 推人：找最近對象（玩家或其他 AI 都算）
       const pushCd=[5.0,3.0,2.0][diff];
@@ -2900,8 +2918,12 @@ class GameScene extends Phaser.Scene {
         if(pd<44){
           e.pushTimer=pushCd+Math.random()*2;
           const pnx=(pTgt.x-e.x)/pd, pny=(pTgt.y-e.y)/pd;
-          const pForce=95*Math.min(2.0,1+e.heat/100*1.5); // AI 越熟推越猛
+          const _eGarlicBst=(e.activeEffects&&e.activeEffects.garlic>0)?1.7:1.0;
+          const pForce=95*Math.min(2.0,1+e.heat/100*1.5)*_eGarlicBst; // AI 越熟推越猛，大蒜加成
           if(pTgt.isPlayer){
+            if(this.abilityActive&&this.abilityActive.pushImmune){
+              this.showPop('🛡 推不動！'); e.pushTimer=pushCd;
+            } else {
             const _kRes=(this.ultState&&this.ultState.knockRes)?this.ultState.knockRes:1;
             const _juicyRes=this.activeEffects.juicy>0?0.5:1.0; // 多汁狀態：被推距離減半
             const cBst=Math.min(1.5,1+this.heat/100*0.8);
@@ -2913,6 +2935,7 @@ class GameScene extends Phaser.Scene {
             if(this.activeEffects.juicy>0) this.showPop('💧 多汁彈開！');
             else if(cBst>1.8) this.showPop('🔥 脆了！被 '+e.label+' 推飛！');
             else         this.showPop('💥 被 '+e.label+' 推開！');
+            }
           } else {
             const eRef=pTgt.ref, eIdx=pTgt.idx;
             const cBst=Math.min(1.5,1+(eRef.heat||0)/100*0.8);
@@ -3001,7 +3024,6 @@ class GameScene extends Phaser.Scene {
     this.flareTimer-=dt;
     if(this.flareTimer<=0){this.spawnFlareZone();this.flareTimer=15+Math.random()*6;}
     this.updateFlares(dt);
-    if(this.beefCharge.active) this.updateBeefCharge(dt);
     // 技能倒計時
     if(this.abilityActive){
       this.abilityActive.timer-=dt;
@@ -3022,6 +3044,13 @@ class GameScene extends Phaser.Scene {
     this.mapItems=this.mapItems.filter(item=>{
       item.life-=dt;
       if(Math.hypot(this.p.x-item.x,this.p.y-item.y)<24){this.applyItem(item);item.img.destroy();item.gfx.destroy();return false;}
+      // AI 撿道具
+      let aiTook=false;
+      this.enemies.forEach(e=>{
+        if(!e.alive||aiTook) return;
+        if(Math.hypot(e.x-item.x,e.y-item.y)<24){this.applyItemToEnemy(e,item);aiTook=true;}
+      });
+      if(aiTook){item.img.destroy();item.gfx.destroy();return false;}
       if(item.life<=0){item.img.destroy();item.gfx.destroy();return false;}
       const blink=item.life<3&&Math.floor(item.life*5)%2===0;
       item.img.setAlpha(blink?0.25:1); item.gfx.setAlpha(blink?0.25:1);
@@ -3031,8 +3060,9 @@ class GameScene extends Phaser.Scene {
     const eff2=[];
     if(ae2.foil>0)    eff2.push('◎险4 '+ae2.foil.toFixed(0)+'s');
     if(ae2.garlic>0)  eff2.push('★推力x2 '+ae2.garlic.toFixed(0)+'s');
-    if(ae2.sauce>0)   eff2.push('!營腦x2 '+ae2.sauce.toFixed(0)+'s');
-    if(ae2.slowpow>0) eff2.push('!慢速 '+ae2.slowpow.toFixed(0)+'s');
+    if(ae2.sauce>0)    eff2.push('🍶降熱x0.5 '+ae2.sauce.toFixed(0)+'s');
+    if(ae2.pepBoost>0) eff2.push('🌶加速x1.5 '+ae2.pepBoost.toFixed(0)+'s');
+    if(ae2.slowpow>0)  eff2.push('🍋慢速 '+ae2.slowpow.toFixed(1)+'s');
     if(ae2.stun>0)    eff2.push('XX穿刺 '+ae2.stun.toFixed(1)+'s');
     if(ae2.toxic>0)   eff2.push('!!焦糖 '+ae2.toxic.toFixed(1)+'s');
     const aa2=this.abilityActive;
@@ -3163,6 +3193,7 @@ class GameScene extends Phaser.Scene {
     if(this.juicyTxt){
       const ae=this.activeEffects;
       if(ae.juicy>0) this.juicyTxt.setText('💧多汁 '+ae.juicy.toFixed(1)+'s');
+      else if(ae.iceBoost>0) this.juicyTxt.setText('❄️加速 '+ae.iceBoost.toFixed(1)+'s');
       else this.juicyTxt.setText('');
     }
     // 推力加成（調味料）
@@ -3185,15 +3216,15 @@ class GameScene extends Phaser.Scene {
       this.cameras.main.shake(150,0.004);
     }
     if(type==='lemon'){
-      const cnt=2+Math.floor(Math.random()*2);
+      const cnt=4+Math.floor(Math.random()*3);
       for(let i=0;i<cnt;i++){
         const lx=G.x+55+Math.random()*(G.w-110);
         const ly=G.y+55+Math.random()*(G.h-110);
         this.evtQueue.push({type:'lemon',x:lx,y:ly,
-          state:'warn',timer:2.0+i*0.6,
+          state:'warn',timer:1.8+i*0.45,
           fallY:G.y-40,fallSpd:35,splashR:0,done:false});
       }
-      this.showPop('🍋 檬檬雨！快跑！');
+      this.showPop('🍋 檸檬雨！快跑！');
     }
     if(type==='skewer'){
       const cnt=1+Math.floor(Math.random()*2);
@@ -3251,11 +3282,14 @@ class GameScene extends Phaser.Scene {
               const force=(1-dist/72)*200;
               const nx2=this.p.x+ddx*force, ny2=this.p.y+ddy*force;
               this.cameras.main.shake(280,0.015);
+              // 酸液效果：減速 2.5 秒 + 加熱
+              ae.slowpow=Math.max(ae.slowpow,2.5);
+              this.heat=Math.min(100,this.heat+10*(1-dist/72));
               if(!inGrill(nx2,ny2)){
-                this.subTxt.setText('被檬檬汁喵飛！');this.endGame(false);
+                this.subTxt.setText('被檸檬汁噴飛！');this.endGame(false);
               } else {
                 this.p.x=nx2; this.p.y=ny2;
-                this.showPop('💦 被咮飛！');
+                this.showPop('🍋 酸液！減速 2.5 秒！');
               }
             }
           }
@@ -3366,30 +3400,58 @@ class GameScene extends Phaser.Scene {
       // ── lemon ────────────────────────────────────────────────
       if(ev.type==='lemon'){
         if(ev.state==='warn'){
-          const pulse=0.18+0.14*Math.sin(ph*9);
-          g.fillStyle(0xffff00,pulse); g.fillEllipse(ev.x,ev.y,80,80);
-          g.lineStyle(3,0xddcc00,0.5+pulse); g.strokeEllipse(ev.x,ev.y,80,80);
-          g.lineStyle(3,0xff8800,0.75);
-          g.lineBetween(ev.x-14,ev.y-14,ev.x+14,ev.y+14);
-          g.lineBetween(ev.x+14,ev.y-14,ev.x-14,ev.y+14);
+          // 地面預警：橢圓投影 + 準心
+          const pulse=0.14+0.10*Math.sin(ph*9);
+          g.fillStyle(0xbbaa00,pulse*0.7); g.fillEllipse(ev.x,ev.y,96,36);
+          g.lineStyle(2,0xaaaa00,0.35+pulse); g.strokeEllipse(ev.x,ev.y,96,36);
+          g.lineStyle(2,0xff9900,0.65);
+          g.lineBetween(ev.x-12,ev.y-12,ev.x+12,ev.y+12);
+          g.lineBetween(ev.x+12,ev.y-12,ev.x-12,ev.y+12);
         } else if(ev.state==='fall'){
           const fy=ev.fallY;
           const prog=Math.max(0,Math.min(1,(fy-(G.y-40))/(ev.y-(G.y-40)+1)));
-          const r=12+prog*22;
-          g.fillStyle(0xffff33,0.92); g.fillCircle(ev.x,fy,r);
-          g.fillStyle(0xffffaa,0.5); g.fillCircle(ev.x-r*0.25,fy-r*0.2,r*0.3);
-          g.fillStyle(0xaaaa00,0.08+prog*0.28);
-          g.fillEllipse(ev.x,ev.y,(1.3-prog)*70,(1.3-prog)*25);
+          const r=9+prog*17;
+          const tilt=Math.sin(ph*5+prog*8)*0.4; // 翻滾角度感
+          // 地面陰影（越近越深越大）
+          const sw=28+prog*55, sh=sw*0.38;
+          g.fillStyle(0x000000,0.06+prog*0.16); g.fillEllipse(ev.x,ev.y,sw,sh);
+          // 檸檬本體（橢圓，帶旋轉感）
+          g.fillStyle(0xddcc00,0.97); g.fillEllipse(ev.x+tilt*r,fy,r*2.4,r*1.7);
+          // 較亮的黃色中間層
+          g.fillStyle(0xffee22,0.85); g.fillEllipse(ev.x+tilt*r*0.6,fy,r*2.0,r*1.35);
+          // 兩端尖頭
+          g.fillStyle(0xbbaa00,0.88);
+          g.fillTriangle(ev.x+tilt*r-r*1.15,fy, ev.x+tilt*r-r*0.9,fy-r*0.4, ev.x+tilt*r-r*0.9,fy+r*0.4);
+          g.fillTriangle(ev.x+tilt*r+r*1.15,fy, ev.x+tilt*r+r*0.9,fy-r*0.4, ev.x+tilt*r+r*0.9,fy+r*0.4);
+          // 蒂頭（綠色小梗）
+          g.fillStyle(0x55bb22,0.95); g.fillEllipse(ev.x+tilt*r,fy-r*0.82,r*0.28,r*0.22);
+          g.fillStyle(0x33991a,0.9);  g.fillRect(ev.x+tilt*r-1,fy-r*0.92,2,r*0.22);
+          // 高光（左上方亮斑）
+          g.fillStyle(0xfffff0,0.50); g.fillEllipse(ev.x+tilt*r-r*0.48,fy-r*0.30,r*0.52,r*0.34);
+          // 表面顆粒感（4~5 個小暗點）
+          g.fillStyle(0xbbaa00,0.30);
+          for(let d=0;d<4;d++){g.fillCircle(ev.x+tilt*r+(d-1.5)*r*0.38,fy+(d%2===0?1:-1)*r*0.32,r*0.10);}
         } else if(ev.state==='splash'){
           const r=ev.splashR, a=Math.max(0,1-r/90);
-          g.fillStyle(0xffff55,0.28*a); g.fillCircle(ev.x,ev.y,r);
-          g.lineStyle(3,0xffcc00,0.8*a); g.strokeCircle(ev.x,ev.y,r);
-          for(let i=0;i<8;i++){
-            const ang=i*Math.PI/4;
-            g.fillStyle(0xffff00,0.7*a);
-            g.fillCircle(ev.x+Math.cos(ang)*r*0.65,ev.y+Math.sin(ang)*r*0.65,5);
+          // 果汁液面
+          g.fillStyle(0xeeee22,0.30*a); g.fillCircle(ev.x,ev.y,r);
+          g.lineStyle(2,0xddcc00,0.85*a); g.strokeCircle(ev.x,ev.y,r);
+          // 果汁液滴（大小不一）
+          for(let i=0;i<12;i++){
+            const ang=i*Math.PI*2/12+0.3;
+            const dr=r*(0.50+0.35*Math.sin(i*2.1));
+            const dropR=3+2.5*(1-r/90);
+            g.fillStyle(i%3===0?0xffee44:0xddcc00,0.88*a);
+            g.fillCircle(ev.x+Math.cos(ang)*dr,ev.y+Math.sin(ang)*dr,dropR);
           }
-          g.fillStyle(0xcccc00,0.6*a); g.fillEllipse(ev.x,ev.y,28,16);
+          // 果皮碎片（4 個小橢圓）
+          for(let i=0;i<4;i++){
+            const ang=i*Math.PI/2+0.7;
+            g.fillStyle(0xddcc22,0.72*a);
+            g.fillEllipse(ev.x+Math.cos(ang)*r*0.38,ev.y+Math.sin(ang)*r*0.38,16,9);
+          }
+          // 中心果肉
+          g.fillStyle(0xffff99,0.50*a); g.fillCircle(ev.x,ev.y,10*a);
         }
       }
       // ── ice ──────────────────────────────────────────────────
@@ -3621,50 +3683,6 @@ class GameScene extends Phaser.Scene {
     }});
   }
 
-  startBeefCharge(){
-    const bc=this.beefCharge;
-    bc.active=true; bc.timer=0;
-    bc.dx=this.lastDir.x; bc.dy=this.lastDir.y;
-    if(bc.gfx) bc.gfx.destroy();
-    bc.gfx=this.add.graphics().setDepth(30);
-  }
-
-  updateBeefCharge(dt){
-    const bc=this.beefCharge;
-    if(!this.alive){bc.active=false;if(bc.gfx){bc.gfx.destroy();bc.gfx=null;}return;}
-    bc.timer+=dt;
-    // 方向跟著玩家輸入即時更新
-    bc.dx=this.lastDir.x; bc.dy=this.lastDir.y;
-    const prog=Math.min(1,bc.timer/bc.maxTimer);
-    const g=bc.gfx; g.clear();
-    const px=this.p.x, py=this.p.y;
-    const dx=bc.dx, dy=bc.dy;
-    const arrowLen=40+prog*60;
-    const pulse=0.65+0.35*Math.sin(bc.timer*12);
-    // 箭身
-    g.lineStyle(3+prog*3,0x4488ff,pulse);
-    g.lineBetween(px,py,px+dx*arrowLen,py+dy*arrowLen);
-    // 箭頭三角形
-    const hx=px+dx*arrowLen, hy=py+dy*arrowLen;
-    const pw=9+prog*6;
-    g.fillStyle(0x88ccff,pulse);
-    g.fillTriangle(hx+dx*14,hy+dy*14, hx-dy*pw,hy+dx*pw, hx+dy*pw,hy-dx*pw);
-    // 充電條（玩家下方）
-    const bw=64;
-    g.fillStyle(0x112233,0.75); g.fillRect(px-bw/2,py+24,bw,7);
-    g.fillStyle(prog<0.5?0x4488ff:0x88ffff,0.9); g.fillRect(px-bw/2,py+24,bw*prog,7);
-    // 充滿閃光
-    if(prog>=1){
-      g.lineStyle(2,0xffffff,0.8*(0.5+0.5*Math.sin(bc.timer*20)));
-      g.strokeCircle(px,py,28);
-    }
-    if(prog>=1){
-      bc.active=false;
-      if(bc.gfx){bc.gfx.destroy();bc.gfx=null;}
-      this.doUltimate();
-    }
-  }
-
   fireUltimate(){
     const ck=this.charData.key;
     const aliveE=this.enemies.filter(e=>e.alive);
@@ -3703,7 +3721,7 @@ class GameScene extends Phaser.Scene {
         this.ultState={type:'beef',timer:8,phase:'aim',aimTimer:3.0,
           dx:_bDx/_bDn,dy:_bDy/_bDn,aimGfx:_bAimGfx,hitSet:new Set()};
         this.cameras.main.shake(150,0.010);
-        this.showPop('🥩 鐵板衝鋒！蓄力中…');
+        this.showPop('🥩 鐵板衝鋒！方向鍵瞄準，3秒後衝！');
         break;}
       case 'mushroom':{
         // 孢子迷霧：持續擴散10秒，敵人接觸累積1.8秒後定身
@@ -3770,21 +3788,24 @@ class GameScene extends Phaser.Scene {
         this.showPop('💧 吸熱冰封！熟度上限200%！吸熱並凍結！');
         break;}
       case 'bacon':{
-        this.enemyCC.slow=Math.max(this.enemyCC.slow,9);
-        for(let si=0;si<12;si++){
-          const sx=G.x+50+Math.random()*(G.w-100);
-          const sy=G.y+50+Math.random()*(G.h-100);
-          this.time.delayedCall(si*70,()=>{
+        this.enemyCC.slow=Math.max(this.enemyCC.slow,14);
+        for(let si=0;si<24;si++){
+          const sx=G.x+40+Math.random()*(G.w-80);
+          const sy=G.y+40+Math.random()*(G.h-80);
+          this.time.delayedCall(si*55,()=>{
             if(!this.alive) return;
             const smoke={v:0};const sfx=this.add.graphics().setDepth(24);
-            this.tweens.add({targets:smoke,v:1,duration:900,ease:'Quad.easeInOut',
-              onUpdate:()=>{sfx.clear();const a=smoke.v>0.5?1-smoke.v*1.6:smoke.v*1.6;
-                sfx.fillStyle(0xaa7744,a*0.4);sfx.fillCircle(sx,sy,smoke.v*52);
-                sfx.fillStyle(0x886633,a*0.25);sfx.fillCircle(sx+14,sy-10,smoke.v*36);},
+            this.tweens.add({targets:smoke,v:1,duration:3200,ease:'Quad.easeInOut',
+              onUpdate:()=>{sfx.clear();
+                const rise=smoke.v>0.55?1-smoke.v*1.7:smoke.v*1.7;
+                const r1=smoke.v*90, r2=smoke.v*65, r3=smoke.v*48;
+                sfx.fillStyle(0x553322,rise*0.72);sfx.fillCircle(sx,sy,r1);
+                sfx.fillStyle(0x886644,rise*0.55);sfx.fillCircle(sx+18,sy-14,r2);
+                sfx.fillStyle(0xbbaa88,rise*0.30);sfx.fillCircle(sx-12,sy-8,r3);},
               onComplete:()=>sfx.destroy()});
           });
         }
-        this.showPop('🥓 煙燻覆蓋！全場減速9秒！');
+        this.showPop('🥓 煙燻覆蓋！全場減速14秒！');
         break;}
       case 'saury':{
         // 魚骨連射：彈珠模式，自動衝撞邊緣彈來彈去 5 秒，碰到人立刻飛出
@@ -3876,6 +3897,9 @@ class GameScene extends Phaser.Scene {
     } else if(us.type==='beef'){
       if(us.phase==='aim'){
         us.aimTimer-=dt;
+        // 方向跟著玩家輸入即時更新
+        const _ld=this.lastDir;
+        if(Math.abs(_ld.x)>0||Math.abs(_ld.y)>0){const _dn=Math.hypot(_ld.x,_ld.y)||1;us.dx=_ld.x/_dn;us.dy=_ld.y/_dn;}
         const _bDist=350;
         const _btX=Phaser.Math.Clamp(this.p.x+us.dx*_bDist,G.x+25,G.x+G.w-25);
         const _btY=Phaser.Math.Clamp(this.p.y+us.dy*_bDist,G.y+25,G.y+G.h-25);
@@ -3896,8 +3920,12 @@ class GameScene extends Phaser.Scene {
             onUpdate:()=>{_bcg.clear();_bcg.fillStyle(0xff9900,_bcp.a);_bcg.fillCircle(_bpx,_bpy,2+_bcp.a*3);},
             onComplete:()=>_bcg.destroy()});
         }
+        // 倒數文字
+        if(!us.cntTxt||!us.cntTxt.scene){us.cntTxt=this.add.text(0,0,'',{fontSize:'40px',color:'#ffcc00',stroke:'#000',strokeThickness:5,fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(32);}
+        us.cntTxt.setText(Math.ceil(us.aimTimer)+'').setPosition(this.p.x,this.p.y-56);
         if(us.aimTimer<=0){
           us.phase='dash'; us.flying=true; us.aimGfx.clear();
+          if(us.cntTxt&&us.cntTxt.scene){us.cntTxt.destroy();us.cntTxt=null;}
           us.targetX=_btX; us.targetY=_btY; us.dashSpd=900;
           this.cameras.main.shake(260,0.022);
           const _bdf={r:0};const _bdg=this.add.graphics().setDepth(27);
@@ -4221,6 +4249,7 @@ class GameScene extends Phaser.Scene {
     if(us.fogGfx) us.fogGfx.destroy();
     if(us.spinGfx) us.spinGfx.destroy();
     if(us.aimGfx) us.aimGfx.destroy();
+    if(us.cntTxt&&us.cntTxt.scene) us.cntTxt.destroy();
     if(us.nodeGfx) us.nodeGfx.destroy();
     if(us.projGfx) us.projGfx.destroy();
     if(us.type==='wing'&&us.flying){
