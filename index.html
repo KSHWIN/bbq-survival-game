@@ -1478,7 +1478,7 @@ class GameScene extends Phaser.Scene {
     this.oilSlicks=[]; this.oilDir={x:0,y:0};
     this.iceTrail=[]; this.iceLastPos={x:0,y:0};
     this.saucePools=[]; this.lemonPuddles=[];
-    this.trailLayer=this.add.graphics().setDepth(6);
+    this.fxTrailLayer=this.add.graphics().setDepth(6);
     this.oilLayer=this.add.graphics().setDepth(3);
     this.randOilTimer=12+Math.random()*6;
     this.flares=[]; this.flareTimer=15+Math.random()*5;
@@ -3586,7 +3586,7 @@ class GameScene extends Phaser.Scene {
   }
 
   drawTrailEffects(){
-    const g=this.trailLayer; g.clear();
+    const g=this.fxTrailLayer; g.clear();
     this.iceTrail.forEach(t=>{
       const a=Math.min(0.55,t.life/3.0*0.55);
       g.fillStyle(0xaaddff,a); g.fillCircle(t.x,t.y,16);
