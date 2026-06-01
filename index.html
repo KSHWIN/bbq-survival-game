@@ -1537,6 +1537,14 @@ class GameScene extends Phaser.Scene {
     const AC=window.AudioContext||window.webkitAudioContext;
     this.ac=AC?new AC():null;
     this.time.delayedCall(200,()=>this.startBGM());
+    this.events.once('shutdown',()=>{
+      if(this.bgmEvent){this.bgmEvent.remove();this.bgmEvent=null;}
+      if(this.ac){try{this.ac.close();}catch(e){} this.ac=null;}
+      if(this.multiplay&&window.MP&&window.MP.socket){
+        const s=window.MP.socket;
+        s.off('game_state'); s.off('game_event'); s.off('player_disconnected');
+      }
+    });
     this.otherPlayers={};
     this.otherLayer=this.add.graphics().setDepth(18);
     this.teamRingLayer=this.add.graphics().setDepth(22);
@@ -2350,15 +2358,6 @@ class GameScene extends Phaser.Scene {
   }
 
   showPop(msg){ this.popTxt.setText(msg); this.time.delayedCall(1600,()=>this.popTxt.setText('')); }
-
-  shutdown(){
-    if(this.bgmEvent){this.bgmEvent.remove();this.bgmEvent=null;}
-    if(this.ac){try{this.ac.close();}catch(e){} this.ac=null;}
-    if(this.multiplay&&window.MP&&window.MP.socket){
-      const s=window.MP.socket;
-      s.off('game_state'); s.off('game_event'); s.off('player_disconnected');
-    }
-  }
 
   endGame(win){
     this.alive=false;
