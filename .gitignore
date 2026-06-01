@@ -1,1 +1,8 @@
-node_modules/
+# 影片檔
+*.mp4
+*.mov
+*.avi
+
+# 系統檔
+.DS_Store
+Thumbs.db
