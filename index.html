@@ -3842,7 +3842,10 @@ class GameScene extends Phaser.Scene {
     this.holes=this.holes.filter(h=>{
       h.timer-=dt;
       if(h.state==='warn'){
-        if(h.timer<=0){h.state='active';h.timer=4+Math.random()*3;h.alpha=0;}
+        // 連鎖崩塌：stuck 叉子在洞上方 → 加速崩塌
+        const skNear=this.evtQueue.some(ev=>ev.type==='skewer'&&ev.state==='stuck'&&
+          Math.hypot(ev.x-h.x,ev.targetY-h.y)<40);
+        if(h.timer<=0||skNear){h.state='active';h.timer=4+Math.random()*3;h.alpha=0;}
         return true;
       }
       if(h.state==='active'){
@@ -3874,17 +3877,16 @@ class GameScene extends Phaser.Scene {
     const ph=this.firePhase;
     this.holes.forEach(h=>{
       if(h.state==='warn'){
-        const pulse=0.35+0.3*Math.sin(ph*11);
-        const s=h.r*(1.1+pulse*0.15);
-        g.fillStyle(0xff6600,pulse*0.25);
-        g.fillRect(h.x-s,h.y-s,s*2,s*2);
-        g.lineStyle(3,0xff8800,0.55+pulse);
-        g.strokeRect(h.x-h.r,h.y-h.r,h.r*2,h.r*2);
-        const cx=h.r*0.55;
-        g.lineStyle(2,0xff4400,0.8);
-        g.lineBetween(h.x-cx,h.y-cx,h.x+cx,h.y+cx);
-        g.lineBetween(h.x+cx,h.y-cx,h.x-cx,h.y+cx);
-      } else if(h.state==='active'||h.state==='closing'){
+        // 發紅預警：脈動橘紅光暈 + 抖動
+        const pulse=0.3+0.4*Math.sin(ph*8);
+        const wx=h.x+(Math.random()-0.5)*2, wy=h.y+(Math.random()-0.5)*2;
+        g.fillStyle(0xff3300,pulse*0.5);
+        g.fillCircle(wx,wy,h.r+4);
+        g.lineStyle(2,0xff6600,pulse);
+        g.strokeCircle(wx,wy,h.r+4);
+        return;
+      }
+      if(h.state==='active'||h.state==='closing'){
         const a=h.alpha;
         g.fillStyle(0x000000,a);
         g.fillRect(h.x-h.r,h.y-h.r,h.r*2,h.r*2);
