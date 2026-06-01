@@ -198,6 +198,7 @@ const IMG = {
     <button class="lobby-btn" onclick="Lobby.showCreate()">🏠 開房間（主機）</button>
     <button class="lobby-btn secondary" onclick="Lobby.showJoin()">🚪 加入房間</button>
     <button class="lobby-btn secondary" onclick="openAnimModal()">🎬 烤肉動畫</button>
+    <button class="lobby-btn secondary" onclick="window.open('changelog.html','_blank')">📋 更新日誌</button>
   </div>
 
   <!-- Screen: Create Room -->
@@ -367,9 +368,9 @@ class BootScene extends Phaser.Scene {
     const bgFg = this.add.rectangle(W/2-150,H/2+16,0,12,0xff6600).setOrigin(0,0.5);
     const keys = Object.keys(IMG);
     let done=0;
-    const onAdded=()=>{ done++; bgFg.width=(done/keys.length)*300; txt.setText('載入中 '+done+'/'+keys.length); if(done>=keys.length){ CHARS.forEach(ch=>this._rmWhite(ch.img)); CHARS.forEach(ch=>this._buildDir(ch.img)); this.scene.start('Select'); } };
+    const onAdded=()=>{ done++; bgFg.width=(done/keys.length)*300; txt.setText('載入中 '+done+'/'+keys.length); if(done>=keys.length){ CHARS.forEach(ch=>this._rmWhite(ch.img)); CHARS.forEach(ch=>this._buildDir(ch.img)); const _pg=window._PENDING_GAME_START; if(_pg){window._PENDING_GAME_START=null;this.scene.start(_pg.scene,_pg.data);}else{this.scene.start('Select');} } };
     keys.forEach(k=>{ if(this.textures.exists(k)){onAdded();return;} this.textures.once('addtexture-'+k,onAdded); this.textures.once('onerror-'+k,onAdded); this.textures.addBase64(k,IMG[k]); });
-    // 載入完成後先進 Home 場景
+    // 載入完成後根據 pending 指令決定目標場景
   }
   _rmWhite(key){
     if(!this.textures.exists(key)) return;
@@ -543,51 +544,47 @@ class TeamScene extends Phaser.Scene {
     });
     this.modeBtns=mBtns;
 
-    // ── 隊伍面板 ──────────────────────────────────────────────
-    // 藍隊（左）
-    this.add.rectangle(cx-200,cy-10,220,300,0x001133,0.85).setStrokeStyle(2,0x4488ff,0.8).setDepth(5);
-    this.add.text(cx-200,cy-148,'🟦 藍隊',{fontSize:'16px',color:'#66aaff',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(6);
-    // 紅隊（右）
-    this.add.rectangle(cx+200,cy-10,220,300,0x1a0000,0.85).setStrokeStyle(2,0xff4444,0.8).setDepth(5);
-    this.add.text(cx+200,cy-148,'🟥 紅隊',{fontSize:'16px',color:'#ff6666',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(6);
-    // 中央（未分配）
-    this.add.rectangle(cx,cy-60,140,180,0x111111,0.7).setStrokeStyle(1,0x555555,0.5).setDepth(5);
-    this.add.text(cx,cy-140,'待分配',{fontSize:'13px',color:'#888888',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(6);
+    // ── 隊伍面板（只在隊伍制顯示）─────────────────────────────
+    const _blueBox=this.add.rectangle(cx-200,cy-10,220,300,0x001133,0.85).setStrokeStyle(2,0x4488ff,0.8).setDepth(5);
+    const _blueLbl=this.add.text(cx-200,cy-148,'🟦 藍隊',{fontSize:'16px',color:'#66aaff',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(6);
+    const _redBox=this.add.rectangle(cx+200,cy-10,220,300,0x1a0000,0.85).setStrokeStyle(2,0xff4444,0.8).setDepth(5);
+    const _redLbl=this.add.text(cx+200,cy-148,'🟥 紅隊',{fontSize:'16px',color:'#ff6666',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(6);
+    const _ctrBox=this.add.rectangle(cx,cy-60,140,180,0x111111,0.7).setStrokeStyle(1,0x555555,0.5).setDepth(5);
+    const _ctrLbl=this.add.text(cx,cy-140,'待分配',{fontSize:'13px',color:'#888888',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(6);
+    this.teamPanels=[_blueBox,_blueLbl,_redBox,_redLbl,_ctrBox,_ctrLbl];
     this.cardGfxGroup=[];
     this._buildCards();
 
-    // ── AI 設定（只有房主/單人模式顯示）──────────────────────
-    const aiy=cy+122;
-    this.add.text(cx-120,aiy-18,'AI 數量',{fontSize:'13px',color:'#aaaaaa',fontFamily:'sans-serif'}).setDepth(6);
-    const cntBtns=[];
-    for(let n=1;n<=6;n++){
-      const bx=cx-90+(n-1)*30;
-      const nb=this.add.rectangle(bx,aiy,24,22,n===(this.gameData.enemyCnt||2)?0xff6600:0x333333,1).setDepth(6);
-      const nt=this.add.text(bx,aiy,''+n,{fontSize:'12px',color:'#ffffff',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(7);
+    // ── 對手數量 + AI 難度 ────────────────────────────────
+    const _acy=H-110;
+    this.add.text(cx-170,_acy-14,'對手數量：',{fontSize:'13px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(6);
+    const _cntBtns=[];
+    for(let n=1;n<=8;n++){
+      const bx=cx-80+(n-1)*30;
+      const nb=this.add.rectangle(bx,_acy,26,22,n===(this.gameData.enemyCnt||2)?0xff6600:0x333333,1).setDepth(6);
+      this.add.text(bx,_acy,''+n,{fontSize:'12px',color:'#ffffff',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(7);
       nb.setInteractive({useHandCursor:true});
       nb.on('pointerdown',()=>{
         this.gameData.enemyCnt=n;
-        cntBtns.forEach((b,j)=>b.setFillStyle(j+1===n?0xff6600:0x333333));
+        _cntBtns.forEach((b,j)=>b.setFillStyle(j+1===n?0xff6600:0x333333));
         this._buildCards();
       });
-      cntBtns.push(nb);
+      _cntBtns.push(nb);
     }
-    // AI 難度
-    const diffy=aiy+32;
-    this.add.text(cx-120,diffy-16,'AI 難度',{fontSize:'13px',color:'#aaaaaa',fontFamily:'sans-serif'}).setDepth(6);
-    const diffLabels=['弱','中','強'];
-    const diffColors=[0x1a4a1a,0xff6600,0x8b0000];
-    const diffBtns=[];
-    diffLabels.forEach((dl,di)=>{
-      const bx=cx-80+di*50;
-      const db=this.add.rectangle(bx,diffy,42,22,di===(this.gameData.aiDiff||1)?diffColors[di]:0x333333,1).setDepth(6);
-      const dt=this.add.text(bx,diffy,dl,{fontSize:'12px',color:'#ffffff',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(7);
+    const _adfy=H-68;
+    this.add.text(cx-170,_adfy-14,'AI 難度：',{fontSize:'13px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(6);
+    const _diffColors=[0x1a4a1a,0xff6600,0x8b0000];
+    const _diffBtns=[];
+    ['弱','中','強'].forEach((dl,di)=>{
+      const bx=cx-80+di*60;
+      const db=this.add.rectangle(bx,_adfy,50,24,di===(this.gameData.aiDiff??1)?_diffColors[di]:0x333333,1).setDepth(6);
+      this.add.text(bx,_adfy,dl,{fontSize:'12px',color:'#ffffff',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(7);
       db.setInteractive({useHandCursor:true});
       db.on('pointerdown',()=>{
         this.gameData.aiDiff=di;
-        diffBtns.forEach((b,j)=>b.setFillStyle(j===di?diffColors[j]:0x333333));
+        _diffBtns.forEach((b,j)=>b.setFillStyle(j===di?_diffColors[j]:0x333333));
       });
-      diffBtns.push(db);
+      _diffBtns.push(db);
     });
 
     // ── 確認開始按鈕 ──────────────────────────────────────────
@@ -651,6 +648,8 @@ class TeamScene extends Phaser.Scene {
     this.cardGfxGroup=[];
     const cx=W/2, cy=H/2;
     const isTeam=this.gameMode==='team';
+    // 隊伍面板顯示/隱藏
+    if(this.teamPanels) this.teamPanels.forEach(p=>p.setVisible(isTeam));
     // 顯示說明
     if(this.helpTxt) this.helpTxt.setText(isTeam
       ?'點擊卡片切換隊伍（藍 ↔ 紅 ↔ 未分配）   未分配者遊戲開始後隨機分隊'
@@ -831,8 +830,8 @@ class SelectScene extends Phaser.Scene {
       cont.add(lvAddList);
       cont.setInteractive(new Phaser.Geom.Rectangle(-LW/2,-LH/2,LW,LH),Phaser.Geom.Rectangle.Contains);
       cont.on('pointerdown',()=>this.setLvSel(i));
-      cont.on('pointerover',()=>{ if(this.lvSel!==i){card.bg.setStrokeStyle(2,0x888888);} });
-      cont.on('pointerout', ()=>{ if(this.lvSel!==i){const dc2=DCOLS[Math.min(LEVELS[i].diff-1,4)];card.bg.setStrokeStyle(2,dc2);} });
+      cont.on('pointerover',()=>{ if(this.lvSel!==i){bg.setStrokeStyle(2,0x888888);} });
+      cont.on('pointerout', ()=>{ if(this.lvSel!==i){const dc2=DCOLS[Math.min(LEVELS[i].diff-1,4)];bg.setStrokeStyle(2,dc2);} });
       this.lvCards.push({cont,bg,dc});
     });
 
@@ -867,46 +866,6 @@ class SelectScene extends Phaser.Scene {
     this.events.once('shutdown',()=>this._stopSelBGM());
     this.time.delayedCall(300,()=>this._startSelBGM());
 
-    // ── Enemy Count Selector ─────────────────────────────
-    this.enemyCnt=2;
-    const ECY=H-62;
-    this.add.text(663,ECY,'對手數量：',{fontSize:'11px',color:'#888888',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(11);
-    this.ecBtns=[];
-    [1,2,3,4,5,6,7,8].forEach((n,bi)=>{
-      const bx=731+bi*29, by=ECY;
-      const bBg=this.add.rectangle(bx,by,26,22,n===2?0xff6600:0x2a2a2a,1).setStrokeStyle(1,0x886644).setDepth(11);
-      const bTxt=this.add.text(bx,by,n+'',{fontSize:'11px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(11);
-      bBg.setInteractive();
-      bBg.on('pointerdown',()=>{
-        this.enemyCnt=n;
-        this.ecBtns.forEach((b,j)=>b.bg.setFillStyle(j===bi?0xff6600:0x2a2a2a));
-      });
-      bBg.on('pointerover',()=>bBg.setScale(1.1));
-      bBg.on('pointerout', ()=>bBg.setScale(1));
-      this.ecBtns.push({bg:bBg,txt:bTxt,val:n});
-    });
-
-    // ── AI Difficulty Selector（底欄上方空白區）────────────
-    this.aiDiff=1;
-    const ADY=H-120;
-    this.add.rectangle(810,ADY,300,34,0x040608,0.88).setStrokeStyle(1,0x445566).setDepth(10);
-    this.add.text(668,ADY,'AI 難度：',{fontSize:'11px',color:'#888888',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(11);
-    this.adBtns=[];
-    ['弱','中','強'].forEach((lbl,bi)=>{
-      const bx=738+bi*64, by=ADY;
-      const col=[0x1a4a1a,0xff6600,0x8b0000][bi];
-      const bBg=this.add.rectangle(bx,by,56,24,bi===1?0xff6600:col,1).setStrokeStyle(1,0x886644).setDepth(11);
-      const bTxt=this.add.text(bx,by,lbl,{fontSize:'13px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(11);
-      bBg.setInteractive();
-      bBg.on('pointerdown',()=>{
-        this.aiDiff=bi;
-        this.adBtns.forEach((b,j)=>b.bg.setFillStyle(j===bi?[0x1a4a1a,0xff6600,0x8b0000][j]:0x2a2a2a));
-      });
-      bBg.on('pointerover',()=>bBg.setScale(1.1));
-      bBg.on('pointerout', ()=>bBg.setScale(1));
-      this.adBtns.push({bg:bBg,txt:bTxt});
-    });
-
     // ── Start Button ─────────────────────────────────────
     const btnW=148,btnH=28,btnX=804,btnY=H-19;
     const btnBg=this.add.rectangle(btnX,btnY,btnW,btnH,0xff6600,1).setStrokeStyle(3,0xffcc44).setDepth(25);
@@ -917,9 +876,8 @@ class SelectScene extends Phaser.Scene {
     // Pulse tween on button
     this.tweens.add({targets:[btnBg,btnTxt],scaleX:{from:1,to:1.04},scaleY:{from:1,to:1.04},duration:650,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
 
-    // ── Detail bar（左）+ 選項面板（右）──────────────────
-    this.add.rectangle(304,H-44,600,82,0x060400,0.94).setStrokeStyle(1,0x885522).setDepth(10);
-    this.add.rectangle(804,H-44,296,82,0x040608,0.94).setStrokeStyle(1,0x445566).setDepth(10);
+    // ── Detail bar（全寬）──────────────────────────────────
+    this.add.rectangle(W/2,H-44,W,82,0x060400,0.94).setStrokeStyle(1,0x885522).setDepth(10);
     // 左側：動畫區 90×70
     this.prevG=this.add.graphics().setDepth(12);
     this.previewKey=''; this.previewPhase=0;
@@ -946,13 +904,9 @@ class SelectScene extends Phaser.Scene {
     const homeBtn=this.add.text(16,16,'← 首頁',{fontSize:'14px',color:'#ffcc88',backgroundColor:'#3d1a00',padding:{x:10,y:6},fontFamily:'Microsoft JhengHei, sans-serif'}).setOrigin(0,0).setDepth(30).setInteractive({useHandCursor:true});
     homeBtn.on('pointerover',()=>homeBtn.setColor('#ffffff'));
     homeBtn.on('pointerout', ()=>homeBtn.setColor('#ffcc88'));
-    homeBtn.on('pointerdown',()=>{ this._stopSelBGM(); const ov=document.getElementById('lobby-overlay'); if(ov){ov.classList.remove('hidden'); if(typeof Lobby!=='undefined') Lobby.showLanding();} });
+    homeBtn.on('pointerdown',()=>{ this._stopSelBGM(); const ov=document.getElementById('lobby-overlay'); if(ov){ov.classList.remove('hidden'); if(typeof Lobby!=='undefined') Lobby.showLanding();} window.setTimeout(()=>{if(gameInstance){gameInstance.destroy(true);gameInstance=null;}},16); });
     // ────────────────────────────────────────────────────────────
-    const clBtn=this.add.text(W-16,16,'📋 更新日誌',{fontSize:'14px',color:'#ffcc44',backgroundColor:'#3d1a00',padding:{x:10,y:6},fontFamily:'Microsoft JhengHei, sans-serif'}).setOrigin(1,0).setDepth(30).setInteractive({useHandCursor:true});
-    clBtn.on('pointerover',()=>clBtn.setColor('#ffffff'));
-    clBtn.on('pointerout', ()=>clBtn.setColor('#ffcc44'));
-    clBtn.on('pointerdown',()=>window.open('changelog.html','_blank'));
-    const anBtn=this.add.text(W-16,50,'🎬 烤肉動畫',{fontSize:'14px',color:'#ffcc44',backgroundColor:'#3d1a00',padding:{x:10,y:6},fontFamily:'Microsoft JhengHei, sans-serif'}).setOrigin(1,0).setDepth(30).setInteractive({useHandCursor:true});
+    const anBtn=this.add.text(W-16,16,'🎬 烤肉動畫',{fontSize:'14px',color:'#ffcc44',backgroundColor:'#3d1a00',padding:{x:10,y:6},fontFamily:'Microsoft JhengHei, sans-serif'}).setOrigin(1,0).setDepth(30).setInteractive({useHandCursor:true});
     anBtn.on('pointerover',()=>anBtn.setColor('#ffffff'));
     anBtn.on('pointerout', ()=>anBtn.setColor('#ffcc44'));
     anBtn.on('pointerdown',()=>openAnimModal());
@@ -1089,9 +1043,9 @@ class SelectScene extends Phaser.Scene {
     const go={px:x,py:H+8,life:1,ph};
     const gfx=this.add.graphics().setDepth(1);
     this.tweens.add({targets:go,px:x+swayAmp,py:H+8-rise,life:0,duration:dur,ease:'Linear',
-      onUpdate:()=>{gfx.clear();const sw=Math.sin(go.ph+(1-go.life)*Math.PI*5)*14;
+      onUpdate:()=>{if(!gfx.scene) return; gfx.clear();const sw=Math.sin(go.ph+(1-go.life)*Math.PI*5)*14;
         gfx.fillStyle(col,go.life*0.78);gfx.fillCircle(go.px+sw,go.py,sz*(0.4+go.life*0.6));},
-      onComplete:()=>gfx.destroy()});
+      onComplete:()=>{if(gfx.scene) gfx.destroy();}});
   }
 
   _selOilSplat(x,y){
@@ -1103,14 +1057,14 @@ class SelectScene extends Phaser.Scene {
       const gfx=this.add.graphics().setDepth(15);
       this.tweens.add({targets:go,px:x+Math.cos(ang)*spd,py:y+Math.sin(ang)*spd,life:0,
         duration:300+Math.random()*220,ease:'Quad.easeOut',
-        onUpdate:()=>{gfx.clear();gfx.fillStyle(0xffcc44,go.life*0.88);gfx.fillCircle(go.px,go.py,2.5+go.life*4.5);
+        onUpdate:()=>{if(!gfx.scene) return; gfx.clear();gfx.fillStyle(0xffcc44,go.life*0.88);gfx.fillCircle(go.px,go.py,2.5+go.life*4.5);
           if(go.life>0.35){gfx.fillStyle(0xff8800,go.life*0.52);gfx.fillCircle(go.px+1,go.py-1,go.life*3);}},
-        onComplete:()=>gfx.destroy()});
+        onComplete:()=>{if(gfx.scene) gfx.destroy();}});
     }
   }
 
   _drawAbilAnim(){
-    const g=this.prevG; if(!g) return;
+    const g=this.prevG; if(!g||!g.scene) return;
     g.clear();
     const key=this.previewKey;
     if(!key) return;
@@ -1257,7 +1211,7 @@ class SelectScene extends Phaser.Scene {
   }
 
   _drawUltAnim(){
-    const g=this.ultPrevG; if(!g) return;
+    const g=this.ultPrevG; if(!g||!g.scene) return;
     g.clear();
     const key=this.ultPreviewKey;
     if(!key) return;
@@ -1493,8 +1447,8 @@ class SelectScene extends Phaser.Scene {
     this.scene.start('Team',{
       char:CHARS[this.sel],
       level:LEVELS[this.lvSel],
-      enemyCnt:this.enemyCnt||2,
-      aiDiff:this.aiDiff||1,
+      enemyCnt:2,
+      aiDiff:1,
       multiplay:this.multiplay||false,
     });
   }
@@ -1502,7 +1456,7 @@ class SelectScene extends Phaser.Scene {
 
 class GameScene extends Phaser.Scene {
   constructor(){ super('Game'); }
-  init(data){ this.charData=data.char||this.charData||CHARS[0]; this.levelData=data.level||this.levelData||LEVELS[0]; this.enemyCnt=data.enemyCnt||2; this.aiDiff=data.aiDiff??1; this.multiplay=data.multiplay||false; this.syncTimer=0; this.gameMode=data.gameMode||'individual'; this.playerTeam=data.playerTeam||'none'; this.aiTeams=(data.teams||[]).reduce((m,t)=>{m[t.id]=t.team||'none';return m;},{}); }
+  init(data){ this.charData=data.char||this.charData||CHARS[0]; this.levelData=data.level||this.levelData||LEVELS[0]; this.enemyCnt=data.enemyCnt||2; this.aiDiff=data.aiDiff??1; this.multiplay=data.multiplay||false; this.syncTimer=0; this.gameMode=data.gameMode||'individual'; this.playerTeam=data.playerTeam||'none'; this.aiTeams=(data.teams||[]).reduce((m,t)=>{m[t.id]=t.team||'none';return m;},{}); this._teamLabels=null; }
 
   create(){
     const c=this.charData;
@@ -2412,10 +2366,11 @@ class GameScene extends Phaser.Scene {
     if(Phaser.Input.Keyboard.JustDown(this.keys.back)){
       const ov=document.getElementById('lobby-overlay');
       if(ov){ov.classList.remove('hidden');if(typeof Lobby!=='undefined')Lobby.showLanding();}
-      this.scene.start('Select');
+      window.setTimeout(()=>{if(gameInstance){gameInstance.destroy(true);gameInstance=null;}},16);
       return;
     }
     if(!this.alive) return;
+    try{
 
     // 多人同步（20Hz）
     // 隊伍狀態（單人/多人共用）
@@ -2437,13 +2392,13 @@ class GameScene extends Phaser.Scene {
         });
       }
       // 多人其他玩家光圈
-      if(this.otherLayer) this.otherLayer.clear();
+      if(this.otherLayer&&this.otherLayer.scene) this.otherLayer.clear();
       Object.values(this.otherPlayers||{}).forEach(op=>{
         const d=op.data; if(!d||!d.alive) return;
         const isAlly=isTeamMode&&d.team===myTeam;
         const col=isAlly?0x44cc77:(d.team==='blue'?0x4488ff:d.team==='red'?0xff4444:0xffdd88);
         const ringCol=isAlly?0x44ff88:0xff6644;
-        if(this.otherLayer){
+        if(this.otherLayer&&this.otherLayer.scene){
           this.otherLayer.fillStyle(col,0.85); this.otherLayer.fillCircle(d.x,d.y,16);
           this.otherLayer.lineStyle(3,ringCol,0.9); this.otherLayer.strokeCircle(d.x,d.y,16);
           const hpFrac=Math.max(0,(d.hp||100))/100;
@@ -2458,11 +2413,12 @@ class GameScene extends Phaser.Scene {
       });
     }
     // ── 隊伍光圈 + 光暈（單人+多人都執行）──────────────────
-    if(this.teamRingLayer) this.teamRingLayer.clear();
-    if(this.teamGlowLayer) this.teamGlowLayer.clear();
+    try{
+    if(this.teamRingLayer&&this.teamRingLayer.scene) this.teamRingLayer.clear();
+    if(this.teamGlowLayer&&this.teamGlowLayer.scene) this.teamGlowLayer.clear();
     if(isTeamMode){
       // 地板光暈
-      if(this.teamGlowLayer){
+      if(this.teamGlowLayer&&this.teamGlowLayer.scene){
         if(myTeam!=='none'&&this.alive){
           const gc=myTeam==='blue'?0x4488ff:0xff4444;
           this.teamGlowLayer.fillStyle(gc,0.30); this.teamGlowLayer.fillCircle(this.p.x,this.p.y,22);
@@ -2474,31 +2430,33 @@ class GameScene extends Phaser.Scene {
         });
       }
       // 本地玩家光圈
-      if(this.teamRingLayer&&this.alive&&myTeam!=='none'){
+      if(this.teamRingLayer&&this.teamRingLayer.scene&&this.alive&&myTeam!=='none'){
         const myCol=myTeam==='blue'?0x4488ff:0xff4444;
         this.teamRingLayer.lineStyle(6,0xffffff,0.9); this.teamRingLayer.strokeCircle(this.p.x,this.p.y,28);
         this.teamRingLayer.lineStyle(4,myCol,1.0);   this.teamRingLayer.strokeCircle(this.p.x,this.p.y,28);
       }
       // AI 敵人光圈 + 隊伍標籤
-      if(this.teamRingLayer) this.enemies.forEach((e,i)=>{
+      if(this.teamRingLayer&&this.teamRingLayer.scene) this.enemies.forEach((e,i)=>{
         if(!e.alive) return;
-        const sp=this.enemySprites[i]; if(!sp||!sp.visible) return;
+        const sp=this.enemySprites[i]; if(!sp||!sp.scene||!sp.visible) return;
         const col=e.team==='blue'?0x4488ff:e.team==='red'?0xff4444:0x888888;
         const lc=e.team==='blue'?'#88aaff':e.team==='red'?'#ff8888':'#aaaaaa';
         const r=24+sp.scaleX*4;
         this.teamRingLayer.lineStyle(6,0xffffff,0.9); this.teamRingLayer.strokeCircle(e.x,e.y,r);
         this.teamRingLayer.lineStyle(4,col,1.0);      this.teamRingLayer.strokeCircle(e.x,e.y,r);
         if(!this._teamLabels) this._teamLabels=[];
-        if(!this._teamLabels[i]){
+        if(!this._teamLabels[i]||!this._teamLabels[i].scene){
           this._teamLabels[i]=this.add.text(0,0,'',{fontSize:'11px',color:'#ffffff',stroke:'#000',strokeThickness:3,fontFamily:'sans-serif'}).setDepth(25);
         }
         const lbl=e.team==='blue'?'[藍]':e.team==='red'?'[紅]':'[?]';
         this._teamLabels[i].setText(lbl).setColor(lc).setPosition(e.x,e.y-28).setVisible(true);
       });
       (this._teamLabels||[]).forEach((lbl,i)=>{
-        if(lbl&&(!this.enemies[i]||!this.enemies[i].alive)) lbl.setVisible(false);
+        if(lbl&&lbl.scene&&(!this.enemies[i]||!this.enemies[i].alive)) lbl.setVisible(false);
       });
     }
+    }catch(e){console.error('[team ring error]',e,{gameMode:this.gameMode,playerTeam:this.playerTeam,_teamLabels:this._teamLabels,teamRingLayer:this.teamRingLayer});}
+
 
     // 移動（方向鍵）
     // 安全機制：衝刺超過 0.6 秒強制結束
@@ -3210,6 +3168,7 @@ class GameScene extends Phaser.Scene {
     // 推力加成（調味料）
     // （在 doPush() FORCE 計算中直接引用 seasoningCombo）
     // ──────────────────────────────────────────────────────────
+    }catch(_ue){console.error('[game update crash]',_ue);}
   }
 
   spawnRandEvent(){
@@ -4617,14 +4576,19 @@ class GameScene extends Phaser.Scene {
   }
 }
 
-window._phaserGame = new Phaser.Game({
-  type: Phaser.AUTO,
-  input: { keyboard: { capture: [38,40,37,39,32,83,82,27] } }, // 阻止瀏覽器攔截↑↓←→SpaceSREsc
-  width: W, height: H,
-  backgroundColor: '#0a0400',
-  scene: [BootScene, HomeScene, TeamScene, SelectScene, GameScene],
-  parent: 'game',
-});
+let gameInstance = null;
+function createGame(){
+  if(gameInstance){gameInstance.destroy(true);gameInstance=null;}
+  gameInstance=new Phaser.Game({
+    type:Phaser.AUTO,
+    input:{keyboard:{capture:[38,40,37,39,32,83,82,27]}},
+    width:W, height:H,
+    backgroundColor:'#0a0400',
+    scene:[BootScene,HomeScene,TeamScene,SelectScene,GameScene],
+    parent:'game',
+  });
+  window._phaserGame=gameInstance;
+}
 
 </script>
 <script>
@@ -4678,7 +4642,7 @@ const Lobby = {
   showLanding() { this._show('screen-landing'); },
   showCreate()  { this._show('screen-create'); },
   showJoin()    { this._show('screen-join'); },
-  showSingle()  { document.getElementById('lobby-overlay').classList.add('hidden'); },
+  showSingle()  { document.getElementById('lobby-overlay').classList.add('hidden'); if(!gameInstance) createGame(); },
 
   _getChars() {
     if (typeof CHARS !== 'undefined') return CHARS;
@@ -4905,19 +4869,22 @@ const Lobby = {
 
   _launchGame() {
     document.getElementById('lobby-overlay').classList.add('hidden');
-    const game = window._phaserGame;
-    if (!game) return;
     const myPlayer = window.MP.players.find(p => p.id === window.MP.myId);
     const charKey = myPlayer ? myPlayer.charKey : window.MP.myCharKey;
     const charData = this._getChars().find(c => c.key === charKey) || this._getChars()[0];
-    // 先進 TeamScene（多人隊伍確認畫面），再由那邊啟動遊戲
-    game.scene.start('Team', {
+    const launchData = {
       char: charData,
       level: (typeof LEVELS !== 'undefined' ? LEVELS[0] : null),
       enemyCnt: Math.max(0, (window.MP.settings.maxPlayers||4) - window.MP.players.length),
       aiDiff: 1,
       multiplay: true,
-    });
+    };
+    if(gameInstance){
+      gameInstance.scene.start('Team', launchData);
+    } else {
+      window._PENDING_GAME_START={scene:'Team',data:launchData};
+      createGame();
+    }
   },
 };
 </script>
