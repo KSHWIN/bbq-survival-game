@@ -2357,11 +2357,7 @@ class GameScene extends Phaser.Scene {
       // ─────────────────────────────────────────────────────────
 
       if(this._checkWinCondition()){ this.time.delayedCall(600,()=>this.endGame(true)); }
-    } else {
-      // 落點在場內：噴出碰撞油漬
-      this._spawnCollisionOil(e.x,e.y);
-      if(this.onFire(e.x,e.y)) e.heat=Math.min(100,e.heat+22);
-    }
+    } else if(this.onFire(e.x,e.y)){ e.heat=Math.min(100,e.heat+22); }
   }
 
   showPop(msg){ this.popTxt.setText(msg); this.time.delayedCall(1600,()=>this.popTxt.setText('')); }
@@ -3066,7 +3062,7 @@ class GameScene extends Phaser.Scene {
             this.tweens.add({targets:eRef,
               x:eRef.x+pnx*pForce*cBst,y:eRef.y+pny*pForce*cBst,
               duration:240,ease:'Cubic.easeOut',
-              onComplete:()=>this.checkEnemyFall(eRef,eIdx)});
+              onComplete:()=>{this.checkEnemyFall(eRef,eIdx); if(inGrill(eRef.x,eRef.y)) this._spawnCollisionOil(eRef.x,eRef.y);}});
           }
           const gOriX=pTgt.isPlayer?this.p.x:pTgt.ref.x;
           const gOriY=pTgt.isPlayer?this.p.y:pTgt.ref.y;
