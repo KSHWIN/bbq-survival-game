@@ -2418,6 +2418,10 @@ class GameScene extends Phaser.Scene {
     if(!this.alive) return;
 
     // 多人同步（20Hz）
+    // 隊伍狀態（單人/多人共用）
+    const isTeamMode=this.gameMode==='team'||(window.MP?.settings?.gameMode==='team');
+    const myTeam=this.playerTeam||(window.MP?.myTeam)||'none';
+    // 多人同步（20Hz）
     if(this.multiplay&&window.MP&&window.MP.socket){
       this.syncTimer=(this.syncTimer||0)+dt;
       if(this.syncTimer>=0.05){
@@ -2432,53 +2436,8 @@ class GameScene extends Phaser.Scene {
           ultActive:!!(this.ultActive),
         });
       }
+      // 多人其他玩家光圈
       if(this.otherLayer) this.otherLayer.clear();
-      if(this.teamRingLayer) this.teamRingLayer.clear();
-      if(this.teamGlowLayer) this.teamGlowLayer.clear();
-      // 隊伍模式：單人 OR 多人都顯示光圈
-      const isTeamMode=this.gameMode==='team'||(window.MP?.settings?.gameMode==='team');
-      const myTeam=this.playerTeam||(window.MP?.myTeam)||'none';
-      // 地板光暈（低深度，讓角色疊在上面）
-      if(isTeamMode&&this.teamGlowLayer){
-        if(myTeam!=='none'&&this.alive){
-          const gc=myTeam==='blue'?0x4488ff:0xff4444;
-          this.teamGlowLayer.fillStyle(gc,0.30); this.teamGlowLayer.fillCircle(this.p.x,this.p.y,22);
-        }
-        if(!this.multiplay) this.enemies.forEach(e=>{
-          if(!e.alive||e.team==='none') return;
-          const gc=e.team==='blue'?0x4488ff:0xff4444;
-          this.teamGlowLayer.fillStyle(gc,0.30); this.teamGlowLayer.fillCircle(e.x,e.y,22);
-        });
-      }
-      // 本地玩家光圈
-      if(this.teamRingLayer&&isTeamMode&&this.alive&&myTeam!=='none'){
-        const myCol=myTeam==='blue'?0x4488ff:0xff4444;
-        this.teamRingLayer.lineStyle(6,0xffffff,0.9); this.teamRingLayer.strokeCircle(this.p.x,this.p.y,28);
-        this.teamRingLayer.lineStyle(4,myCol,1.0);   this.teamRingLayer.strokeCircle(this.p.x,this.p.y,28);
-      }
-      // 單人模式：AI 敵人也畫光圈 + 隊友/敵人標示
-      if(isTeamMode&&!this.multiplay&&this.teamRingLayer){
-        this.enemies.forEach((e,i)=>{
-          if(!e.alive) return;
-          const sp=this.enemySprites[i]; if(!sp||!sp.visible) return;
-          const col=e.team==='blue'?0x4488ff:e.team==='red'?0xff4444:0x888888;
-          const lc=e.team==='blue'?'#88aaff':e.team==='red'?'#ff8888':'#aaaaaa';
-          const r=24+sp.scaleX*4;
-          this.teamRingLayer.lineStyle(6,0xffffff,0.9); this.teamRingLayer.strokeCircle(e.x,e.y,r);
-          this.teamRingLayer.lineStyle(4,col,1.0);      this.teamRingLayer.strokeCircle(e.x,e.y,r);
-          if(!this._teamLabels) this._teamLabels=[];
-          if(!this._teamLabels[i]){
-            this._teamLabels[i]=this.add.text(0,0,'',{fontSize:'11px',color:'#ffffff',stroke:'#000',strokeThickness:3,fontFamily:'sans-serif'}).setDepth(25);
-          }
-          const lbl=e.team==='blue'?'[藍]':e.team==='red'?'[紅]':'[?]';
-          this._teamLabels[i].setText(lbl).setColor(lc).setPosition(e.x,e.y-28).setVisible(true);
-        });
-        // 隱藏已死的 label
-        (this._teamLabels||[]).forEach((lbl,i)=>{
-          if(lbl&&(!this.enemies[i]||!this.enemies[i].alive)) lbl.setVisible(false);
-        });
-      }
-      // 多人模式：其他玩家光圈（原有邏輯）
       Object.values(this.otherPlayers||{}).forEach(op=>{
         const d=op.data; if(!d||!d.alive) return;
         const isAlly=isTeamMode&&d.team===myTeam;
@@ -2496,6 +2455,48 @@ class GameScene extends Phaser.Scene {
           if(op.nm._teamLabel!==label){ op.nm.setText((d.nickname||'?')+label); op.nm._teamLabel=label; }
           op.nm.setPosition(d.x,d.y-26);
         }
+      });
+    }
+    // ── 隊伍光圈 + 光暈（單人+多人都執行）──────────────────
+    if(this.teamRingLayer) this.teamRingLayer.clear();
+    if(this.teamGlowLayer) this.teamGlowLayer.clear();
+    if(isTeamMode){
+      // 地板光暈
+      if(this.teamGlowLayer){
+        if(myTeam!=='none'&&this.alive){
+          const gc=myTeam==='blue'?0x4488ff:0xff4444;
+          this.teamGlowLayer.fillStyle(gc,0.30); this.teamGlowLayer.fillCircle(this.p.x,this.p.y,22);
+        }
+        this.enemies.forEach(e=>{
+          if(!e.alive||e.team==='none') return;
+          const gc=e.team==='blue'?0x4488ff:0xff4444;
+          this.teamGlowLayer.fillStyle(gc,0.30); this.teamGlowLayer.fillCircle(e.x,e.y,22);
+        });
+      }
+      // 本地玩家光圈
+      if(this.teamRingLayer&&this.alive&&myTeam!=='none'){
+        const myCol=myTeam==='blue'?0x4488ff:0xff4444;
+        this.teamRingLayer.lineStyle(6,0xffffff,0.9); this.teamRingLayer.strokeCircle(this.p.x,this.p.y,28);
+        this.teamRingLayer.lineStyle(4,myCol,1.0);   this.teamRingLayer.strokeCircle(this.p.x,this.p.y,28);
+      }
+      // AI 敵人光圈 + 隊伍標籤
+      if(this.teamRingLayer) this.enemies.forEach((e,i)=>{
+        if(!e.alive) return;
+        const sp=this.enemySprites[i]; if(!sp||!sp.visible) return;
+        const col=e.team==='blue'?0x4488ff:e.team==='red'?0xff4444:0x888888;
+        const lc=e.team==='blue'?'#88aaff':e.team==='red'?'#ff8888':'#aaaaaa';
+        const r=24+sp.scaleX*4;
+        this.teamRingLayer.lineStyle(6,0xffffff,0.9); this.teamRingLayer.strokeCircle(e.x,e.y,r);
+        this.teamRingLayer.lineStyle(4,col,1.0);      this.teamRingLayer.strokeCircle(e.x,e.y,r);
+        if(!this._teamLabels) this._teamLabels=[];
+        if(!this._teamLabels[i]){
+          this._teamLabels[i]=this.add.text(0,0,'',{fontSize:'11px',color:'#ffffff',stroke:'#000',strokeThickness:3,fontFamily:'sans-serif'}).setDepth(25);
+        }
+        const lbl=e.team==='blue'?'[藍]':e.team==='red'?'[紅]':'[?]';
+        this._teamLabels[i].setText(lbl).setColor(lc).setPosition(e.x,e.y-28).setVisible(true);
+      });
+      (this._teamLabels||[]).forEach((lbl,i)=>{
+        if(lbl&&(!this.enemies[i]||!this.enemies[i].alive)) lbl.setVisible(false);
       });
     }
 
