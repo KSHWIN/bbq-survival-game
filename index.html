@@ -2969,8 +2969,9 @@ class GameScene extends Phaser.Scene {
         e.y+=this.tilt.y*this.tilt.force*dt;
         if(!inGrill(e.x,e.y)&&e.alive) this.checkEnemyFall(e,i);
       }
-      if(this.onFire(e.x,e.y)) e.heat=Math.min(100,e.heat+14*dt);
-      else                      e.heat=Math.min(100,e.heat+0.8*dt);
+      const _eFoil=e.activeEffects&&e.activeEffects.foil>0;
+      if(!_eFoil&&this.onFire(e.x,e.y)) e.heat=Math.min(100,e.heat+14*dt);
+      else if(!_eFoil)                   e.heat=Math.min(100,e.heat+0.8*dt);
       if(e.heat>=100){
         e.alive=false;
         this.showPop(e.label+' 被烤熟！');
