@@ -1463,7 +1463,7 @@ class GameScene extends Phaser.Scene {
     this.heat=0; this.alive=true; this.pushCD=0; this.timeLeft=this.levelData.timer;
     this.lastDir={x:1,y:0}; this.firePhase=0; this.pushWas=false; this.wobbleTween=null; this.dashState=null; this.dashTrail=[];
     this.forkTimer=4; this.fork=null;
-    this.activeEffects={foil:0,garlic:0,sauce:0,slowpow:0,pepBoost:0,stun:0,toxic:0,oilSlick:0,
+    this.activeEffects={foil:0,garlic:0,sauce:0,slowpow:0,pepBoost:0,stun:0,toxic:0,oilSlick:0,slip:0,sauceCharge:0,
       goldenZone:0,   // 黃金熟度 50-80% buff 計時
       juicy:0,        // 擊殺排熱 buff 計時
       iceBoost:0,     // 冰塊拾取加速 buff 計時
@@ -1476,6 +1476,9 @@ class GameScene extends Phaser.Scene {
     this._goldenActive=false;  // 上幀是否在黃金區
     this.mapItems=[]; this.itemTimer=3; this.sizzleTimer=0;
     this.oilSlicks=[]; this.oilDir={x:0,y:0};
+    this.iceTrail=[]; this.iceLastPos={x:0,y:0};
+    this.saucePools=[]; this.lemonPuddles=[];
+    this.trailLayer=this.add.graphics().setDepth(6);
     this.oilLayer=this.add.graphics().setDepth(3);
     this.randOilTimer=12+Math.random()*6;
     this.flares=[]; this.flareTimer=15+Math.random()*5;
@@ -2497,6 +2500,8 @@ class GameScene extends Phaser.Scene {
     // ── 正向循環速度加成 ──
     const _goldenSpd=this.activeEffects.goldenZone>0?1.15:1.0;   // 黃金熟度 +15%
     const _iceSpd=this.activeEffects.iceBoost>0?1.5:1.0;          // 冰塊加速 +50%
+    if(this.activeEffects.slip>0&&!this._slipInit){this._slipInit=true;}
+    if(this.activeEffects.slip<=0) this._slipInit=false;
     const SPD=isDash?120:this.charData.speed*(this.activeEffects.pepBoost>0?1.5:1)*(this.activeEffects.slowpow>0?0.5:1)*ultSpd*_ultSpdMul*_goldenSpd*_iceSpd;
     let mx=0, my=0;
     const _ctrlRev=(this.ultState&&this.ultState.reversed)?-1:1;
@@ -2506,6 +2511,7 @@ class GameScene extends Phaser.Scene {
     if(this.keys.down.isDown  ||GKEYS['ArrowDown'])  my=_ctrlRev;
     if(mx&&my){mx*=0.707;my*=0.707;}
     if(this.activeEffects.stun>0){mx=0;my=0;if(isDash&&this.dashState)this.dashState.active=false;}
+    if(this.activeEffects.slip>0){mx=0;my=0;} // 打滑：無法輸入
     if(this.ultState&&this.ultState.flying){mx=0;my=0;}
     if(!isDash){
       if(this.activeEffects.oilSlick>0){
@@ -2576,6 +2582,14 @@ class GameScene extends Phaser.Scene {
         this.p.y=Phaser.Math.Clamp(ny,G.y+4,G.y+G.h-4);
       }
     } else {this.p.x=nx;this.p.y=ny;}
+    // 冰跡留下（iceBoost 期間）
+    if(this.activeEffects.iceBoost>0){
+      const _id=Math.hypot(this.p.x-this.iceLastPos.x,this.p.y-this.iceLastPos.y);
+      if(_id>=15){
+        this.iceTrail.push({x:this.p.x,y:this.p.y,life:3.0,ownerId:'player'});
+        this.iceLastPos={x:this.p.x,y:this.p.y};
+      }
+    }
     // lastDir 只從鍵盤輸入更新，忽略衝刺覆蓋方向
     const kx=((this.keys.left.isDown||GKEYS['ArrowLeft'])?-1:(this.keys.right.isDown||GKEYS['ArrowRight'])?1:0);
     const ky=((this.keys.up.isDown||GKEYS['ArrowUp'])?-1:(this.keys.down.isDown||GKEYS['ArrowDown'])?1:0);
@@ -2888,8 +2902,11 @@ class GameScene extends Phaser.Scene {
       }
       // 油漬：在油上無法發動衝刺、無法轉向（只能滑行）
       const onOil=this.oilSlicks&&this.oilSlicks.some(os=>Math.hypot(e.x-os.x,e.y-os.y)<os.r);
+      const onSlip=(e.activeEffects&&e.activeEffects.slip>0);
+      if(onSlip){e.vx=e.slipLastVx||e.vx; e.vy=e.slipLastVy||e.vy;}
       // 衝刺：難度決定頻率，速度固定 4.5
       const chargeCd=diff===0?6+Math.random()*4:diff===1?3.5+Math.random()*3:2+Math.random()*2;
+      if(!onSlip){
       if(e.chargeTimer<=0&&edist<(diff===1?165:200)&&!onOil){
         e.chargeTimer=chargeCd;
         e.charging=true; e.chargeTime=0.32;
@@ -2910,6 +2927,7 @@ class GameScene extends Phaser.Scene {
       const _eIceSpd=_eAE.iceBoost>0?1.5:1.0;
       const maxSpd=(e.charging?4.5:2.8)*sSlow*capSlow*(onOil?0.7:1)*_ePepSpd*_eIceSpd;
       if(espd>maxSpd){e.vx=(e.vx/espd)*maxSpd;e.vy=(e.vy/espd)*maxSpd;}
+      }
       // 推人：找最近對象（玩家或其他 AI 都算）
       const pushCd=[5.0,3.0,2.0][diff];
       if(e.pushTimer<=0&&!e.charging){
@@ -2962,6 +2980,14 @@ class GameScene extends Phaser.Scene {
       }
       if(onOil){e.vx*=0.985;e.vy*=0.985;} // 油上滑行：輕微減速但失去轉向控制
       e.x+=e.vx; e.y+=e.vy;
+      // AI 冰跡留下
+      if(e.activeEffects&&e.activeEffects.iceBoost>0){
+        const _eid=Math.hypot(e.x-(e.iceLastX||0),e.y-(e.iceLastY||0));
+        if(_eid>=15){
+          this.iceTrail.push({x:e.x,y:e.y,life:3.0,ownerId:e.label});
+          e.iceLastX=e.x; e.iceLastY=e.y;
+        }
+      }
       if(e.x<G.x+e.r||e.x>G.x+G.w-e.r) e.vx*=-1;
       if(e.y<G.y+e.r||e.y>G.y+G.h-e.r) e.vy*=-1;
       if(this.tilt&&this.tilt.state==='active'){
@@ -3041,6 +3067,22 @@ class GameScene extends Phaser.Scene {
     this.updateRandEvents(dt); if(!this.alive) return;
     this.updateShrink(dt);    if(!this.alive) return;
     this.updateHoles(dt);     if(!this.alive) return;
+    // 冰跡更新
+    this.iceTrail=this.iceTrail.filter(t=>{
+      t.life-=dt;
+      if(t.life<=0) return false;
+      if(t.ownerId!=='player'&&Math.hypot(this.p.x-t.x,this.p.y-t.y)<22){
+        this.activeEffects.slip=Math.max(this.activeEffects.slip,1.0);
+      }
+      this.enemies.forEach(e=>{
+        if(!e.alive||t.ownerId===e.label) return;
+        if(Math.hypot(e.x-t.x,e.y-t.y)<22){
+          if(e.activeEffects) e.activeEffects.slip=Math.max(e.activeEffects.slip||0,1.0);
+          e.slipLastVx=e.vx; e.slipLastVy=e.vy;
+        }
+      });
+      return true;
+    });
     // 道具拾取
     this.mapItems=this.mapItems.filter(item=>{
       item.life-=dt;
@@ -3066,6 +3108,8 @@ class GameScene extends Phaser.Scene {
     if(ae2.slowpow>0)  eff2.push('🍋慢速 '+ae2.slowpow.toFixed(1)+'s');
     if(ae2.stun>0)    eff2.push('XX穿刺 '+ae2.stun.toFixed(1)+'s');
     if(ae2.toxic>0)   eff2.push('!!焦糖 '+ae2.toxic.toFixed(1)+'s');
+    if(ae2.slip>0)        eff2.push('⛸打滑 '+ae2.slip.toFixed(1)+'s');
+    if(ae2.sauceCharge>0) eff2.push('🍶待佈陣 '+ae2.sauceCharge.toFixed(1)+'s');
     const aa2=this.abilityActive;
     if(aa2&&aa2.type==='armor')  eff2.push('裝甲 '+aa2.timer.toFixed(1)+'s');
     if(aa2&&aa2.type==='glide')  eff2.push('滑翔免疫 '+aa2.timer.toFixed(1)+'s');
@@ -3075,6 +3119,7 @@ class GameScene extends Phaser.Scene {
     // 繪製
     this.firePhase+=dt*3;
     this.drawFires(this.firePhase);
+    this.drawTrailEffects();
     this.drawShrinkRing();
     this.drawHoles();
     this.drawEventFx();
@@ -3537,6 +3582,36 @@ class GameScene extends Phaser.Scene {
       }
       this.p.x=Phaser.Math.Clamp(this.p.x,G.x+pad+2,G.x+G.w-pad-2);
       this.p.y=Phaser.Math.Clamp(this.p.y,G.y+pad+2,G.y+G.h-pad-2);
+    }
+  }
+
+  drawTrailEffects(){
+    const g=this.trailLayer; g.clear();
+    this.iceTrail.forEach(t=>{
+      const a=Math.min(0.55,t.life/3.0*0.55);
+      g.fillStyle(0xaaddff,a); g.fillCircle(t.x,t.y,16);
+      g.lineStyle(1,0xffffff,a*0.6); g.strokeCircle(t.x,t.y,16);
+    });
+    this.saucePools.forEach(sp=>{
+      const a=Math.min(0.45,sp.life/8.0*0.45);
+      g.fillStyle(0x5c3300,a); g.fillCircle(sp.x,sp.y,sp.r);
+      g.lineStyle(2,0x3a1f00,a+0.2); g.strokeCircle(sp.x,sp.y,sp.r);
+    });
+    this.lemonPuddles.forEach(lp=>{
+      const a=Math.min(0.5,lp.life/2.5*0.5);
+      const wb=(Math.random()-0.5)*2;
+      g.fillStyle(0xccdd22,a); g.fillCircle(lp.x+wb,lp.y+wb,lp.r);
+      g.lineStyle(1,0x99aa00,a+0.1); g.strokeCircle(lp.x,lp.y,lp.r);
+    });
+    if(this._sneezeFx){
+      const a=this._sneezeFx.life/0.3*0.7;
+      const cx=this.p.x, cy=this.p.y;
+      const ang=Math.atan2(this._sneezeFx.dy,this._sneezeFx.dx);
+      const r=80*(1-this._sneezeFx.life/0.3)*0.8+20;
+      g.fillStyle(0xffffff,a*0.35);
+      g.beginPath(); g.moveTo(cx,cy);
+      g.arc(cx,cy,r,ang-Math.PI/4,ang+Math.PI/4,false);
+      g.closePath(); g.fillPath();
     }
   }
 
