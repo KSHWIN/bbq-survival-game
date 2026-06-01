@@ -2609,6 +2609,18 @@ class GameScene extends Phaser.Scene {
       }
     } else {this.p.x=nx;this.p.y=ny;}
     this._lastPX=this.p.x; this._lastPY=this.p.y;
+    // 傾斜低側加速帶
+    if(this.tilt&&this.tilt.state==='active'){
+      const _tf=this.tilt;
+      const _lowEdgeX=_tf.x>0?G.x+G.w-this.shrinkPad:G.x+this.shrinkPad;
+      const _lowEdgeY=_tf.y>0?G.y+G.h-this.shrinkPad:G.y+this.shrinkPad;
+      const _distToLow=_tf.x!==0?
+        Math.abs(this.p.x-_lowEdgeX):Math.abs(this.p.y-_lowEdgeY);
+      if(_distToLow<35){
+        this.p.x+=_tf.x*_tf.force*0.5*dt;
+        this.p.y+=_tf.y*_tf.force*0.5*dt;
+      }
+    }
     // 冰跡留下（iceBoost 期間）
     if(this.activeEffects.iceBoost>0){
       const _id=Math.hypot(this.p.x-this.iceLastPos.x,this.p.y-this.iceLastPos.y);
@@ -2857,6 +2869,17 @@ class GameScene extends Phaser.Scene {
           this.tilt=null;
           this.cameras.main.setRotation(0);
           this.tiltTxt.setVisible(false);
+        }
+        // 道具跟著傾斜力滑動
+        if(this.tilt&&this.tilt.state==='active'){
+          this.mapItems.forEach(item=>{
+            item.x=Phaser.Math.Clamp(item.x+this.tilt.x*15*dt,G.x+30,G.x+G.w-30);
+            item.y=Phaser.Math.Clamp(item.y+this.tilt.y*15*dt,G.y+30,G.y+G.h-30);
+            item.img.setPosition(item.x,item.y);
+            item.gfx.clear();
+            item.gfx.fillStyle(item.good?0x00ccff:0xff3300,0.45);
+            item.gfx.fillCircle(item.x,item.y,23);
+          });
         }
       }
     } else { this.tiltTxt.setVisible(false); }
@@ -3715,6 +3738,16 @@ class GameScene extends Phaser.Scene {
       g.strokeCircle(this.p.x,this.p.y,this._garlicAoe.r);
       g.fillStyle(0xffee44,a*0.15);
       g.fillCircle(this.p.x,this.p.y,this._garlicAoe.r);
+    }
+    // 傾斜警示帶
+    if(this.tilt&&this.tilt.state==='warn'){
+      const _t=this.tilt;
+      const blink=0.25+0.35*Math.sin(ph*6);
+      g.fillStyle(0xff4400,blink*0.5);
+      if(_t.x>0)      g.fillRect(G.x+G.w-20,G.y,20,G.h);
+      else if(_t.x<0) g.fillRect(G.x,G.y,20,G.h);
+      else if(_t.y>0) g.fillRect(G.x,G.y+G.h-20,G.w,20);
+      else            g.fillRect(G.x,G.y,G.w,20);
     }
   }
 
