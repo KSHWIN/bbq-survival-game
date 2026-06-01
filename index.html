@@ -1481,7 +1481,7 @@ class GameScene extends Phaser.Scene {
     this.mapItems=[]; this.itemTimer=3; this.sizzleTimer=0;
     this.oilSlicks=[]; this.oilDir={x:0,y:0};
     this.iceTrail=[]; this.iceLastPos={x:0,y:0};
-    this.saucePools=[]; this.lemonPuddles=[];
+    this.saucePools=[]; this.lemonPuddles=[]; this.sauceSplash=[];
     this.fxTrailLayer=this.add.graphics().setDepth(6);
     this.oilLayer=this.add.graphics().setDepth(3);
     this.randOilTimer=12+Math.random()*6;
@@ -2272,6 +2272,12 @@ class GameScene extends Phaser.Scene {
   _deploySaucePool(ownerId,px,py){
     if(this.saucePools.length>=2) this.saucePools.shift();
     this.saucePools.push({x:px,y:py,r:55,life:8.0,ownerId});
+    // 飛濺效果：噴出 8 個液滴
+    for(let _si=0;_si<8;_si++){
+      const _ang=Math.random()*Math.PI*2;
+      const _spd=40+Math.random()*60;
+      this.sauceSplash.push({x:px,y:py,vx:Math.cos(_ang)*_spd,vy:Math.sin(_ang)*_spd,life:0.5,r:4+Math.random()*5});
+    }
     if(ownerId==='player'){
       this.activeEffects.sauceCharge=0;
       this.showPop('🍶 醬油灘！');
@@ -2363,7 +2369,7 @@ class GameScene extends Phaser.Scene {
   }
 
   endGame(win){
-    this.iceTrail=[]; this.saucePools=[]; this.lemonPuddles=[];
+    this.iceTrail=[]; this.saucePools=[]; this.lemonPuddles=[]; this.sauceSplash=[];
     this._garlicAoe=null; this._sneezeFx=null;
     this.alive=false;
     if(this.tilt){this.tilt=null;this.cameras.main.setRotation(0);}
@@ -3163,6 +3169,11 @@ class GameScene extends Phaser.Scene {
     this.updateRandEvents(dt); if(!this.alive) return;
     this.updateShrink(dt);    if(!this.alive) return;
     this.updateHoles(dt);     if(!this.alive) return;
+    // 醬油飛濺液滴物理更新
+    this.sauceSplash=this.sauceSplash.filter(s=>{
+      s.life-=dt; s.x+=s.vx*dt; s.y+=s.vy*dt; s.vx*=0.82; s.vy*=0.82;
+      return s.life>0;
+    });
     // 醬油灘更新
     this.saucePools=this.saucePools.filter(sp=>{
       sp.life-=dt;
@@ -3275,7 +3286,7 @@ class GameScene extends Phaser.Scene {
     if(this._sneezeFx){this._sneezeFx.life-=dt; if(this._sneezeFx.life<=0) this._sneezeFx=null;}
     // 效果指示器
     const eff2=[];
-    if(ae2.foil>0)    eff2.push('◎险4 '+ae2.foil.toFixed(0)+'s');
+    if(ae2.foil>0)    eff2.push('◎隔熱 '+ae2.foil.toFixed(0)+'s');
     if(ae2.garlic>0)  eff2.push('★推力x2 '+ae2.garlic.toFixed(0)+'s');
     if(ae2.pepBoost>0) eff2.push('🌶加速x1.5 '+ae2.pepBoost.toFixed(0)+'s');
     if(ae2.slowpow>0)  eff2.push('🍋慢速 '+ae2.slowpow.toFixed(1)+'s');
@@ -3743,6 +3754,19 @@ class GameScene extends Phaser.Scene {
       g.fillStyle(0xffee44,a*0.15);
       g.fillCircle(this.p.x,this.p.y,this._garlicAoe.r);
     }
+    // 鋁箔紙銀色光效（身上閃爍）
+    if(this.activeEffects&&this.activeEffects.foil>0){
+      const _fp=this.p;
+      const _fa=0.45+0.35*Math.sin(ph*12); // 快速閃爍
+      g.lineStyle(3,0xddddee,_fa); g.strokeCircle(_fp.x,_fp.y,26);
+      g.lineStyle(1,0xffffff,_fa*0.6); g.strokeCircle(_fp.x,_fp.y,22);
+      // 四個反光點
+      for(let _k=0;_k<4;_k++){
+        const _ka=ph*4+_k*Math.PI/2;
+        g.fillStyle(0xffffff,_fa*0.55);
+        g.fillCircle(_fp.x+Math.cos(_ka)*18,_fp.y+Math.sin(_ka)*18,3);
+      }
+    }
     // 傾斜警示帶
     if(this.tilt&&this.tilt.state==='warn'){
       const _t=this.tilt;
@@ -3822,9 +3846,17 @@ class GameScene extends Phaser.Scene {
       g.lineStyle(1,0xffffff,a*0.6); g.strokeCircle(t.x,t.y,16);
     });
     this.saucePools.forEach(sp=>{
-      const a=Math.min(0.45,sp.life/8.0*0.45);
-      g.fillStyle(0x5c3300,a); g.fillCircle(sp.x,sp.y,sp.r);
-      g.lineStyle(2,0x3a1f00,a+0.2); g.strokeCircle(sp.x,sp.y,sp.r);
+      const a=Math.min(0.7,sp.life/8.0*0.7);
+      g.fillStyle(0x0f0500,a); g.fillCircle(sp.x,sp.y,sp.r);
+      g.lineStyle(2,0xcc5500,Math.min(0.85,a+0.25)); g.strokeCircle(sp.x,sp.y,sp.r);
+      // 內圈光澤感
+      g.fillStyle(0x3a1200,a*0.5); g.fillCircle(sp.x-sp.r*0.2,sp.y-sp.r*0.2,sp.r*0.55);
+    });
+    // 醬油飛濺液滴繪製
+    this.sauceSplash.forEach(s=>{
+      const _sa=s.life/0.5;
+      g.fillStyle(0x0f0500,_sa*0.9); g.fillCircle(s.x,s.y,s.r*_sa);
+      g.lineStyle(1,0xcc5500,_sa*0.6); g.strokeCircle(s.x,s.y,s.r*_sa);
     });
     this.lemonPuddles.forEach(lp=>{
       const a=Math.min(0.5,lp.life/2.5*0.5);
