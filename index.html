@@ -485,16 +485,31 @@ class HomeScene extends Phaser.Scene {
 class TeamScene extends Phaser.Scene {
   constructor(){ super('Team'); }
   init(data){
-    this.gameData=data;              // from SelectScene
-    this.gameMode='individual';      // 'individual' | 'team'
-    // 產生全部參與者（玩家 + AI）
-    this.participants=[
-      {id:'player',name:'你',charKey:data.char.key,char:data.char,team:'none',isPlayer:true},
-    ];
-    const cnt=data.enemyCnt||2;
-    for(let i=0;i<cnt;i++){
-      const c=CHARS[(CHARS.findIndex(x=>x.key===data.char.key)+1+i)%CHARS.length];
-      this.participants.push({id:'ai'+i,name:'AI '+(i+1),charKey:c.key,char:c,team:'none',isPlayer:false});
+    this.gameData=data;
+    this.mpMode=!!(data&&data.multiplay&&window.MP&&window.MP.enabled);
+    this.gameMode=this.mpMode?(window.MP.settings&&window.MP.settings.gameMode==='team'?'team':'individual'):'individual';
+    if(this.mpMode){
+      // 多人模式：從 MP.players 建立參與者
+      const myId=window.MP.myId;
+      this.participants=(window.MP.players||[]).map(p=>{
+        const charObj=CHARS.find(c=>c.key===p.charKey)||CHARS[0];
+        return {id:p.id,name:p.nickname+(p.id===myId?' 👤':''),charKey:p.charKey,char:charObj,
+          team:p.team||'none',isPlayer:true,isSelf:p.id===myId};
+      });
+      // AI 補位（主機才能控制）
+      const aiCnt=Math.max(0,(window.MP.settings&&window.MP.settings.maxPlayers||4)-this.participants.length);
+      for(let i=0;i<aiCnt;i++){
+        const c=CHARS[(i+3)%CHARS.length];
+        this.participants.push({id:'ai'+i,name:'AI '+(i+1),charKey:c.key,char:c,team:'none',isPlayer:false});
+      }
+    } else {
+      // 單人模式：玩家 + AI 隨機選角
+      this.participants=[{id:'player',name:'你',charKey:data.char.key,char:data.char,team:'none',isPlayer:true,isSelf:true}];
+      const cnt=data.enemyCnt||2;
+      for(let i=0;i<cnt;i++){
+        const c=CHARS[(CHARS.findIndex(x=>x.key===data.char.key)+1+i)%CHARS.length];
+        this.participants.push({id:'ai'+i,name:'AI '+(i+1),charKey:c.key,char:c,team:'none',isPlayer:false});
+      }
     }
   }
 
@@ -574,38 +589,56 @@ class TeamScene extends Phaser.Scene {
 
     // ── 確認開始按鈕 ──────────────────────────────────────────
     const sBx=cx+240,sByOff=H-30;
-    const sBg=this.add.rectangle(sBx,sByOff,180,38,0xff6600,1).setStrokeStyle(3,0xffcc44).setDepth(20);
-    const sTxt=this.add.text(sBx,sByOff,'▶  確認開始',{fontSize:'18px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#883300',strokeThickness:4}).setOrigin(0.5).setDepth(21);
-    sBg.setInteractive({useHandCursor:true});
-    sBg.on('pointerover',()=>{ sBg.setFillStyle(0xff8800); sBg.setScale(1.05); sTxt.setScale(1.05); });
-    sBg.on('pointerout', ()=>{ sBg.setFillStyle(0xff6600); sBg.setScale(1); sTxt.setScale(1); });
-    sBg.on('pointerdown',()=>this._startGame());
-    this.tweens.add({targets:[sBg,sTxt],scaleX:{from:1,to:1.03},scaleY:{from:1,to:1.03},duration:700,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
+    const isHost=!this.mpMode||window.MP.isHost;
+    const sBg=this.add.rectangle(sBx,sByOff,180,38,isHost?0xff6600:0x333333,1).setStrokeStyle(3,isHost?0xffcc44:0x555555).setDepth(20);
+    const sBtnLabel=this.mpMode?(isHost?'▶  確認開始（主機）':'⏳ 等待主機開始…'):'▶  確認開始';
+    const sTxt=this.add.text(sBx,sByOff,sBtnLabel,{fontSize:isHost?18:14,color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold',stroke:isHost?'#883300':'#111',strokeThickness:4}).setOrigin(0.5).setDepth(21);
+    if(isHost){
+      sBg.setInteractive({useHandCursor:true});
+      sBg.on('pointerover',()=>{ sBg.setFillStyle(0xff8800); sBg.setScale(1.05); sTxt.setScale(1.05); });
+      sBg.on('pointerout', ()=>{ sBg.setFillStyle(0xff6600); sBg.setScale(1); sTxt.setScale(1); });
+      sBg.on('pointerdown',()=>this._startGame());
+      this.tweens.add({targets:[sBg,sTxt],scaleX:{from:1,to:1.03},scaleY:{from:1,to:1.03},duration:700,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
+    }
 
-    // ── 回上一頁 ──────────────────────────────────────────────
-    const backBtn=this.add.text(14,14,'← 角色選擇',{fontSize:'13px',color:'#ffcc88',backgroundColor:'#3d1a00',padding:{x:8,y:4},fontFamily:'sans-serif'}).setOrigin(0,0).setDepth(20).setInteractive({useHandCursor:true});
-    backBtn.on('pointerdown',()=>this.scene.start('Select'));
+    // ── 回上一頁（單人才顯示）──────────────────────────────────
+    if(!this.mpMode){
+      const backBtn=this.add.text(14,14,'← 角色選擇',{fontSize:'13px',color:'#ffcc88',backgroundColor:'#3d1a00',padding:{x:8,y:4},fontFamily:'sans-serif'}).setOrigin(0,0).setDepth(20).setInteractive({useHandCursor:true});
+      backBtn.on('pointerdown',()=>this.scene.start('Select'));
+    }
 
     // 說明文字
-    this.helpTxt=this.add.text(cx,H-14,'點擊參與者卡片可切換隊伍（藍 ↔ 紅 ↔ 未分配）',{fontSize:'11px',color:'#666666',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(5);
+    const helpHint=this.mpMode?'點擊自己的卡片切換隊伍；主機可切換 AI 隊伍':'點擊參與者卡片可切換隊伍（藍 ↔ 紅 ↔ 未分配）';
+    this.helpTxt=this.add.text(cx,H-14,helpHint,{fontSize:'11px',color:'#666666',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(5);
     this._refreshTeamUI();
+
+    // ── 多人模式：監聽主機廣播的 team_confirmed ────────────────
+    if(this.mpMode&&!isHost){
+      const sock=window.MP&&window.MP.socket;
+      if(sock){
+        sock.on('game_event',(evt)=>{
+          if(evt.type==='team_confirmed'){
+            sock.off('game_event');
+            this._launchFromTeamData(evt.teams);
+          }
+        });
+      }
+    }
   }
 
   _buildCards(){
-    // 清除舊卡片
+    if(this.mpMode) return; // 多人模式：participants 已在 init() 建好
     this.cardGfxGroup.forEach(o=>{try{o.destroy();}catch(e){}});
     this.cardGfxGroup=[];
-    // 重設參與者（保留隊伍設定）
     const teamMap={};
     this.participants.forEach(p=>teamMap[p.id]=p.team);
     const cnt=this.gameData.enemyCnt||2;
-    // 保持玩家，更新 AI 數量
     this.participants=this.participants.filter(p=>p.isPlayer);
     for(let i=0;i<cnt;i++){
       const ci=(CHARS.findIndex(x=>x.key===this.gameData.char.key)+1+i)%CHARS.length;
       const c=CHARS[ci];
       const id='ai'+i;
-      this.participants.push({id,name:'AI '+(i+1),charKey:c.key,char:c,team:teamMap[id]||'none',isPlayer:false});
+      this.participants.push({id,name:'AI '+(i+1),charKey:c.key,char:c,team:teamMap[id]||'none',isPlayer:false,isSelf:false});
     }
     this._refreshTeamUI();
   }
@@ -628,15 +661,23 @@ class TeamScene extends Phaser.Scene {
       const col=p.team==='blue'?0x003388:p.team==='red'?0x880000:0x222222;
       const border=p.team==='blue'?0x4488ff:p.team==='red'?0xff4444:0x555555;
       const bg=this.add.rectangle(x,y,88,58,col,0.92).setStrokeStyle(2,border,1).setDepth(10);
-      const nameTxt=this.add.text(x,y+10,p.name+(isP?' 👤':'🤖'),{fontSize:'11px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:isP?'bold':'normal'}).setOrigin(0.5).setDepth(11);
+      // 名稱：多人模式隱藏冗餘 icon（name 已含 👤），單人模式保留原邏輯
+      const nameLabel=this.mpMode?p.name:(p.name+(isP?' 👤':'🤖'));
+      const nameTxt=this.add.text(x,y+10,nameLabel,{fontSize:'11px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:(isP||p.isSelf)?'bold':'normal'}).setOrigin(0.5).setDepth(11);
       const charTxt=this.add.text(x,y-10,p.char.name,{fontSize:'10px',color:'#ffcc44',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(11);
       this.cardGfxGroup.push(bg,nameTxt,charTxt);
-      if(isTeam){
+      // 多人模式：只有自己的卡或 AI 卡（主機才能改）才能點
+      const canInteract=isTeam&&(this.mpMode?(p.isSelf||((!p.isPlayer)&&window.MP&&window.MP.isHost)):true);
+      if(canInteract){
         bg.setInteractive({useHandCursor:true});
         bg.on('pointerdown',()=>{
           const seq=['none','blue','red'];
           const cur=p.team||'none';
           p.team=seq[(seq.indexOf(cur)+1)%seq.length];
+          // 多人模式：更新自己的 team 並通知 server
+          if(this.mpMode&&p.isSelf&&window.MP&&window.MP.socket){
+            window.MP.myTeam=p.team; window.MP.socket.emit('update_team',{team:p.team});
+          }
           this._refreshTeamUI();
         });
         bg.on('pointerover',()=>bg.setStrokeStyle(3,0xffffff,0.8));
@@ -664,14 +705,27 @@ class TeamScene extends Phaser.Scene {
 
   _startGame(){
     const d=this.gameData;
+    const teamsData=this.participants.map(p=>({id:p.id,team:p.team||'none',isPlayer:p.isPlayer}));
+    if(this.mpMode&&window.MP&&window.MP.socket&&window.MP.isHost){
+      // 主機：廣播 team_confirmed，然後自己也進遊戲
+      window.MP.socket.emit('game_event',{type:'team_confirmed',teams:teamsData});
+    }
+    this._launchFromTeamData(teamsData);
+  }
+
+  _launchFromTeamData(teamsData){
+    const d=this.gameData;
+    const myParticipant=this.participants.find(p=>p.isSelf)||this.participants.find(p=>p.isPlayer);
+    const myChar=myParticipant?myParticipant.char:d.char;
+    const aiTeams=(teamsData||[]).filter(p=>!p.isPlayer);
     this.scene.start('Game',{
-      char:d.char,
+      char:myChar,
       level:d.level,
       enemyCnt:d.enemyCnt||2,
       aiDiff:d.aiDiff??1,
-      multiplay:d.multiplay||false,
+      multiplay:this.mpMode,
       gameMode:this.gameMode,
-      teams:this.participants.filter(p=>!p.isPlayer).map(p=>({id:p.id,team:p.team||'none'})),
+      teams:aiTeams,
     });
   }
 }
@@ -679,6 +733,7 @@ class TeamScene extends Phaser.Scene {
 // ── Select Scene ─────────────────────────────────────────
 class SelectScene extends Phaser.Scene {
   constructor(){ super('Select'); }
+  init(data){ this.multiplay = !!(data && data.multiplay); }
 
   create(){
     this.sel=0; this.lvSel=0;
@@ -1436,7 +1491,7 @@ class SelectScene extends Phaser.Scene {
       level:LEVELS[this.lvSel],
       enemyCnt:this.enemyCnt||2,
       aiDiff:this.aiDiff||1,
-      multiplay:false,
+      multiplay:this.multiplay||false,
     });
   }
 }
@@ -4490,7 +4545,7 @@ window._phaserGame = new Phaser.Game({
   input: { keyboard: { capture: [38,40,37,39,32,83,82,27] } }, // 阻止瀏覽器攔截↑↓←→SpaceSREsc
   width: W, height: H,
   backgroundColor: '#0a0400',
-  scene: [BootScene, SelectScene, GameScene],
+  scene: [BootScene, HomeScene, TeamScene, SelectScene, GameScene],
   parent: 'game',
 });
 
@@ -4778,10 +4833,11 @@ const Lobby = {
     const myPlayer = window.MP.players.find(p => p.id === window.MP.myId);
     const charKey = myPlayer ? myPlayer.charKey : window.MP.myCharKey;
     const charData = this._getChars().find(c => c.key === charKey) || this._getChars()[0];
-    game.scene.start('Game', {
+    // 先進 TeamScene（多人隊伍確認畫面），再由那邊啟動遊戲
+    game.scene.start('Team', {
       char: charData,
       level: (typeof LEVELS !== 'undefined' ? LEVELS[0] : null),
-      enemyCnt: Math.max(0, window.MP.settings.maxPlayers - window.MP.players.length),
+      enemyCnt: Math.max(0, (window.MP.settings.maxPlayers||4) - window.MP.players.length),
       aiDiff: 1,
       multiplay: true,
     });
