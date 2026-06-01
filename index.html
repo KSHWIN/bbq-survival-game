@@ -3521,7 +3521,7 @@ class GameScene extends Phaser.Scene {
           const prog=Math.max(0,1-ev.timer/0.18);
           ev.curY=(G.y-80)+(ev.targetY-G.y+80)*prog;
           if(ev.timer<=0){
-            ev.state='stuck'; ev.timer=1.8; ev.curY=ev.targetY;
+            ev.state='stuck'; ev.timer=3.0; ev.curY=ev.targetY;
             if(Math.hypot(this.p.x-ev.x,this.p.y-ev.targetY)<30){
               ae.stun=Math.max(ae.stun,2.0);
               this.cameras.main.shake(340,0.016);
@@ -3529,6 +3529,16 @@ class GameScene extends Phaser.Scene {
             }
           }
         } else if(ev.state==='stuck'){
+          // 插地牆壁：玩家被推到叉子 → 反彈
+          const _skd=Math.abs(this.p.x-ev.x);
+          if(_skd<28&&Math.abs(this.p.y-ev.targetY)<32){
+            const _skDir=this.p.x>ev.x?1:-1;
+            const _nx=this.p.x+_skDir*50;
+            if(inGrill(_nx,this.p.y)){
+              this.p.x=_nx;
+              this.showPop('⚡ 撞到叉子！');
+            }
+          }
           if(ev.timer<=0){ev.state='retract';ev.timer=0.28;}
         } else if(ev.state==='retract'){
           const prog=Math.max(0,1-ev.timer/0.28);
@@ -3648,6 +3658,10 @@ class GameScene extends Phaser.Scene {
       // ── skewer ───────────────────────────────────────────────
       if(ev.type==='skewer'){
         if(ev.state==='warn'){
+          // 紅色軌跡線
+          const _rt=1-ev.timer/1.6;
+          g.lineStyle(2,0xff2200,0.3+0.5*_rt);
+          g.lineBetween(ev.x,G.y-10,ev.x,ev.targetY);
           const pulse=0.3+0.28*Math.sin(ph*11);
           g.fillStyle(0xff8800,pulse); g.fillEllipse(ev.x,ev.targetY,58,20);
           g.lineStyle(3,0xffaa00,0.55+pulse); g.strokeEllipse(ev.x,ev.targetY,58,20);
