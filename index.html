@@ -3206,6 +3206,26 @@ class GameScene extends Phaser.Scene {
       this._garlicAoe.life-=dt;
       if(this._garlicAoe.life<=0) this._garlicAoe=null;
     }
+    // 胡椒噴嚏（pepBoost 結束瞬間）
+    if(this._pepWas&&ae2.pepBoost<=0){
+      const _snDir=this.lastDir||{x:1,y:0};
+      this.enemies.forEach((e,i)=>{
+        if(!e.alive) return;
+        const dx=e.x-this.p.x, dy=e.y-this.p.y;
+        const dist=Math.hypot(dx,dy)||1;
+        if(dist>80) return;
+        const dot=(dx/dist)*_snDir.x+(dy/dist)*_snDir.y;
+        if(dot<0.707) return;
+        const force=160*(1-dist/80);
+        this.tweens.add({targets:e,x:e.x+(dx/dist)*force,y:e.y+(dy/dist)*force,
+          duration:280,ease:'Cubic.easeOut',
+          onComplete:()=>this.checkEnemyFall(e,i)});
+      });
+      this.showPop('💨 哈啾！');
+      this._sneezeFx={dx:_snDir.x,dy:_snDir.y,life:0.3};
+    }
+    this._pepWas=ae2.pepBoost>0;
+    if(this._sneezeFx){this._sneezeFx.life-=dt; if(this._sneezeFx.life<=0) this._sneezeFx=null;}
     // 效果指示器
     const eff2=[];
     if(ae2.foil>0)    eff2.push('◎险4 '+ae2.foil.toFixed(0)+'s');
