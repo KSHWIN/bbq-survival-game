@@ -367,8 +367,9 @@ class BootScene extends Phaser.Scene {
     const bgFg = this.add.rectangle(W/2-150,H/2+16,0,12,0xff6600).setOrigin(0,0.5);
     const keys = Object.keys(IMG);
     let done=0;
-    const onAdded=()=>{ done++; bgFg.width=(done/keys.length)*300; txt.setText('載入中 '+done+'/'+keys.length); if(done>=keys.length){ CHARS.forEach(ch=>this._rmWhite(ch.img)); CHARS.forEach(ch=>this._buildDir(ch.img)); this.scene.start('Select'); } };
+    const onAdded=()=>{ done++; bgFg.width=(done/keys.length)*300; txt.setText('載入中 '+done+'/'+keys.length); if(done>=keys.length){ CHARS.forEach(ch=>this._rmWhite(ch.img)); CHARS.forEach(ch=>this._buildDir(ch.img)); this.scene.start('Home'); } };
     keys.forEach(k=>{ if(this.textures.exists(k)){onAdded();return;} this.textures.once('addtexture-'+k,onAdded); this.textures.once('onerror-'+k,onAdded); this.textures.addBase64(k,IMG[k]); });
+    // 載入完成後先進 Home 場景
   }
   _rmWhite(key){
     if(!this.textures.exists(key)) return;
@@ -412,6 +413,266 @@ class BootScene extends Phaser.Scene {
       ctxb.fillRect(0,0,W,H);
       this.textures.addCanvas(key+'_b',cb);
     }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// ── Home Scene（首頁：單人 / 多人模式選擇）────────────────
+// ═══════════════════════════════════════════════════════════
+class HomeScene extends Phaser.Scene {
+  constructor(){ super('Home'); }
+  create(){
+    const cx=W/2, cy=H/2;
+    // 背景漸層
+    const bg=this.add.graphics();
+    bg.fillGradientStyle(0x120400,0x120400,0x0a0200,0x0a0200,1);
+    bg.fillRect(0,0,W,H);
+    // 燒烤炭火粒子（裝飾）
+    for(let i=0;i<20;i++){
+      const ex=Math.random()*W, ey=H*0.4+Math.random()*H*0.5;
+      const eg=this.add.graphics();
+      const obj={x:ex,y:ey,a:0.3+Math.random()*0.5};
+      this.tweens.add({targets:obj,a:0,y:ey-30-Math.random()*40,x:ex+(Math.random()-0.5)*30,
+        duration:1500+Math.random()*2000,repeat:-1,delay:Math.random()*2000,
+        onUpdate:()=>{ eg.clear(); eg.fillStyle(Math.random()<0.5?0xff4400:0xff8800,obj.a); eg.fillCircle(obj.x,obj.y,2+Math.random()*2); }
+      });
+    }
+    // 標題
+    this.add.text(cx,cy-170,'烤肉求生',{
+      fontSize:'72px',color:'#ff6600',fontFamily:'sans-serif',fontStyle:'bold',
+      stroke:'#000000',strokeThickness:10
+    }).setOrigin(0.5);
+    this.add.text(cx,cy-100,'BBQ Survival',{
+      fontSize:'22px',color:'#ff8844',fontFamily:'sans-serif',fontStyle:'italic',
+      stroke:'#000000',strokeThickness:4
+    }).setOrigin(0.5);
+
+    const makeModeBtn=(x,y,icon,label,sub,col,cb)=>{
+      const bg2=this.add.rectangle(x,y,220,100,col,0.85).setStrokeStyle(3,0xffffff,0.3).setDepth(5);
+      const iconT=this.add.text(x,y-22,icon,{fontSize:'32px'}).setOrigin(0.5).setDepth(6);
+      const lbl=this.add.text(x,y+12,label,{fontSize:'22px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:4}).setOrigin(0.5).setDepth(6);
+      const subT=this.add.text(x,y+34,sub,{fontSize:'12px',color:'#cccccc',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(6);
+      bg2.setInteractive({useHandCursor:true});
+      bg2.on('pointerover',()=>{ bg2.setFillStyle(col,1); bg2.setScale(1.04); iconT.setScale(1.08); lbl.setScale(1.04); });
+      bg2.on('pointerout', ()=>{ bg2.setFillStyle(col,0.85); bg2.setScale(1); iconT.setScale(1); lbl.setScale(1); });
+      bg2.on('pointerdown',cb);
+      // 脈動
+      this.tweens.add({targets:bg2,scaleX:{from:1,to:1.02},scaleY:{from:1,to:1.02},duration:900,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
+    };
+
+    // 單人模式按鈕
+    makeModeBtn(cx-130,cy+30,'🔥','單人模式','AI 對戰・挑戰四個關卡',0xcc4400,()=>{
+      this.scene.start('Select',{multiplay:false});
+    });
+    // 多人模式按鈕
+    makeModeBtn(cx+130,cy+30,'🌐','多人模式','連線對戰・與好友同樂',0x004488,()=>{
+      // 顯示多人大廳（原有 HTML 面板）
+      const el=document.getElementById('lobby-wrap');
+      if(el) el.style.display='flex';
+      this.scene.start('Select',{multiplay:true});
+    });
+
+    // 版本 + 更新日誌
+    this.add.text(cx,H-18,'v0.5  |  點擊烤肉動畫看角色大絕！',{fontSize:'12px',color:'#664422',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(5);
+    const clBtn=this.add.text(W-14,14,'📋 更新日誌',{fontSize:'13px',color:'#ffcc44',backgroundColor:'#3d1a00',padding:{x:8,y:4},fontFamily:'sans-serif'}).setOrigin(1,0).setDepth(10).setInteractive({useHandCursor:true});
+    clBtn.on('pointerdown',()=>window.open('changelog.html','_blank'));
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// ── Team Scene（分隊選擇：隊伍制 / 個人制・隊伍分配）───────
+// ═══════════════════════════════════════════════════════════
+class TeamScene extends Phaser.Scene {
+  constructor(){ super('Team'); }
+  init(data){
+    this.gameData=data;              // from SelectScene
+    this.gameMode='individual';      // 'individual' | 'team'
+    // 產生全部參與者（玩家 + AI）
+    this.participants=[
+      {id:'player',name:'你',charKey:data.char.key,char:data.char,team:'none',isPlayer:true},
+    ];
+    const cnt=data.enemyCnt||2;
+    for(let i=0;i<cnt;i++){
+      const c=CHARS[(CHARS.findIndex(x=>x.key===data.char.key)+1+i)%CHARS.length];
+      this.participants.push({id:'ai'+i,name:'AI '+(i+1),charKey:c.key,char:c,team:'none',isPlayer:false});
+    }
+  }
+
+  create(){
+    const cx=W/2, cy=H/2;
+    // 背景
+    const bg=this.add.graphics();
+    bg.fillGradientStyle(0x120400,0x120400,0x0a0200,0x0a0200,1);
+    bg.fillRect(0,0,W,H);
+
+    // 標題
+    this.add.text(cx,28,'賽前設定',{fontSize:'28px',color:'#ffcc44',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:5}).setOrigin(0.5).setDepth(5);
+
+    // ── 模式切換：個人制 / 隊伍制 ─────────────────────────────
+    const modeBg=this.add.rectangle(cx,68,340,36,0x221100,1).setStrokeStyle(2,0xff8800,0.5).setDepth(5);
+    const mBtns=[];
+    ['個人制（全員互打）','隊伍制（藍 vs 紅）'].forEach((lbl,i)=>{
+      const bx=cx-85+i*170;
+      const bb=this.add.rectangle(bx,68,160,28,i===0?0xff6600:0x222222,1).setDepth(6);
+      const bt=this.add.text(bx,68,lbl,{fontSize:'13px',color:'#ffffff',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(7);
+      bb.setInteractive({useHandCursor:true});
+      bb.on('pointerdown',()=>{
+        this.gameMode=['individual','team'][i];
+        mBtns.forEach((b,j)=>b.bg.setFillStyle(j===i?0xff6600:0x222222));
+        this._refreshTeamUI();
+      });
+      mBtns.push({bg:bb,txt:bt});
+    });
+    this.modeBtns=mBtns;
+
+    // ── 隊伍面板 ──────────────────────────────────────────────
+    // 藍隊（左）
+    this.add.rectangle(cx-200,cy-10,220,300,0x001133,0.85).setStrokeStyle(2,0x4488ff,0.8).setDepth(5);
+    this.add.text(cx-200,cy-148,'🟦 藍隊',{fontSize:'16px',color:'#66aaff',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(6);
+    // 紅隊（右）
+    this.add.rectangle(cx+200,cy-10,220,300,0x1a0000,0.85).setStrokeStyle(2,0xff4444,0.8).setDepth(5);
+    this.add.text(cx+200,cy-148,'🟥 紅隊',{fontSize:'16px',color:'#ff6666',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(6);
+    // 中央（未分配）
+    this.add.rectangle(cx,cy-60,140,180,0x111111,0.7).setStrokeStyle(1,0x555555,0.5).setDepth(5);
+    this.add.text(cx,cy-140,'待分配',{fontSize:'13px',color:'#888888',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(6);
+    this.cardGfxGroup=[];
+    this._buildCards();
+
+    // ── AI 設定（只有房主/單人模式顯示）──────────────────────
+    const aiy=cy+122;
+    this.add.text(cx-120,aiy-18,'AI 數量',{fontSize:'13px',color:'#aaaaaa',fontFamily:'sans-serif'}).setDepth(6);
+    const cntBtns=[];
+    for(let n=1;n<=6;n++){
+      const bx=cx-90+(n-1)*30;
+      const nb=this.add.rectangle(bx,aiy,24,22,n===(this.gameData.enemyCnt||2)?0xff6600:0x333333,1).setDepth(6);
+      const nt=this.add.text(bx,aiy,''+n,{fontSize:'12px',color:'#ffffff',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(7);
+      nb.setInteractive({useHandCursor:true});
+      nb.on('pointerdown',()=>{
+        this.gameData.enemyCnt=n;
+        cntBtns.forEach((b,j)=>b.setFillStyle(j+1===n?0xff6600:0x333333));
+        this._buildCards();
+      });
+      cntBtns.push(nb);
+    }
+    // AI 難度
+    const diffy=aiy+32;
+    this.add.text(cx-120,diffy-16,'AI 難度',{fontSize:'13px',color:'#aaaaaa',fontFamily:'sans-serif'}).setDepth(6);
+    const diffLabels=['弱','中','強'];
+    const diffColors=[0x1a4a1a,0xff6600,0x8b0000];
+    const diffBtns=[];
+    diffLabels.forEach((dl,di)=>{
+      const bx=cx-80+di*50;
+      const db=this.add.rectangle(bx,diffy,42,22,di===(this.gameData.aiDiff||1)?diffColors[di]:0x333333,1).setDepth(6);
+      const dt=this.add.text(bx,diffy,dl,{fontSize:'12px',color:'#ffffff',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(7);
+      db.setInteractive({useHandCursor:true});
+      db.on('pointerdown',()=>{
+        this.gameData.aiDiff=di;
+        diffBtns.forEach((b,j)=>b.setFillStyle(j===di?diffColors[j]:0x333333));
+      });
+      diffBtns.push(db);
+    });
+
+    // ── 確認開始按鈕 ──────────────────────────────────────────
+    const sBx=cx+240,sByOff=H-30;
+    const sBg=this.add.rectangle(sBx,sByOff,180,38,0xff6600,1).setStrokeStyle(3,0xffcc44).setDepth(20);
+    const sTxt=this.add.text(sBx,sByOff,'▶  確認開始',{fontSize:'18px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#883300',strokeThickness:4}).setOrigin(0.5).setDepth(21);
+    sBg.setInteractive({useHandCursor:true});
+    sBg.on('pointerover',()=>{ sBg.setFillStyle(0xff8800); sBg.setScale(1.05); sTxt.setScale(1.05); });
+    sBg.on('pointerout', ()=>{ sBg.setFillStyle(0xff6600); sBg.setScale(1); sTxt.setScale(1); });
+    sBg.on('pointerdown',()=>this._startGame());
+    this.tweens.add({targets:[sBg,sTxt],scaleX:{from:1,to:1.03},scaleY:{from:1,to:1.03},duration:700,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
+
+    // ── 回上一頁 ──────────────────────────────────────────────
+    const backBtn=this.add.text(14,14,'← 角色選擇',{fontSize:'13px',color:'#ffcc88',backgroundColor:'#3d1a00',padding:{x:8,y:4},fontFamily:'sans-serif'}).setOrigin(0,0).setDepth(20).setInteractive({useHandCursor:true});
+    backBtn.on('pointerdown',()=>this.scene.start('Select'));
+
+    // 說明文字
+    this.helpTxt=this.add.text(cx,H-14,'點擊參與者卡片可切換隊伍（藍 ↔ 紅 ↔ 未分配）',{fontSize:'11px',color:'#666666',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(5);
+    this._refreshTeamUI();
+  }
+
+  _buildCards(){
+    // 清除舊卡片
+    this.cardGfxGroup.forEach(o=>{try{o.destroy();}catch(e){}});
+    this.cardGfxGroup=[];
+    // 重設參與者（保留隊伍設定）
+    const teamMap={};
+    this.participants.forEach(p=>teamMap[p.id]=p.team);
+    const cnt=this.gameData.enemyCnt||2;
+    // 保持玩家，更新 AI 數量
+    this.participants=this.participants.filter(p=>p.isPlayer);
+    for(let i=0;i<cnt;i++){
+      const ci=(CHARS.findIndex(x=>x.key===this.gameData.char.key)+1+i)%CHARS.length;
+      const c=CHARS[ci];
+      const id='ai'+i;
+      this.participants.push({id,name:'AI '+(i+1),charKey:c.key,char:c,team:teamMap[id]||'none',isPlayer:false});
+    }
+    this._refreshTeamUI();
+  }
+
+  _refreshTeamUI(){
+    this.cardGfxGroup.forEach(o=>{try{o.destroy();}catch(e){}});
+    this.cardGfxGroup=[];
+    const cx=W/2, cy=H/2;
+    const isTeam=this.gameMode==='team';
+    // 顯示說明
+    if(this.helpTxt) this.helpTxt.setText(isTeam
+      ?'點擊卡片切換隊伍（藍 ↔ 紅 ↔ 未分配）   未分配者遊戲開始後隨機分隊'
+      :'個人制：所有人互相攻擊，不分隊伍');
+
+    const groups={blue:[],red:[],none:[]};
+    this.participants.forEach(p=>groups[p.team||'none'].push(p));
+
+    const drawCard=(p,x,y)=>{
+      const isP=p.isPlayer;
+      const col=p.team==='blue'?0x003388:p.team==='red'?0x880000:0x222222;
+      const border=p.team==='blue'?0x4488ff:p.team==='red'?0xff4444:0x555555;
+      const bg=this.add.rectangle(x,y,88,58,col,0.92).setStrokeStyle(2,border,1).setDepth(10);
+      const nameTxt=this.add.text(x,y+10,p.name+(isP?' 👤':'🤖'),{fontSize:'11px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:isP?'bold':'normal'}).setOrigin(0.5).setDepth(11);
+      const charTxt=this.add.text(x,y-10,p.char.name,{fontSize:'10px',color:'#ffcc44',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(11);
+      this.cardGfxGroup.push(bg,nameTxt,charTxt);
+      if(isTeam){
+        bg.setInteractive({useHandCursor:true});
+        bg.on('pointerdown',()=>{
+          const seq=['none','blue','red'];
+          const cur=p.team||'none';
+          p.team=seq[(seq.indexOf(cur)+1)%seq.length];
+          this._refreshTeamUI();
+        });
+        bg.on('pointerover',()=>bg.setStrokeStyle(3,0xffffff,0.8));
+        bg.on('pointerout', ()=>bg.setStrokeStyle(2,border,1));
+      }
+    };
+
+    const placeRow=(arr,baseX,startY,maxPerCol=4)=>{
+      arr.forEach((p,i)=>{
+        const col=Math.floor(i/maxPerCol), row=i%maxPerCol;
+        drawCard(p, baseX+col*96, startY+row*66);
+      });
+    };
+
+    if(isTeam){
+      placeRow(groups.blue, cx-300, cy-110);
+      placeRow(groups.none, cx-44,  cy-110);
+      placeRow(groups.red,  cx+100, cy-110);
+    } else {
+      // 個人制：全部排成一排顯示在中央
+      const all=this.participants;
+      all.forEach((p,i)=>drawCard(p, cx-180+i%5*92, cy-80+Math.floor(i/5)*70));
+    }
+  }
+
+  _startGame(){
+    const d=this.gameData;
+    this.scene.start('Game',{
+      char:d.char,
+      level:d.level,
+      enemyCnt:d.enemyCnt||2,
+      aiDiff:d.aiDiff??1,
+      multiplay:d.multiplay||false,
+      gameMode:this.gameMode,
+      teams:this.participants.filter(p=>!p.isPlayer).map(p=>({id:p.id,team:p.team||'none'})),
+    });
   }
 }
 
@@ -622,6 +883,12 @@ class SelectScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-ENTER',()=>this.startGame());
     this.input.keyboard.on('keydown-SPACE',()=>this.startGame());
     this.setSel(0); this.setLvSel(0);
+    // ── 回首頁按鈕 ──────────────────────────────────────────────
+    const homeBtn=this.add.text(16,16,'← 首頁',{fontSize:'14px',color:'#ffcc88',backgroundColor:'#3d1a00',padding:{x:10,y:6},fontFamily:'Microsoft JhengHei, sans-serif'}).setOrigin(0,0).setDepth(30).setInteractive({useHandCursor:true});
+    homeBtn.on('pointerover',()=>homeBtn.setColor('#ffffff'));
+    homeBtn.on('pointerout', ()=>homeBtn.setColor('#ffcc88'));
+    homeBtn.on('pointerdown',()=>{ this._stopSelBGM(); this.scene.start('Home'); });
+    // ────────────────────────────────────────────────────────────
     const clBtn=this.add.text(W-16,16,'📋 更新日誌',{fontSize:'14px',color:'#ffcc44',backgroundColor:'#3d1a00',padding:{x:10,y:6},fontFamily:'Microsoft JhengHei, sans-serif'}).setOrigin(1,0).setDepth(30).setInteractive({useHandCursor:true});
     clBtn.on('pointerover',()=>clBtn.setColor('#ffffff'));
     clBtn.on('pointerout', ()=>clBtn.setColor('#ffcc44'));
@@ -1163,7 +1430,14 @@ class SelectScene extends Phaser.Scene {
 
   startGame(){
     this._stopSelBGM();
-    this.scene.start('Game',{char:CHARS[this.sel], level:LEVELS[this.lvSel], enemyCnt:this.enemyCnt||2, aiDiff:this.aiDiff||1});
+    // 先進隊伍選擇場景，再由那邊啟動遊戲
+    this.scene.start('Team',{
+      char:CHARS[this.sel],
+      level:LEVELS[this.lvSel],
+      enemyCnt:this.enemyCnt||2,
+      aiDiff:this.aiDiff||1,
+      multiplay:false,
+    });
   }
 }
 
@@ -1176,7 +1450,16 @@ class GameScene extends Phaser.Scene {
     this.heat=0; this.alive=true; this.pushCD=0; this.timeLeft=this.levelData.timer;
     this.lastDir={x:1,y:0}; this.firePhase=0; this.pushWas=false; this.wobbleTween=null; this.dashState=null; this.dashTrail=[];
     this.forkTimer=4; this.fork=null;
-    this.activeEffects={foil:0,garlic:0,sauce:0,slowpow:0,stun:0,toxic:0,oilSlick:0};
+    this.activeEffects={foil:0,garlic:0,sauce:0,slowpow:0,stun:0,toxic:0,oilSlick:0,
+      goldenZone:0,   // 黃金熟度 50-80% buff 計時
+      juicy:0,        // 擊殺排熱 buff 計時
+    };
+    // ── 正向循環系統 ─────────────────────
+    this.seasoningCombo=0;     // 調味料連擊層數 0-3
+    this.seasoningTimer=0;     // 連擊計時（超時歸零）
+    this.seasoningShield=false;// 3層烤肉醬護盾（抵一次推擠）
+    this.killCount=0;          // 本局擊殺計數
+    this._goldenActive=false;  // 上幀是否在黃金區
     this.mapItems=[]; this.itemTimer=3; this.sizzleTimer=0;
     this.oilSlicks=[]; this.oilDir={x:0,y:0};
     this.oilLayer=this.add.graphics().setDepth(3);
@@ -1277,6 +1560,8 @@ class GameScene extends Phaser.Scene {
     this.add.text(12,8,c.name,ts(14,'#ffaa44'));
     this.add.text(12,28,'熟度',ts(13));
     this.heatBarBg=this.add.rectangle(62,36,220,16,0x441100).setOrigin(0,0.5);
+    // 黃金熟度區（50-80%）標記，畫在熱度條底下
+    this.goldenZoneMark=this.add.rectangle(62+50*2.2,36,30*2.2,14,0xffcc00,0.28).setOrigin(0,0.5).setDepth(1);
     this.heatBarFg=this.add.rectangle(62,36,0,14,0xff4400).setOrigin(0,0.5);
     this.heatTxt  =this.add.text(292,28,'0%',ts(12));
     this.add.text(12,50,'推擠[A]',ts(12,'#66ccff'));
@@ -1298,6 +1583,18 @@ class GameScene extends Phaser.Scene {
     gAnBtn.on('pointerover',()=>gAnBtn.setAlpha(0.75));
     gAnBtn.on('pointerout', ()=>gAnBtn.setAlpha(1));
     gAnBtn.on('pointerdown',()=>openAnimModal());
+    // ── 正向循環 UI ──────────────────────────────────────────────
+    // 第二條 HUD 背景（緊接 100px 面板）
+    this.add.rectangle(0,100,320,24,0x000000,0.50).setOrigin(0,0).setDepth(19);
+    // 黃金熟度狀態文字
+    this.goldenTxt=this.add.text(8,112,'',{fontSize:'11px',color:'#ffcc00',fontFamily:'sans-serif',stroke:'#000',strokeThickness:2}).setDepth(20);
+    // 調味料連擊圖示（3 個小方塊）
+    this.seasoningDots=[];
+    const sdLabels=['🧂','🌶','🍖'];
+    for(let s=0;s<3;s++) this.seasoningDots.push(this.add.text(138+s*34,112,sdLabels[s],{fontSize:'12px',color:'#888888'}).setDepth(20).setAlpha(0.3));
+    // 多汁狀態文字
+    this.juicyTxt=this.add.text(240,112,'',{fontSize:'11px',color:'#34d399',fontFamily:'sans-serif',stroke:'#000',strokeThickness:2}).setDepth(20);
+    // ─────────────────────────────────────────────────────────────
     this.popTxt   =this.add.text(W/2,G.y-28,'',ts(17,'#ffff44')).setOrigin(0.5).setDepth(30);
     this.statusTxt=this.add.text(W/2,H/2-30,'',{fontSize:'44px',color:'#ff3333',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:6}).setOrigin(0.5).setDepth(40);
     this.subTxt   =this.add.text(W/2,H/2+28,'',ts(20,'#ffaaaa')).setOrigin(0.5).setDepth(40);
@@ -1923,6 +2220,9 @@ class GameScene extends Phaser.Scene {
     this.playSound('push');
     const ae=this.activeEffects;
     const c=this.charData;
+    // 調味料連擊：靠近叉子閃過或推到人時疊加（此處是推出發動）
+    // 疊加在 checkEnemyFall 裡，但每次 push 重設計時器
+    if(this.seasoningCombo>0) this.seasoningTimer=Math.max(this.seasoningTimer,6.0);
     const boost=ae.garlic>0?1.70:1;
     // 玉米爆炸（保留，改用 tween）
     if(c.key==='corn'&&this.heat>=70){
@@ -1958,6 +2258,33 @@ class GameScene extends Phaser.Scene {
       if(this.enemySprites[i]) this.enemySprites[i].setVisible(false);
       if(this.enemyFx[i])      this.enemyFx[i].setVisible(false);
       this.showPop(e.label+' 掉落！');
+
+      // ── 正向循環：擊殺 → 多汁排熱 ─────────────────────────
+      this.killCount++;
+      this.activeEffects.juicy=4.5;                         // 4.5 秒多汁狀態
+      const heatBefore=this.heat;
+      this.heat=Math.max(0, this.heat*0.80);               // 熟度立減 20%
+      // 金色畫面閃
+      this.cameras.main.flash(180,255,200,0,false);
+      // Ding! 音效（Web Audio 合成）
+      if(this.ac){
+        const g=this.ac.createGain(), osc=this.ac.createOscillator();
+        osc.type='sine'; osc.frequency.setValueAtTime(1320,this.ac.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880,this.ac.currentTime+0.25);
+        g.gain.setValueAtTime(0.35,this.ac.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001,this.ac.currentTime+0.4);
+        osc.connect(g); g.connect(this.ac.destination);
+        osc.start(); osc.stop(this.ac.currentTime+0.4);
+      }
+      // 彈出文字
+      const msgs=['✨ Well Done!','🍖 Delicious!','💧 多汁！'];
+      this.showPop(msgs[this.killCount%msgs.length]);
+      // 調味料連擊疊加
+      this.seasoningCombo=Math.min(3,this.seasoningCombo+1);
+      this.seasoningTimer=9.0;
+      if(this.seasoningCombo===3) this.seasoningShield=true;
+      // ─────────────────────────────────────────────────────────
+
       if(this.enemies.every(en=>!en.alive)){ this.time.delayedCall(600,()=>this.endGame(true)); }
     } else if(this.onFire(e.x,e.y)){ e.heat=Math.min(100,e.heat+22); }
   }
@@ -2066,7 +2393,9 @@ class GameScene extends Phaser.Scene {
       }
     }
     const _ultSpdMul=(this.ultState&&this.ultState.spdMul)?this.ultState.spdMul:1;
-    const SPD=isDash?120:this.charData.speed*(this.activeEffects.slowpow>0?0.5:1)*ultSpd*_ultSpdMul;
+    // ── 正向循環速度加成 ──
+    const _goldenSpd=this.activeEffects.goldenZone>0?1.15:1.0;   // 黃金熟度 +15%
+    const SPD=isDash?120:this.charData.speed*(this.activeEffects.slowpow>0?0.5:1)*ultSpd*_ultSpdMul*_goldenSpd;
     let mx=0, my=0;
     const _ctrlRev=(this.ultState&&this.ultState.reversed)?-1:1;
     if(this.keys.left.isDown  ||GKEYS['ArrowLeft'])  mx=-_ctrlRev;
@@ -2189,6 +2518,49 @@ class GameScene extends Phaser.Scene {
       });
     }
     if(this.heat>=heatCap){this.subTxt.setText('被烤熟了！');this.endGame(false);return;}
+
+    // ── 正向循環：黃金熟度區（50-80%） ─────────────────────────
+    const inGolden=this.heat>=50&&this.heat<=80;
+    if(inGolden){
+      ae.goldenZone=0.25; // 持續刷新
+      // 大絕微幅自動充能（在黃金區時）
+      if(this.ultCharge<this.ultMax&&!this.ultState){
+        this.ultCharge=Math.min(this.ultMax,this.ultCharge+0.015*dt);
+      }
+      if(!this._goldenActive){
+        this._goldenActive=true;
+        this.showPop('🌟 美味爆發！');
+        // 播金色粒子效果
+        if(this.ac){const g=this.ac.createGain(),o=this.ac.createOscillator();o.type='triangle';
+          o.frequency.value=660;g.gain.setValueAtTime(0.18,this.ac.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001,this.ac.currentTime+0.3);
+          o.connect(g);g.connect(this.ac.destination);o.start();o.stop(this.ac.currentTime+0.3);}
+      }
+    } else {
+      ae.goldenZone=Math.max(0,ae.goldenZone-dt);
+      if(this._goldenActive&&ae.goldenZone<=0) this._goldenActive=false;
+    }
+    // 多汁狀態倒計時
+    if(ae.juicy>0) ae.juicy=Math.max(0,ae.juicy-dt);
+    // 調味料連擊倒計時（超時歸零）
+    if(this.seasoningTimer>0){
+      this.seasoningTimer-=dt;
+      if(this.seasoningTimer<=0){
+        this.seasoningCombo=0;
+        this.seasoningShield=false;
+      }
+    }
+    // ── 黃金區粒子特效（每幀） ────────────────────────────────
+    if(inGolden&&Math.random()<0.35*dt*60){
+      const px=this.p.x+(Math.random()-0.5)*22, py=this.p.y+(Math.random()-0.5)*22;
+      const go={life:1,x:px,y:py};
+      const gfx=this.add.graphics().setDepth(22);
+      this.tweens.add({targets:go,life:0,x:px+(Math.random()-0.5)*18,y:py-20,
+        duration:600+Math.random()*300,ease:'Quad.easeOut',
+        onUpdate:()=>{gfx.clear();gfx.fillStyle(0xffcc00,go.life*0.8);gfx.fillCircle(go.x,go.y,2.5+go.life*2);},
+        onComplete:()=>gfx.destroy()});
+    }
+    // ─────────────────────────────────────────────────────────
 
     // 玩家 sprite + 跑步動畫
     const isMoving=!!(mx||my)||isDash;
@@ -2441,13 +2813,15 @@ class GameScene extends Phaser.Scene {
           const pForce=95*Math.min(2.0,1+e.heat/100*1.5); // AI 越熟推越猛
           if(pTgt.isPlayer){
             const _kRes=(this.ultState&&this.ultState.knockRes)?this.ultState.knockRes:1;
+            const _juicyRes=this.activeEffects.juicy>0?0.5:1.0; // 多汁狀態：被推距離減半
             const cBst=Math.min(1.5,1+this.heat/100*0.8);
             this.tweens.add({targets:this.p,
-              x:this.p.x+pnx*pForce*cBst*_kRes,y:this.p.y+pny*pForce*cBst*_kRes,
+              x:this.p.x+pnx*pForce*cBst*_kRes*_juicyRes,y:this.p.y+pny*pForce*cBst*_kRes*_juicyRes,
               duration:240,ease:'Cubic.easeOut',
               onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this.subTxt.setText('被推落！');this.endGame(false);}}});
-            this.cameras.main.shake(120,0.004+cBst*0.005);
-            if(cBst>1.8) this.showPop('🔥 脆了！被 '+e.label+' 推飛！');
+            this.cameras.main.shake(120,0.004+cBst*_juicyRes*0.005);
+            if(this.activeEffects.juicy>0) this.showPop('💧 多汁彈開！');
+            else if(cBst>1.8) this.showPop('🔥 脆了！被 '+e.label+' 推飛！');
             else         this.showPop('💥 被 '+e.label+' 推開！');
           } else {
             const eRef=pTgt.ref, eIdx=pTgt.idx;
@@ -2666,6 +3040,9 @@ class GameScene extends Phaser.Scene {
 
     // UI
     this.heatBarFg.width=Math.min(220,this.heat*2.2);
+    // 黃金區：熱度條在 50-80% 時變成金橘色
+    const inG=this.heat>=50&&this.heat<=80;
+    this.heatBarFg.setFillStyle(inG?0xffaa00:0xff4400);
     this.heatTxt.setText(Math.floor(this.heat)+'%');
     this.timerTxt.setText(this.timeLeft+'s');
     const ready=this.pushCD<=0;
@@ -2676,6 +3053,31 @@ class GameScene extends Phaser.Scene {
     this.abilBarFg.setFillStyle(aReady?0xffaa00:0x664400);
     this.abilCdTxt.setText(aReady?'Ready!':this.abilityCD.toFixed(1)+'s');
     this.updateUltUI();
+
+    // ── 正向循環 UI ──────────────────────────────────────────────
+    if(this.goldenTxt){
+      if(inG) this.goldenTxt.setText('🌟 美味爆發　速度+15%');
+      else if(this.activeEffects.goldenZone>0) this.goldenTxt.setText('🌟 美味餘韻…');
+      else this.goldenTxt.setText('');
+    }
+    if(this.seasoningDots){
+      const names=['','🧂撒鹽 推+10%','🌶胡椒 推+20% CD-0.5s','🍖烤肉醬 護盾'];
+      for(let s=0;s<3;s++){
+        const lit=s<this.seasoningCombo;
+        this.seasoningDots[s].setAlpha(lit?1:0.25);
+        if(lit&&s===2&&this.seasoningShield) this.seasoningDots[s].setStyle({color:'#ff8c00'});
+        else if(lit) this.seasoningDots[s].setStyle({color:'#ffffff'});
+        else this.seasoningDots[s].setStyle({color:'#888888'});
+      }
+    }
+    if(this.juicyTxt){
+      const ae=this.activeEffects;
+      if(ae.juicy>0) this.juicyTxt.setText('💧多汁 '+ae.juicy.toFixed(1)+'s');
+      else this.juicyTxt.setText('');
+    }
+    // 推力加成（調味料）
+    // （在 doPush() FORCE 計算中直接引用 seasoningCombo）
+    // ──────────────────────────────────────────────────────────
   }
 
   spawnRandEvent(){
@@ -3092,8 +3494,9 @@ class GameScene extends Phaser.Scene {
   doUltimate(){
     if(this.ultCinema||this.ultCharge<this.ultMax)return;
     this.ultCinema=true; this.ultCharge=0; this.updateUltUI();
-    this.time.timeScale=0.06;
-    this.time.delayedCall(140,()=>{if(this.time)this.time.timeScale=1;});
+    // 移除 timeScale（會讓 BGM 跑調）：改用相機縮放做衝擊感
+    this.cameras.main.zoomTo(1.04,120,Phaser.Math.Easing.Cubic.Out);
+    this.time.delayedCall(180,()=>{ if(this.cameras&&this.cameras.main) this.cameras.main.zoomTo(1.0,220,Phaser.Math.Easing.Cubic.InOut); });
     const _vig=this.add.rectangle(W/2,H/2,W,H,0x000000,0).setDepth(87);
     this.tweens.add({targets:_vig,alpha:{from:0,to:0.55},duration:100,yoyo:true,hold:250,
       onComplete:()=>_vig.destroy()});
