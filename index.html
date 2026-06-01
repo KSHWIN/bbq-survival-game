@@ -2978,7 +2978,8 @@ class GameScene extends Phaser.Scene {
       const _ePepSpd=_eAE.pepBoost>0?1.5:1.0;
       const _eIceSpd=_eAE.iceBoost>0?1.5:1.0;
       const _eSauceSlow=(e._sauceSlow&&e._sauceSlow<1)?e._sauceSlow:1.0;
-      const maxSpd=(e.charging?4.5:2.8)*sSlow*capSlow*(onOil?0.7:1)*_ePepSpd*_eIceSpd*_eSauceSlow;
+      const _eLemonSlow=this.lemonPuddles.some(lp=>Math.hypot(e.x-lp.x,e.y-lp.y)<lp.r)?0.7:1.0;
+      const maxSpd=(e.charging?4.5:2.8)*sSlow*capSlow*(onOil?0.7:1)*_ePepSpd*_eIceSpd*_eSauceSlow*_eLemonSlow;
       e._sauceSlow=1.0;
       if(espd>maxSpd){e.vx=(e.vx/espd)*maxSpd;e.vy=(e.vy/espd)*maxSpd;}
       }
@@ -3145,6 +3146,23 @@ class GameScene extends Phaser.Scene {
       this.enemies.forEach(e=>{
         if(!e.alive||sp.ownerId===e.label) return;
         if(Math.hypot(e.x-sp.x,e.y-sp.y)<sp.r) e._sauceSlow=0.7;
+      });
+      return true;
+    });
+    // 檸檬酸汁殘留更新
+    this.lemonPuddles=this.lemonPuddles.filter(lp=>{
+      lp.life-=dt;
+      if(lp.life<=0) return false;
+      if(Math.hypot(this.p.x-lp.x,this.p.y-lp.y)<lp.r){
+        this.activeEffects.slowpow=Math.max(this.activeEffects.slowpow,0.3);
+        this.heat=Math.min(100,this.heat+6*dt);
+      }
+      this.enemies.forEach(e=>{
+        if(!e.alive) return;
+        if(Math.hypot(e.x-lp.x,e.y-lp.y)<lp.r){
+          if(e.activeEffects) e.activeEffects.slowpow=Math.max(e.activeEffects.slowpow||0,0.3);
+          e.heat=Math.min(100,(e.heat||0)+6*dt);
+        }
       });
       return true;
     });
@@ -3449,6 +3467,16 @@ class GameScene extends Phaser.Scene {
           ev.fallY+=ev.fallSpd*dt;
           if(ev.fallY>=ev.y){
             ev.state='splash'; ev.splashR=8; ev.timer=0.55;
+            // 濺射酸汁點（擠檸檬感）
+            const _cnt=4+Math.floor(Math.random()*3);
+            for(let _li=0;_li<_cnt;_li++){
+              const _ang=Math.random()*Math.PI*2;
+              const _dst=20+Math.random()*40;
+              this.lemonPuddles.push({
+                x:ev.x+Math.cos(_ang)*_dst, y:ev.y+Math.sin(_ang)*_dst,
+                r:18+Math.random()*8, life:2.5
+              });
+            }
             const dist=Math.hypot(this.p.x-ev.x,this.p.y-ev.y);
             if(dist<72){
               const ddx=(this.p.x-ev.x)/(dist||1);
