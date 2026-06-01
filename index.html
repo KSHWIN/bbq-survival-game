@@ -1539,7 +1539,7 @@ class GameScene extends Phaser.Scene {
     this.time.delayedCall(200,()=>this.startBGM());
     this.otherPlayers={};
     this.otherLayer=this.add.graphics().setDepth(18);
-    this.teamRingLayer=this.add.graphics().setDepth(9);
+    this.teamRingLayer=this.add.graphics().setDepth(22);
     if(this.multiplay) this._initMultiplayer();
     this.forkInterval=()=>(5+Math.random()*4)/this.levelData.forkMod;
 
@@ -2351,6 +2351,15 @@ class GameScene extends Phaser.Scene {
 
   showPop(msg){ this.popTxt.setText(msg); this.time.delayedCall(1600,()=>this.popTxt.setText('')); }
 
+  shutdown(){
+    if(this.bgmEvent){this.bgmEvent.remove();this.bgmEvent=null;}
+    if(this.ac){try{this.ac.close();}catch(e){} this.ac=null;}
+    if(this.multiplay&&window.MP&&window.MP.socket){
+      const s=window.MP.socket;
+      s.off('game_state'); s.off('game_event'); s.off('player_disconnected');
+    }
+  }
+
   endGame(win){
     this.alive=false;
     if(this.tilt){this.tilt=null;this.cameras.main.setRotation(0);}
@@ -2406,8 +2415,8 @@ class GameScene extends Phaser.Scene {
       // 本地玩家光圈
       if(this.teamRingLayer&&isTeamMode&&this.alive&&myTeam!=='none'){
         const myCol=myTeam==='blue'?0x4488ff:0xff4444;
-        this.teamRingLayer.lineStyle(4,myCol,0.7); this.teamRingLayer.strokeCircle(this.p.x,this.p.y,22);
-        this.teamRingLayer.lineStyle(2,myCol,0.35); this.teamRingLayer.strokeCircle(this.p.x,this.p.y,26);
+        this.teamRingLayer.lineStyle(6,0xffffff,0.9); this.teamRingLayer.strokeCircle(this.p.x,this.p.y,28);
+        this.teamRingLayer.lineStyle(4,myCol,1.0);   this.teamRingLayer.strokeCircle(this.p.x,this.p.y,28);
       }
       // 單人模式：AI 敵人也畫光圈 + 隊友/敵人標示
       if(isTeamMode&&!this.multiplay&&this.teamRingLayer){
@@ -2416,7 +2425,9 @@ class GameScene extends Phaser.Scene {
           const sp=this.enemySprites[i]; if(!sp||!sp.visible) return;
           const col=e.team==='blue'?0x4488ff:e.team==='red'?0xff4444:0x888888;
           const lc=e.team==='blue'?'#88aaff':e.team==='red'?'#ff8888':'#aaaaaa';
-          this.teamRingLayer.lineStyle(3,col,0.75); this.teamRingLayer.strokeCircle(e.x,e.y,20+sp.scaleX*4);
+          const r=24+sp.scaleX*4;
+          this.teamRingLayer.lineStyle(6,0xffffff,0.9); this.teamRingLayer.strokeCircle(e.x,e.y,r);
+          this.teamRingLayer.lineStyle(4,col,1.0);      this.teamRingLayer.strokeCircle(e.x,e.y,r);
           if(!this._teamLabels) this._teamLabels=[];
           if(!this._teamLabels[i]){
             this._teamLabels[i]=this.add.text(0,0,'',{fontSize:'11px',color:'#ffffff',stroke:'#000',strokeThickness:3,fontFamily:'sans-serif'}).setDepth(25);
