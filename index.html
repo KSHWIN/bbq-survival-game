@@ -2409,7 +2409,12 @@ class GameScene extends Phaser.Scene {
   update(_,delta){
     const dt=delta/1000;
     if(Phaser.Input.Keyboard.JustDown(this.keys.restart)){this.scene.restart();return;}
-    if(Phaser.Input.Keyboard.JustDown(this.keys.back)){this.scene.start('Select');return;}
+    if(Phaser.Input.Keyboard.JustDown(this.keys.back)){
+      const ov=document.getElementById('lobby-overlay');
+      if(ov){ov.classList.remove('hidden');if(typeof Lobby!=='undefined')Lobby.showLanding();}
+      this.scene.start('Select');
+      return;
+    }
     if(!this.alive) return;
 
     // 多人同步（20Hz）
