@@ -3761,6 +3761,20 @@ class GameScene extends Phaser.Scene {
       this.p.x=Phaser.Math.Clamp(this.p.x,G.x+pad+2,G.x+G.w-pad-2);
       this.p.y=Phaser.Math.Clamp(this.p.y,G.y+pad+2,G.y+G.h-pad-2);
     }
+    // 邊緣火圈：靠近縮圈邊界加熱
+    if(this.shrinkPad>0&&this.alive){
+      const pad=this.shrinkPad;
+      const edgeDist=Math.min(
+        this.p.x-(G.x+pad), (G.x+G.w-pad)-this.p.x,
+        this.p.y-(G.y+pad), (G.y+G.h-pad)-this.p.y
+      );
+      if(edgeDist<30) this.heat=Math.min(100,this.heat+35*dt);
+      this.enemies.forEach(e=>{
+        if(!e.alive) return;
+        const eDist=Math.min(e.x-(G.x+pad),(G.x+G.w-pad)-e.x,e.y-(G.y+pad),(G.y+G.h-pad)-e.y);
+        if(eDist<30) e.heat=Math.min(100,e.heat+35*dt);
+      });
+    }
   }
 
   drawTrailEffects(){
@@ -3818,6 +3832,22 @@ class GameScene extends Phaser.Scene {
       g.fillRect(G.x+G.w-pad-step,G.y+pad+step,step,G.h-pad*2-step*2);
       g.lineStyle(3,0xff8800,0.5+0.5*Math.sin(ph*14));
       g.strokeRect(G.x+np,G.y+np,G.w-np*2,G.h-np*2);
+    }
+    // 縮圈邊緣火焰粒子
+    if(pad>0){
+      const _fp=10+Math.floor(Math.random()*4);
+      for(let _fi=0;_fi<_fp;_fi++){
+        const _fa=0.3+Math.random()*0.5;
+        const _fr=3+Math.random()*4;
+        g.fillStyle(Math.random()<0.5?0xff6600:0xff3300,_fa);
+        let _fx,_fy;
+        const _side=Math.floor(Math.random()*4);
+        if(_side===0){_fx=G.x+pad+Math.random()*(G.w-pad*2);_fy=G.y+pad+Math.random()*20-10;}
+        else if(_side===1){_fx=G.x+pad+Math.random()*(G.w-pad*2);_fy=G.y+G.h-pad+Math.random()*20-10;}
+        else if(_side===2){_fx=G.x+pad+Math.random()*20-10;_fy=G.y+pad+Math.random()*(G.h-pad*2);}
+        else{_fx=G.x+G.w-pad+Math.random()*20-10;_fy=G.y+pad+Math.random()*(G.h-pad*2);}
+        g.fillCircle(_fx,_fy,_fr);
+      }
     }
   }
 
