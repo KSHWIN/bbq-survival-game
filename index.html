@@ -1547,6 +1547,7 @@ class GameScene extends Phaser.Scene {
     });
     this.otherPlayers={};
     this._teamLabels=null;
+    this.teamGlowLayer=this.add.graphics().setDepth(8);
     this.otherLayer=this.add.graphics().setDepth(18);
     this.teamRingLayer=this.add.graphics().setDepth(22);
     if(this.multiplay) this._initMultiplayer();
@@ -1622,6 +1623,15 @@ class GameScene extends Phaser.Scene {
       this.textures.exists(e.img) ? this.add.image(e.x,e.y,e.img).setScale(ES*_wScale(e.weight)).setDepth(9) : null
     );
     this.enemyFx=this.enemies.map(()=>this.add.text(0,0,'').setFontSize(14).setDepth(20).setVisible(false));
+    // 隊伍染色（分隊模式才套用）
+    if(this.gameMode==='team'){
+      if(this.playerSprite&&this.playerTeam!=='none')
+        this.playerSprite.setTint(this.playerTeam==='blue'?0xaaddff:0xffaaaa);
+      this.enemies.forEach((e,i)=>{
+        const sp=this.enemySprites[i];
+        if(sp&&e.team!=='none') sp.setTint(e.team==='blue'?0xaaddff:0xffaaaa);
+      });
+    }
 
     // UI
     const ts=(s,col='#ffcc66')=>({fontSize:s+'px',color:col,fontFamily:'sans-serif'});
@@ -2354,11 +2364,20 @@ class GameScene extends Phaser.Scene {
       if(this.seasoningCombo===3) this.seasoningShield=true;
       // ─────────────────────────────────────────────────────────
 
-      if(this.enemies.every(en=>!en.alive)){ this.time.delayedCall(600,()=>this.endGame(true)); }
+      if(this._checkWinCondition()){ this.time.delayedCall(600,()=>this.endGame(true)); }
     } else if(this.onFire(e.x,e.y)){ e.heat=Math.min(100,e.heat+22); }
   }
 
   showPop(msg){ this.popTxt.setText(msg); this.time.delayedCall(1600,()=>this.popTxt.setText('')); }
+
+  _checkWinCondition(){
+    if(this.gameMode==='team'&&this.playerTeam!=='none'){
+      const opp=this.playerTeam==='blue'?'red':'blue';
+      const hasOpp=this.enemies.some(e=>e.team===opp);
+      return hasOpp&&this.enemies.every(e=>e.team!==opp||!e.alive);
+    }
+    return this.enemies.every(en=>!en.alive);
+  }
 
   endGame(win){
     this.alive=false;
@@ -2380,7 +2399,8 @@ class GameScene extends Phaser.Scene {
       if(!win) this.tweens.add({targets:this.playerSprite,scaleY:0.1,scaleX:1.5,alpha:0.3,duration:400});
       else     this.tweens.add({targets:this.playerSprite,scaleX:1.2,scaleY:1.2,angle:360,duration:600});
     }
-    this.statusTxt.setColor(win?'#44ff88':'#ff3333').setText(win?'撐過去了！':'你死了');
+    const winMsg=win?(this.gameMode==='team'&&this.playerTeam!=='none'?(this.playerTeam==='blue'?'🟦 藍隊勝利！':'🟥 紅隊勝利！'):'撐過去了！'):'你死了';
+    this.statusTxt.setColor(win?'#44ff88':'#ff3333').setText(winMsg);
     this.time.delayedCall(500,()=>{
       this.add.text(W/2,H/2+75,'按 R 重開  |  ESC 選角',{fontSize:'16px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(40);
     });
@@ -2409,9 +2429,22 @@ class GameScene extends Phaser.Scene {
       }
       if(this.otherLayer) this.otherLayer.clear();
       if(this.teamRingLayer) this.teamRingLayer.clear();
+      if(this.teamGlowLayer) this.teamGlowLayer.clear();
       // 隊伍模式：單人 OR 多人都顯示光圈
       const isTeamMode=this.gameMode==='team'||(window.MP?.settings?.gameMode==='team');
       const myTeam=this.playerTeam||(window.MP?.myTeam)||'none';
+      // 地板光暈（低深度，讓角色疊在上面）
+      if(isTeamMode&&this.teamGlowLayer){
+        if(myTeam!=='none'&&this.alive){
+          const gc=myTeam==='blue'?0x4488ff:0xff4444;
+          this.teamGlowLayer.fillStyle(gc,0.30); this.teamGlowLayer.fillCircle(this.p.x,this.p.y,22);
+        }
+        if(!this.multiplay) this.enemies.forEach(e=>{
+          if(!e.alive||e.team==='none') return;
+          const gc=e.team==='blue'?0x4488ff:0xff4444;
+          this.teamGlowLayer.fillStyle(gc,0.30); this.teamGlowLayer.fillCircle(e.x,e.y,22);
+        });
+      }
       // 本地玩家光圈
       if(this.teamRingLayer&&isTeamMode&&this.alive&&myTeam!=='none'){
         const myCol=myTeam==='blue'?0x4488ff:0xff4444;
@@ -2954,7 +2987,7 @@ class GameScene extends Phaser.Scene {
       if(e.heat>=100){
         e.alive=false;
         this.showPop(e.label+' 被烤熟！');
-        if(this.enemies.every(en=>!en.alive)) this.time.delayedCall(600,()=>this.endGame(true));
+        if(this._checkWinCondition()) this.time.delayedCall(600,()=>this.endGame(true));
       }
       if(this.enemySprites[i]){
         this.enemySprites[i].setPosition(e.x,e.y).setVisible(true);
