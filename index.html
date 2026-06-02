@@ -2310,12 +2310,12 @@ class GameScene extends Phaser.Scene {
 
   _deploySaucePool(ownerId,px,py){
     if(this.saucePools.length>=2) this.saucePools.shift();
-    this.saucePools.push({x:px,y:py,r:55,life:8.0,ownerId});
-    // 飛濺效果：噴出 8 個液滴
-    for(let _si=0;_si<8;_si++){
+    this.saucePools.push({x:px,y:py,r:85,life:8.0,ownerId});
+    // 飛濺效果：噴出 14 個液滴
+    for(let _si=0;_si<14;_si++){
       const _ang=Math.random()*Math.PI*2;
-      const _spd=40+Math.random()*60;
-      this.sauceSplash.push({x:px,y:py,vx:Math.cos(_ang)*_spd,vy:Math.sin(_ang)*_spd,life:0.5,r:4+Math.random()*5});
+      const _spd=70+Math.random()*110;
+      this.sauceSplash.push({x:px,y:py,vx:Math.cos(_ang)*_spd,vy:Math.sin(_ang)*_spd,life:0.7,r:7+Math.random()*8});
     }
     if(ownerId==='player'){
       this.activeEffects.sauceCharge=0;
