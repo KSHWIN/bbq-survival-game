@@ -2711,7 +2711,7 @@ class GameScene extends Phaser.Scene {
     const armorOn=aa&&aa.type==='armor', glideOn=aa&&aa.type==='glide', shieldOn=aa&&aa.type==='shield';
     const _hsMul=(this.ultState&&this.ultState.heatStop)?0:1;
     const mult=_hsMul*this.charData.heatMult*(armorOn?0.5:1)*this.levelData.heatMod;
-    const fireImmune=ae.foil>0||glideOn;
+    const fireImmune=ae.foil>0||glideOn||(this.ultState&&this.ultState.type==='tofu');
     const heatCap=(this.ultState&&this.ultState.heatMax)?this.ultState.heatMax:(shieldOn?130:100);
     if(this.onFire(this.p.x,this.p.y)){
       if(!fireImmune) this.heat=Math.min(heatCap,this.heat+15*mult*(this.charData.fireMult||1.0)*dt);
