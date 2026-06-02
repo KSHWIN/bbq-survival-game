@@ -555,8 +555,8 @@ class TeamScene extends Phaser.Scene {
     this.cardGfxGroup=[];
     this._buildCards();
 
-    // ── 對手數量 + AI 難度 ────────────────────────────────
-    const _acy=H-110;
+    // ── 對手數量 + AI 難度 + 道具頻率 ─────────────────────
+    const _acy=H-138;
     this.add.text(cx-170,_acy-14,'對手數量：',{fontSize:'13px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(6);
     const _cntBtns=[];
     for(let n=1;n<=8;n++){
@@ -571,7 +571,7 @@ class TeamScene extends Phaser.Scene {
       });
       _cntBtns.push(nb);
     }
-    const _adfy=H-68;
+    const _adfy=H-96;
     this.add.text(cx-170,_adfy-14,'AI 難度：',{fontSize:'13px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(6);
     const _diffColors=[0x1a4a1a,0xff6600,0x8b0000];
     const _diffBtns=[];
@@ -585,6 +585,24 @@ class TeamScene extends Phaser.Scene {
         _diffBtns.forEach((b,j)=>b.setFillStyle(j===di?_diffColors[j]:0x333333));
       });
       _diffBtns.push(db);
+    });
+    // ── 道具出現頻率 ─────────────────────────────────────
+    if(!this.gameData.itemRate) this.gameData.itemRate=1; // 0=少 1=正常 2=多
+    const _irY=H-54;
+    this.add.text(cx-170,_irY-14,'道具頻率：',{fontSize:'13px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(6);
+    const _irLabels=['少','正常','多'];
+    const _irColors=[0x1a3a5a,0x335533,0x884400];
+    const _irBtns=[];
+    _irLabels.forEach((il,ii)=>{
+      const bx=cx-80+ii*64;
+      const ib=this.add.rectangle(bx,_irY,56,24,ii===(this.gameData.itemRate??1)?_irColors[ii]:0x333333,1).setDepth(6);
+      this.add.text(bx,_irY,il,{fontSize:'12px',color:'#ffffff',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(7);
+      ib.setInteractive({useHandCursor:true});
+      ib.on('pointerdown',()=>{
+        this.gameData.itemRate=ii;
+        _irBtns.forEach((b,j)=>b.setFillStyle(j===ii?_irColors[j]:0x333333));
+      });
+      _irBtns.push(ib);
     });
 
     // ── 確認開始按鈕 ──────────────────────────────────────────
@@ -725,6 +743,7 @@ class TeamScene extends Phaser.Scene {
       level:d.level,
       enemyCnt:d.enemyCnt||2,
       aiDiff:d.aiDiff??1,
+      itemRate:d.itemRate??1,
       multiplay:this.mpMode,
       gameMode:this.gameMode,
       teams:aiTeams,
@@ -1467,7 +1486,7 @@ class SelectScene extends Phaser.Scene {
 
 class GameScene extends Phaser.Scene {
   constructor(){ super('Game'); }
-  init(data){ this.charData=data.char||this.charData||CHARS[0]; this.levelData=data.level||this.levelData||LEVELS[0]; this.enemyCnt=data.enemyCnt||2; this.aiDiff=data.aiDiff??1; this.multiplay=data.multiplay||false; this.syncTimer=0; this.gameMode=data.gameMode||'individual'; this.playerTeam=data.playerTeam||'none'; this.aiTeams=(data.teams||[]).reduce((m,t)=>{m[t.id]=t.team||'none';return m;},{}); this._teamLabels=null; }
+  init(data){ this.charData=data.char||this.charData||CHARS[0]; this.levelData=data.level||this.levelData||LEVELS[0]; this.enemyCnt=data.enemyCnt||2; this.aiDiff=data.aiDiff??1; this.itemRate=data.itemRate??1; this.multiplay=data.multiplay||false; this.syncTimer=0; this.gameMode=data.gameMode||'individual'; this.playerTeam=data.playerTeam||'none'; this.aiTeams=(data.teams||[]).reduce((m,t)=>{m[t.id]=t.team||'none';return m;},{}); this._teamLabels=null; }
 
   create(){
     const c=this.charData;
@@ -1638,15 +1657,6 @@ class GameScene extends Phaser.Scene {
     gAnBtn.on('pointerover',()=>gAnBtn.setAlpha(0.75));
     gAnBtn.on('pointerout', ()=>gAnBtn.setAlpha(1));
     gAnBtn.on('pointerdown',()=>openAnimModal());
-    // ── 道具加速測試按鈕 ─────────────────────────────────────────
-    this._itemFast=false;
-    this._itemFastBtn=this.add.text(W-14,92,'🎁 道具x1',{fontSize:'13px',color:'#aaffaa',backgroundColor:'rgba(0,60,0,0.7)',padding:{x:6,y:3}}).setOrigin(1,0).setDepth(30).setInteractive({useHandCursor:true});
-    this._itemFastBtn.on('pointerdown',()=>{
-      this._itemFast=!this._itemFast;
-      this._itemFastBtn.setText(this._itemFast?'🎁 道具x5 🔴':'🎁 道具x1');
-      this._itemFastBtn.setColor(this._itemFast?'#ffff44':'#aaffaa');
-      if(this._itemFast) this.itemTimer=0.3; // 立刻觸發一次
-    });
     // ── 正向循環 UI ──────────────────────────────────────────────
     // 第二條 HUD 背景（緊接 100px 面板）
     this.add.rectangle(0,100,320,24,0x000000,0.50).setOrigin(0,0).setDepth(19);
@@ -3233,7 +3243,12 @@ class GameScene extends Phaser.Scene {
     }
     // 道具生成
     this.itemTimer-=dt;
-    if(this.itemTimer<=0){this.spawnItem();this.itemTimer=this._itemFast?(0.8+Math.random()*0.4):(5+Math.random()*4);}
+    if(this.itemTimer<=0){
+      this.spawnItem();
+      const _ir=this.itemRate??1;
+      // 0=少(10-16s) 1=正常(5-9s) 2=多(1-2s)
+      this.itemTimer=_ir===0?(10+Math.random()*6):_ir===2?(1+Math.random()):(5+Math.random()*4);
+    }
     this.evtTimer-=dt;
     if(this.evtTimer<=0){this.spawnRandEvent();this.evtTimer=11+Math.random()*5;}
     this.updateRandEvents(dt); if(!this.alive) return;
