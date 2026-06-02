@@ -2599,7 +2599,8 @@ class GameScene extends Phaser.Scene {
     if(this.keys.down.isDown  ||GKEYS['ArrowDown'])  my=_ctrlRev;
     if(mx&&my){mx*=0.707;my*=0.707;}
     if(this.activeEffects.stun>0){mx=0;my=0;if(isDash&&this.dashState)this.dashState.active=false;}
-    if(this.activeEffects.slip>0){mx=this._slipVx/(this.charData.speed*0.016||1);my=this._slipVy/(this.charData.speed*0.016||1);} // 打滑：以捕捉速度滑行
+    if(this.activeEffects.slip>0&&!this._playerOnIce){/* slip timer 保留給其他用途 */}
+    if(this._playerOnIce){mx*=0.25;my*=0.25;} // 踩冰：輸入方向保留但速度減為 25%
     if(this.ultState&&this.ultState.flying){mx=0;my=0;}
     if(!isDash){
       if(this.activeEffects.oilSlick>0){
@@ -3050,11 +3051,11 @@ class GameScene extends Phaser.Scene {
       }
       // 油漬：在油上無法發動衝刺、無法轉向（只能滑行）
       const onOil=this.oilSlicks&&this.oilSlicks.some(os=>Math.hypot(e.x-os.x,e.y-os.y)<os.r);
-      const onSlip=(e.activeEffects&&e.activeEffects.slip>0);
-      if(onSlip){e.vx=e.slipLastVx||e.vx; e.vy=e.slipLastVy||e.vy;}
+      // 踩冰：阻止衝刺，速度已在 maxSpd 限制
+      const onIceTrail=!!e._iceSlowActive;
       // 衝刺：難度決定頻率，速度固定 4.5
       const chargeCd=diff===0?6+Math.random()*4:diff===1?3.5+Math.random()*3:2+Math.random()*2;
-      if(!onSlip){
+      if(!onIceTrail){
       if(e.chargeTimer<=0&&edist<(diff===1?165:200)&&!onOil){
         e.chargeTimer=chargeCd;
         e.charging=true; e.chargeTime=0.32;
@@ -3075,7 +3076,8 @@ class GameScene extends Phaser.Scene {
       const _eIceSpd=_eAE.iceBoost>0?1.5:1.0;
       const _eSauceSlow=(e._sauceSlow&&e._sauceSlow<1)?e._sauceSlow:1.0;
       const _eLemonSlow=this.lemonPuddles.some(lp=>Math.hypot(e.x-lp.x,e.y-lp.y)<lp.r)?0.7:1.0;
-      const maxSpd=(e.charging?4.5:2.8)*sSlow*capSlow*(onOil?0.7:1)*_ePepSpd*_eIceSpd*_eSauceSlow*_eLemonSlow;
+      const _eIceTrailSlow=e._iceSlowActive?0.18:1.0; // 踩冰：速度降到 18%，明顯黏住
+      const maxSpd=(e.charging?4.5:2.8)*sSlow*capSlow*(onOil?0.7:1)*_ePepSpd*_eIceSpd*_eSauceSlow*_eLemonSlow*_eIceTrailSlow;
       e._sauceSlow=1.0;
       if(espd>maxSpd){e.vx=(e.vx/espd)*maxSpd;e.vy=(e.vy/espd)*maxSpd;}
       }
@@ -3313,22 +3315,20 @@ class GameScene extends Phaser.Scene {
       });
       return true;
     });
-    // 冰跡更新
+    // 冰跡更新（位置即時判斷，在範圍內持續減速，走出就恢復）
+    this._playerOnIce=false;
+    this.enemies.forEach(e=>{if(e.alive) e._iceSlowActive=false;}); // 每幀重置
     this.iceTrail=this.iceTrail.filter(t=>{
       t.life-=dt;
       if(t.life<=0) return false;
-      if(t.ownerId!=='player'&&Math.hypot(this.p.x-t.x,this.p.y-t.y)<22){
-        this.activeEffects.slip=Math.max(this.activeEffects.slip,1.0);
+      // 玩家踩冰（非自己留的）
+      if(t.ownerId!=='player'&&Math.hypot(this.p.x-t.x,this.p.y-t.y)<26){
+        this._playerOnIce=true;
       }
+      // AI 踩冰（非自己留的）
       this.enemies.forEach(e=>{
         if(!e.alive||t.ownerId===e.label) return;
-        if(Math.hypot(e.x-t.x,e.y-t.y)<22){
-          if(e.activeEffects){
-            const wasSlip=(e.activeEffects.slip||0)>0;
-            e.activeEffects.slip=Math.max(e.activeEffects.slip||0,1.0);
-            if(!wasSlip){e.slipLastVx=e.vx;e.slipLastVy=e.vy;} // only capture on first contact
-          }
-        }
+        if(Math.hypot(e.x-t.x,e.y-t.y)<26) e._iceSlowActive=true;
       });
       return true;
     });
@@ -3442,7 +3442,7 @@ class GameScene extends Phaser.Scene {
     if(ae2.slowpow>0)  eff2.push('🍋慢速 '+ae2.slowpow.toFixed(1)+'s');
     if(ae2.stun>0)    eff2.push('XX穿刺 '+ae2.stun.toFixed(1)+'s');
     if(ae2.toxic>0)   eff2.push('!!焦糖 '+ae2.toxic.toFixed(1)+'s');
-    if(ae2.slip>0)        eff2.push('⛸打滑 '+ae2.slip.toFixed(1)+'s');
+    if(this._playerOnIce)  eff2.push('❄️踩冰減速');
     if(ae2.sauceCharge>0) eff2.push('🍶待佈陣 '+ae2.sauceCharge.toFixed(1)+'s');
     const aa2=this.abilityActive;
     if(aa2&&aa2.type==='armor')  eff2.push('裝甲 '+aa2.timer.toFixed(1)+'s');
