@@ -3421,13 +3421,12 @@ class GameScene extends Phaser.Scene {
     this.pepperParticles=this.pepperParticles.filter(p=>{
       p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=0.88; p.vy*=0.88;
       if(p.life<=0) return false;
-      // 命中敵人 → 減速 + 混亂（只有碰撞散出的才觸發，trail 不觸發）
+      // 命中敵人 → 減速（只有碰撞散出的才觸發，trail 不觸發）
       if(!p.trail){
         this.enemies.forEach(e=>{
           if(!e.alive) return;
           if(Math.hypot(e.x-p.x,e.y-p.y)<p.r+20){
-            e._sauceSlow=0.55;
-            e._pepConfuse=Math.max(e._pepConfuse||0, 2.5);
+            e._sauceSlow=0.45; // 胡椒辣到：明顯減速但保持方向
           }
         });
       }
@@ -3438,15 +3437,7 @@ class GameScene extends Phaser.Scene {
       }
       return true;
     });
-    // AI 混亂移動（被胡椒打到）
-    this.enemies.forEach(e=>{
-      if(!e.alive||!(e._pepConfuse>0)) return;
-      e._pepConfuse-=dt;
-      if(e._pepConfuse<=0){e._pepConfuse=0;return;}
-      // 每 0.5 秒亂轉方向
-      if(!e._confuseDir||Math.random()<dt*2){e._confuseDir={vx:(Math.random()-0.5)*3,vy:(Math.random()-0.5)*3};}
-      e.vx=e._confuseDir.vx; e.vy=e._confuseDir.vy;
-    });
+    // 胡椒辣到：純減速，由 _sauceSlow 控制（已在 maxSpd 套用）
     // 視野限制（被 AI 胡椒打到）
     this.visionLayer.clear();
     if(ae2.pepperVision>0){
