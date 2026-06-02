@@ -1564,7 +1564,7 @@ class GameScene extends Phaser.Scene {
     const _lvBgKey=this.levelData.key+'_bg_full'; // 'lv2_bg_full' / 'lv3_bg_full' / 'lv4_bg_full'
     const _bgKey=this.textures.exists(_lvBgKey)?_lvBgKey
       :this.textures.exists('cartoon_bg')?'cartoon_bg':null;
-    if(_bgKey) this.add.image(W/2,H/2,_bgKey).setDisplaySize(W,H).setDepth(-15).setAlpha(0.85);
+    if(_bgKey) this.add.image(W/2,H/2,_bgKey).setDisplaySize(W,H).setDepth(-15).setAlpha(1.0);
     this.drawGrill();
 
     // 玩家
@@ -1683,7 +1683,7 @@ class GameScene extends Phaser.Scene {
 
     if(lk==='lv1'){
       // 家庭烤肉架：橫向鑄鐵條 + 炭火縫隙底光
-      g.fillStyle(0x0e0904,0.88); g.fillRect(0,0,W,H);
+      g.fillStyle(0x0e0904,0.38); g.fillRect(0,0,W,H);
       g.fillStyle(0x080402); g.fillRect(G.x-10,G.y-10,G.w+20,G.h+20);
       g.fillStyle(0x170700); g.fillRect(G.x,G.y,G.w,G.h);
       const bH1=7,bg1=15,bt1=22,rows1=Math.ceil(G.h/bt1)+2;
@@ -1709,7 +1709,7 @@ class GameScene extends Phaser.Scene {
 
     else if(lk==='lv2'){
       // 餐廳鐵板燒：光滑金屬平板，細橫紋，銀藍邊框
-      g.fillStyle(0x0d0d12,0.65); g.fillRect(0,0,W,H);
+      g.fillStyle(0x0d0d12,0.30); g.fillRect(0,0,W,H);
       g.fillStyle(0x16161e); g.fillRect(G.x-8,G.y-8,G.w+16,G.h+16);
       g.fillStyle(0x22222e); g.fillRect(G.x,G.y,G.w,G.h);
       const B2=8;
@@ -1726,7 +1726,7 @@ class GameScene extends Phaser.Scene {
 
     else if(lk==='lv3'){
       // 露營野火烤架：粗鐵條 + 橙黃木炭底光
-      g.fillStyle(0x080c03,0.82); g.fillRect(0,0,W,H);
+      g.fillStyle(0x080c03,0.36); g.fillRect(0,0,W,H);
       g.fillStyle(0x110700); g.fillRect(G.x-10,G.y-10,G.w+20,G.h+20);
       g.fillStyle(0x1e0d04); g.fillRect(G.x,G.y,G.w,G.h);
       const bH3=10,bg3=20,bt3=30,rows3=Math.ceil(G.h/bt3)+2;
@@ -1756,7 +1756,7 @@ class GameScene extends Phaser.Scene {
 
     else{
       // 地獄料理直播：極暗底，熔岩裂縫，紅橙多層邊框
-      g.fillStyle(0x0e0000,0.78); g.fillRect(0,0,W,H);
+      g.fillStyle(0x0e0000,0.40); g.fillRect(0,0,W,H);
       g.fillStyle(0x080000); g.fillRect(G.x-8,G.y-8,G.w+16,G.h+16);
       g.fillStyle(0x140300); g.fillRect(G.x,G.y,G.w,G.h);
       const B4=22;
@@ -2274,12 +2274,12 @@ class GameScene extends Phaser.Scene {
   }
 
   _scatterPepper(cx,cy,fromAI){
-    for(let i=0;i<8;i++){
+    for(let i=0;i<14;i++){
       const ang=Math.random()*Math.PI*2;
-      const spd=70+Math.random()*90;
+      const spd=80+Math.random()*110;
       this.pepperParticles.push({
         x:cx,y:cy,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,
-        life:1.5,r:5+Math.random()*4,fromAI:!!fromAI
+        life:1.8,r:6+Math.random()*5,fromAI:!!fromAI,trail:false
       });
     }
   }
@@ -3344,18 +3344,37 @@ class GameScene extends Phaser.Scene {
       this._garlicAoe.life-=dt;
       if(this._garlicAoe.life<=0) this._garlicAoe=null;
     }
+    // 胡椒沿路持續散發（每 0.25 秒噴一波）
+    if(ae2.pepBoost>0){
+      this._pepEmitTimer=(this._pepEmitTimer||0)-dt;
+      if(this._pepEmitTimer<=0){
+        this._pepEmitTimer=0.22;
+        for(let _pe=0;_pe<3;_pe++){
+          const _pang=Math.random()*Math.PI*2;
+          const _pspd=20+Math.random()*35;
+          this.pepperParticles.push({
+            x:this.p.x+(Math.random()-0.5)*12,
+            y:this.p.y+(Math.random()-0.5)*12,
+            vx:Math.cos(_pang)*_pspd, vy:Math.sin(_pang)*_pspd,
+            life:0.9, r:3+Math.random()*3, fromAI:false, trail:true
+          });
+        }
+      }
+    } else { this._pepEmitTimer=0; }
     // 胡椒散出粒子更新
     this.pepperParticles=this.pepperParticles.filter(p=>{
       p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=0.88; p.vy*=0.88;
       if(p.life<=0) return false;
-      // 命中敵人 → 減速 + 混亂
-      this.enemies.forEach(e=>{
-        if(!e.alive) return;
-        if(Math.hypot(e.x-p.x,e.y-p.y)<p.r+10){
-          e._sauceSlow=0.55;
-          e._pepConfuse=Math.max(e._pepConfuse||0, 2.5); // 混亂計時
-        }
-      });
+      // 命中敵人 → 減速 + 混亂（只有碰撞散出的才觸發，trail 不觸發）
+      if(!p.trail){
+        this.enemies.forEach(e=>{
+          if(!e.alive) return;
+          if(Math.hypot(e.x-p.x,e.y-p.y)<p.r+10){
+            e._sauceSlow=0.55;
+            e._pepConfuse=Math.max(e._pepConfuse||0, 2.5);
+          }
+        });
+      }
       // fromAI=true 代表 AI 散出的辣粉打到玩家
       if(p.fromAI&&Math.hypot(this.p.x-p.x,this.p.y-p.y)<p.r+10){
         ae2.pepperVision=Math.max(ae2.pepperVision,5.0);
