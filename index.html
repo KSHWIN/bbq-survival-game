@@ -742,10 +742,10 @@ class SelectScene extends Phaser.Scene {
     this.sel=0; this.lvSel=0;
     // Background
     const selBg=this.textures.exists('cartoon_bg')?'cartoon_bg':'grill_bg';
-    if(this.textures.exists(selBg)) this.add.image(W/2,H/2,selBg).setDisplaySize(W,H).setAlpha(0.38);
-    // 深紅漸層疊層
+    if(this.textures.exists(selBg)) this.add.image(W/2,H/2,selBg).setDisplaySize(W,H).setAlpha(0.72);
+    // 深紅漸層疊層（輕化）
     const _gradBg=this.add.graphics();
-    _gradBg.fillGradientStyle(0x280200,0x280200,0x010000,0x010000,0.92); _gradBg.fillRect(0,0,W,H);
+    _gradBg.fillGradientStyle(0x280200,0x280200,0x010000,0x010000,0.52); _gradBg.fillRect(0,0,W,H);
     // 邊角暗角
     const _vig=this.add.graphics();
     _vig.fillStyle(0x000000,0.40); _vig.fillRect(0,0,W,72);
@@ -761,7 +761,7 @@ class SelectScene extends Phaser.Scene {
     this.add.text(W/2,50,'選擇食材  ●  選擇關卡  ●  出戰！',{fontSize:'15px',color:'#cc8844',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(3);
 
     // ── Character Grid (5×2) ──────────────────────────────
-    const CW=124,CH=145,GX=7,GY=6;
+    const CW=124,CH=158,GX=7,GY=6;
     const totalCW=5*CW+4*GX; // 648
     const sx=(W-totalCW)/2+CW/2;
     const sy=63+CH/2;
@@ -771,29 +771,29 @@ class SelectScene extends Phaser.Scene {
       const cont=this.add.container(cx,cy);
       const shadow=this.add.rectangle(3,3,CW,CH,0x000000,0.55);
       const bg=this.add.rectangle(0,0,CW,CH,0x180d00,0.93).setStrokeStyle(2,0x664422);
-      const portraitBg=this.add.rectangle(0,-30,82,82,0xffffff,1); // 白底
+      const portraitBg=this.add.rectangle(0,-28,96,96,0xffffff,1); // 白底
       let portrait;
-      if(this.textures.exists(c.img)) portrait=this.add.image(0,-30,c.img).setDisplaySize(78,78);
-      else portrait=this.add.rectangle(0,-30,72,72,c.color,0.75).setStrokeStyle(2,0xffffff);
-      const nameT=this.add.text(0,+14,c.name,{fontSize:'16px',color:'#ffdd88',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5);
-      const abilT=this.add.text(0,+30,'✦ '+c.ability,{fontSize:'12px',color:'#66ccff',fontFamily:'sans-serif'}).setOrigin(0.5);
+      if(this.textures.exists(c.img)) portrait=this.add.image(0,-28,c.img).setDisplaySize(92,92);
+      else portrait=this.add.rectangle(0,-28,88,88,c.color,0.75).setStrokeStyle(2,0xffffff);
+      const nameT=this.add.text(0,+24,c.name,{fontSize:'16px',color:'#ffdd88',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5);
+      const abilT=this.add.text(0,+40,'✦ '+c.ability,{fontSize:'12px',color:'#66ccff',fontFamily:'sans-serif'}).setOrigin(0.5);
       // ── 數值長條（速度 / 推力 / 耐熱）──
       const statG=this.add.graphics();
       const spPct=Math.min(1,(c.speed-80)/85);
       const wgPct=Math.min(1,(c.weight-0.6)/0.9);
       const htPct=Math.min(1,Math.max(0,1-((c.heatMult||1)-0.8)/0.6));
       const BW=84,BH=6,BX=-42;
-      [[spPct,0x44ddff,+41],[wgPct,0xff8844,+51],[htPct,0x88ff44,+61]].forEach(([pct,col,by])=>{
+      [[spPct,0x44ddff,+52],[wgPct,0xff8844,+62],[htPct,0x88ff44,+72]].forEach(([pct,col,by])=>{
         statG.fillStyle(0x1a1008,0.85); statG.fillRect(BX,by,BW,BH);
         statG.fillStyle(col,0.88); statG.fillRect(BX,by,Math.round(BW*pct),BH);
         statG.lineStyle(1,col,0.3); statG.strokeRect(BX,by,BW,BH);
       });
-      const lb1=this.add.text(BX-3,+41,'速',{fontSize:'9px',color:'#44ddff',fontFamily:'sans-serif'}).setOrigin(1,0);
-      const lb2=this.add.text(BX-3,+51,'推',{fontSize:'9px',color:'#ff8844',fontFamily:'sans-serif'}).setOrigin(1,0);
-      const lb3=this.add.text(BX-3,+61,'熱',{fontSize:'9px',color:'#88ff44',fontFamily:'sans-serif'}).setOrigin(1,0);
-      const vl1=this.add.text(BX+BW+3,+41,Math.round(spPct*100)+'',{fontSize:'9px',color:'#44ddff',fontFamily:'sans-serif'}).setOrigin(0,0);
-      const vl2=this.add.text(BX+BW+3,+51,Math.round(wgPct*100)+'',{fontSize:'9px',color:'#ff8844',fontFamily:'sans-serif'}).setOrigin(0,0);
-      const vl3=this.add.text(BX+BW+3,+61,Math.round(htPct*100)+'',{fontSize:'9px',color:'#88ff44',fontFamily:'sans-serif'}).setOrigin(0,0);
+      const lb1=this.add.text(BX-3,+52,'速',{fontSize:'9px',color:'#44ddff',fontFamily:'sans-serif'}).setOrigin(1,0);
+      const lb2=this.add.text(BX-3,+62,'推',{fontSize:'9px',color:'#ff8844',fontFamily:'sans-serif'}).setOrigin(1,0);
+      const lb3=this.add.text(BX-3,+72,'熱',{fontSize:'9px',color:'#88ff44',fontFamily:'sans-serif'}).setOrigin(1,0);
+      const vl1=this.add.text(BX+BW+3,+52,Math.round(spPct*100)+'',{fontSize:'9px',color:'#44ddff',fontFamily:'sans-serif'}).setOrigin(0,0);
+      const vl2=this.add.text(BX+BW+3,+62,Math.round(wgPct*100)+'',{fontSize:'9px',color:'#ff8844',fontFamily:'sans-serif'}).setOrigin(0,0);
+      const vl3=this.add.text(BX+BW+3,+72,Math.round(htPct*100)+'',{fontSize:'9px',color:'#88ff44',fontFamily:'sans-serif'}).setOrigin(0,0);
       cont.add([shadow,bg,portraitBg,portrait,nameT,abilT,statG,lb1,lb2,lb3,vl1,vl2,vl3]);
       cont.setInteractive(new Phaser.Geom.Rectangle(-CW/2,-CH/2,CW,CH),Phaser.Geom.Rectangle.Contains);
       cont.on('pointerdown',()=>this.setSel(i));
@@ -873,8 +873,14 @@ class SelectScene extends Phaser.Scene {
     btnBg.setInteractive().on('pointerover',()=>{btnBg.setFillStyle(0xff8800);btnBg.setScale(1.05);btnTxt.setScale(1.05);});
     btnBg.on('pointerout', ()=>{btnBg.setFillStyle(0xff6600);btnBg.setScale(1);btnTxt.setScale(1);});
     btnBg.on('pointerdown',()=>this.startGame());
-    // Pulse tween on button
     this.tweens.add({targets:[btnBg,btnTxt],scaleX:{from:1,to:1.04},scaleY:{from:1,to:1.04},duration:650,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
+    // ── 隨機角色按鈕 ───────────────────────────────────────
+    const rndBtnX=btnX-btnW/2-60, rndBtnY=btnY;
+    const rndBg=this.add.rectangle(rndBtnX,rndBtnY,108,28,0x446688,1).setStrokeStyle(2,0x88bbff).setDepth(25).setInteractive({useHandCursor:true});
+    const rndTxt=this.add.text(rndBtnX,rndBtnY,'🎲 隨機角色',{fontSize:'16px',color:'#cceeff',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(26);
+    rndBg.on('pointerover',()=>{rndBg.setFillStyle(0x6699bb);rndTxt.setScale(1.05);});
+    rndBg.on('pointerout', ()=>{rndBg.setFillStyle(0x446688);rndTxt.setScale(1);});
+    rndBg.on('pointerdown',()=>this.setSel(Math.floor(Math.random()*CHARS.length)));
 
     // ── Detail bar（全寬）──────────────────────────────────
     this.add.rectangle(W/2,H-44,W,82,0x060400,0.94).setStrokeStyle(1,0x885522).setDepth(10);
@@ -3571,8 +3577,8 @@ class GameScene extends Phaser.Scene {
             const lx=z.x+30+Math.random()*(z.w-60);
             const ly=z.y+30+Math.random()*(z.h-60);
             this.evtQueue.push({type:'lemon',x:lx,y:ly,
-              state:'warn',timer:0.5+Math.random()*0.3,
-              fallY:G.y-40,fallSpd:55,splashR:0,done:false});
+              state:'warn',timer:0.3+Math.random()*0.2,
+              fallY:G.y-40,fallSpd:90,splashR:0,done:false});
           }
           if(ev.timer<=0) ev.done=true;
         }
@@ -3606,7 +3612,7 @@ class GameScene extends Phaser.Scene {
               const nx2=this.p.x+ddx*force, ny2=this.p.y+ddy*force;
               this.cameras.main.shake(280,0.015);
               // 酸液效果：減速 2.5 秒 + 加熱
-              ae.slowpow=Math.max(ae.slowpow,2.5);
+              ae.slowpow=Math.max(ae.slowpow,5.0);
               this.heat=Math.min(100,this.heat+10*(1-dist/72));
               if(!inGrill(nx2,ny2)){
                 this.subTxt.setText('被檸檬汁噴飛！');this.endGame(false);
