@@ -1412,7 +1412,7 @@ class SelectScene extends Phaser.Scene {
       {icon:'◎', name:'鋁箔紙',   eff:'7 秒隔熱；被大蒜玩家推 → 攻擊者反彈'},
       {icon:'★', name:'大蒜',     eff:'5 秒推力 ×1.7；最後 1 秒 AOE 爆發'},
       {icon:'🍶',name:'醬油',     eff:'持有 5 秒，按 S 佈下黏滯陷阱'},
-      {icon:'🌶',name:'胡椒粉',   eff:'走動留下辣路 6 秒，路徑擴散，踩到者減速'},
+      {icon:'🌶',name:'胡椒粉',   eff:'15 秒內撞到人→散出辣粉，減速+AI 混亂；AI 打到玩家→視野限制'},
     ];
     GOODS.forEach((it,i)=>{
       const iy=PY-PH/2+76+i*30;
@@ -1473,7 +1473,7 @@ class GameScene extends Phaser.Scene {
     this.heat=0; this.alive=true; this.pushCD=0; this.timeLeft=this.levelData.timer;
     this.lastDir={x:1,y:0}; this.firePhase=0; this.pushWas=false; this.wobbleTween=null; this.dashState=null; this.dashTrail=[];
     this.forkTimer=4; this.fork=null;
-    this.activeEffects={foil:0,garlic:0,slowpow:0,pepBoost:0,stun:0,toxic:0,oilSlick:0,slip:0,sauceCharge:0,
+    this.activeEffects={foil:0,garlic:0,slowpow:0,pepBoost:0,stun:0,toxic:0,oilSlick:0,slip:0,sauceCharge:0,pepperVision:0,
       goldenZone:0,   // 黃金熟度 50-80% buff 計時
       juicy:0,        // 擊殺排熱 buff 計時
       iceBoost:0,     // 冰塊拾取加速 buff 計時
@@ -1491,7 +1491,10 @@ class GameScene extends Phaser.Scene {
     this.iceTrail=[]; this.iceLastPos={x:0,y:0};
     this.saucePools=[]; this.lemonPuddles=[]; this.sauceSplash=[]; this.collisionOils=[]; this.pepperTrail=[];
     this.pepLastPos={x:0,y:0};
+    this.pepperParticles=[]; // 胡椒碰撞散出粒子
+    this.forkMisses=0;       // 廚師叉子未擊中次數
     this.fxTrailLayer=this.add.graphics().setDepth(6);
+    this.visionLayer=this.add.graphics().setDepth(48);
     this.oilLayer=this.add.graphics().setDepth(3);
     this.randOilTimer=12+Math.random()*6;
     this.flares=[]; this.flareTimer=15+Math.random()*5;
@@ -2258,7 +2261,7 @@ class GameScene extends Phaser.Scene {
     if(item.type==='foil')  {ae.foil=item.dur+3;  this.showPop('◎ 鋁箔紙！隔熱 7 秒！'); this.playSound('good');}
     if(item.type==='garlic'){ae.garlic=item.dur+2; this._garlicAoeDone=false; this.showPop('★ 大蒜！推力 ×1.7！最後 1 秒會爆發！'); this.playSound('good');}
     if(item.type==='sauce') {ae.sauceCharge=5.0; this.showPop('🍶 醬油！按 S 佈陣！5 秒後自動！'); this.playSound('good');}
-    if(item.type==='pepper'){ae.pepBoost=6.0; this.pepLastPos={x:this.p.x,y:this.p.y}; this.showPop('🌶 胡椒粉！走動會留下辣路！'); this.playSound('good');}
+    if(item.type==='pepper'){ae.pepBoost=15.0; this.showPop('🌶 胡椒粉！撞到人會散出辣粉！15 秒！'); this.playSound('good');}
   }
 
   applyItemToEnemy(e, item){
@@ -2268,6 +2271,32 @@ class GameScene extends Phaser.Scene {
     if(item.type==='garlic'){ ae.garlic=item.dur+2; e._garlicAoeDone=false; }
     if(item.type==='sauce') { ae.sauceCharge=5.0; }
     if(item.type==='pepper'){ ae.pepBoost=item.dur; }
+  }
+
+  _scatterPepper(cx,cy,fromAI){
+    for(let i=0;i<8;i++){
+      const ang=Math.random()*Math.PI*2;
+      const spd=70+Math.random()*90;
+      this.pepperParticles.push({
+        x:cx,y:cy,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,
+        life:1.5,r:5+Math.random()*4,fromAI:!!fromAI
+      });
+    }
+  }
+
+  _triggerChefAngry(){
+    this.showPop('😠 廚師生氣了！叉子暴走！');
+    this.cameras.main.shake(400,0.018);
+    // 0.6 秒後噴出 9 支叉子
+    for(let i=0;i<9;i++){
+      this.time.delayedCall(600+i*180,()=>{
+        if(!this.alive) return;
+        const kx=G.x+45+Math.random()*(G.w-90);
+        const ky=G.y+45+Math.random()*(G.h-90);
+        this.evtQueue.push({type:'skewer',x:kx,targetY:ky,
+          state:'warn',timer:0.9,curY:G.y-80,done:false});
+      });
+    }
   }
 
   _spawnCollisionOil(x,y){
@@ -2379,7 +2408,8 @@ class GameScene extends Phaser.Scene {
   }
 
   endGame(win){
-    this.iceTrail=[]; this.saucePools=[]; this.lemonPuddles=[]; this.sauceSplash=[]; this.collisionOils=[]; this.pepperTrail=[];
+    this.iceTrail=[]; this.saucePools=[]; this.lemonPuddles=[]; this.sauceSplash=[]; this.collisionOils=[]; this.pepperTrail=[]; this.pepperParticles=[];
+    if(this.visionLayer) this.visionLayer.clear();
     this.firePts=this.firePts.filter(f=>!f.collision);
     this._garlicAoe=null; this._sneezeFx=null;
     this.alive=false;
@@ -2584,6 +2614,7 @@ class GameScene extends Phaser.Scene {
             y:e.y+my*this.dashState.force*resist*charBst,
             duration:260,ease:'Cubic.easeOut',
             onComplete:()=>this.checkEnemyFall(e,i)});
+          if(this.activeEffects.pepBoost>0) this._scatterPepper(e.x,e.y,false);
           this.spawnOilSplat(e.x,e.y,mx,my);
           this.cameras.main.shake(160,0.005+charBst*0.007);
           const fx=this.add.graphics().setDepth(25);
@@ -3054,6 +3085,8 @@ class GameScene extends Phaser.Scene {
             const _kRes=(this.ultState&&this.ultState.knockRes)?this.ultState.knockRes:1;
             const _juicyRes=this.activeEffects.juicy>0?0.5:1.0; // 多汁狀態：被推距離減半
             const cBst=Math.min(1.5,1+this.heat/100*0.8);
+            // AI 有胡椒推玩家 → 散出胡椒（玩家視野受限）
+            if(e.activeEffects&&e.activeEffects.pepBoost>0) this._scatterPepper(this.p.x,this.p.y,true);
             this.tweens.add({targets:this.p,
               x:this.p.x+pnx*pForce*cBst*_kRes*_juicyRes,y:this.p.y+pny*pForce*cBst*_kRes*_juicyRes,
               duration:240,ease:'Cubic.easeOut',
@@ -3311,40 +3344,51 @@ class GameScene extends Phaser.Scene {
       this._garlicAoe.life-=dt;
       if(this._garlicAoe.life<=0) this._garlicAoe=null;
     }
-    // 胡椒路徑（pepBoost 期間留下擴散辣路）
-    if(ae2.pepBoost>0){
-      const _pd=Math.hypot(this.p.x-this.pepLastPos.x,this.p.y-this.pepLastPos.y);
-      if(_pd>=12){
-        // 主軌跡點 + 2 個隨機散布子點
-        this.pepperTrail.push({x:this.p.x,y:this.p.y,life:4.0,r:12});
-        for(let _pi=0;_pi<2;_pi++){
-          this.pepperTrail.push({
-            x:this.p.x+(Math.random()-0.5)*28,
-            y:this.p.y+(Math.random()-0.5)*28,
-            life:3.5+Math.random()*0.5,r:7+Math.random()*6
-          });
-        }
-        this.pepLastPos={x:this.p.x,y:this.p.y};
-      }
-    }
-    // 胡椒路徑更新（衰減 + 減速效果）
-    this.pepperTrail=this.pepperTrail.filter(t=>{
-      t.life-=dt;
-      if(t.life<=0) return false;
-      // 擴散：r 隨時間緩慢增大到最大 28
-      t.r=Math.min(28,t.r+dt*4);
-      // 附近敵人減速
+    // 胡椒散出粒子更新
+    this.pepperParticles=this.pepperParticles.filter(p=>{
+      p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=0.88; p.vy*=0.88;
+      if(p.life<=0) return false;
+      // 命中敵人 → 減速 + 混亂
       this.enemies.forEach(e=>{
         if(!e.alive) return;
-        if(Math.hypot(e.x-t.x,e.y-t.y)<t.r+8) e._sauceSlow=0.65;
+        if(Math.hypot(e.x-p.x,e.y-p.y)<p.r+10){
+          e._sauceSlow=0.55;
+          e._pepConfuse=Math.max(e._pepConfuse||0, 2.5); // 混亂計時
+        }
       });
+      // fromAI=true 代表 AI 散出的辣粉打到玩家
+      if(p.fromAI&&Math.hypot(this.p.x-p.x,this.p.y-p.y)<p.r+10){
+        ae2.pepperVision=Math.max(ae2.pepperVision,5.0);
+        p.fromAI=false; // 只觸發一次
+      }
       return true;
     });
+    // AI 混亂移動（被胡椒打到）
+    this.enemies.forEach(e=>{
+      if(!e.alive||!(e._pepConfuse>0)) return;
+      e._pepConfuse-=dt;
+      if(e._pepConfuse<=0){e._pepConfuse=0;return;}
+      // 每 0.5 秒亂轉方向
+      if(!e._confuseDir||Math.random()<dt*2){e._confuseDir={vx:(Math.random()-0.5)*3,vy:(Math.random()-0.5)*3};}
+      e.vx=e._confuseDir.vx; e.vy=e._confuseDir.vy;
+    });
+    // 視野限制（被 AI 胡椒打到）
+    this.visionLayer.clear();
+    if(ae2.pepperVision>0){
+      const vcx=this.p.x, vcy=this.p.y, vr=90;
+      for(let _vi=0;_vi<20;_vi++){
+        const _r=vr+_vi*18;
+        const _a=Math.min(0.88,_vi/20*0.9);
+        this.visionLayer.lineStyle(22,0x000000,_a);
+        this.visionLayer.strokeCircle(vcx,vcy,_r);
+      }
+    }
     // 效果指示器
     const eff2=[];
     if(ae2.foil>0)    eff2.push('◎隔熱 '+ae2.foil.toFixed(0)+'s');
     if(ae2.garlic>0)  eff2.push('★推力x2 '+ae2.garlic.toFixed(0)+'s');
-    if(ae2.pepBoost>0) eff2.push('🌶辣路 '+ae2.pepBoost.toFixed(0)+'s');
+    if(ae2.pepBoost>0) eff2.push('🌶辣粉 '+ae2.pepBoost.toFixed(0)+'s');
+    if(ae2.pepperVision>0) eff2.push('👁視野受限 '+ae2.pepperVision.toFixed(0)+'s');
     if(ae2.slowpow>0)  eff2.push('🍋慢速 '+ae2.slowpow.toFixed(1)+'s');
     if(ae2.stun>0)    eff2.push('XX穿刺 '+ae2.stun.toFixed(1)+'s');
     if(ae2.toxic>0)   eff2.push('!!焦糖 '+ae2.toxic.toFixed(1)+'s');
@@ -3681,6 +3725,10 @@ class GameScene extends Phaser.Scene {
               ae.stun=Math.max(ae.stun,2.0);
               this.cameras.main.shake(340,0.016);
               this.showPop('⚡ 被竹簽穿了！不能動！');
+              this.forkMisses=0; // 插到人 → 廚師滿足，重置
+            } else {
+              this.forkMisses++;
+              if(this.forkMisses>=3){ this.forkMisses=0; this._triggerChefAngry(); }
             }
           }
         } else if(ev.state==='stuck'){
@@ -3986,13 +4034,11 @@ class GameScene extends Phaser.Scene {
       g.fillStyle(0xccdd22,a); g.fillCircle(lp.x+wb,lp.y+wb,lp.r);
       g.lineStyle(1,0x99aa00,a+0.1); g.strokeCircle(lp.x,lp.y,lp.r);
     });
-    // 胡椒路徑繪製（暗紅棕色塵霧，隨時間擴散淡出）
-    this.pepperTrail.forEach(t=>{
-      const a=Math.min(0.55,t.life/4.0*0.55);
-      g.fillStyle(0x8B2200,a*0.7); g.fillCircle(t.x,t.y,t.r);
-      g.lineStyle(1,0xcc4400,a*0.4); g.strokeCircle(t.x,t.y,t.r);
-      // 中心亮點（辣粉感）
-      g.fillStyle(0xffaa44,a*0.4); g.fillCircle(t.x,t.y,t.r*0.35);
+    // 胡椒散出粒子繪製（暗紅辣粒，快速飛出淡出）
+    this.pepperParticles.forEach(p=>{
+      const _pa=Math.min(0.85,p.life/1.5*0.85);
+      g.fillStyle(0xcc2200,_pa*0.8); g.fillCircle(p.x,p.y,p.r);
+      g.fillStyle(0xff6622,_pa*0.5); g.fillCircle(p.x,p.y,p.r*0.5);
     });
   }
 
