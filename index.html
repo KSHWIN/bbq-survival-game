@@ -1410,7 +1410,7 @@ class SelectScene extends Phaser.Scene {
     mk(()=>this.add.text(PX-PW/4,PY-PH/2+54,'🔵 好道具（撿到有益）',{fontSize:'14px',color:'#88ddff',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(100));
     const GOODS=[
       {icon:'❄️',name:'冰塊',     eff:'降熱 -42%＋留下結冰路徑，他人踩到打滑 1 秒'},
-      {icon:'◎', name:'鋁箔紙',   eff:'7 秒隔熱；被大蒜玩家推 → 攻擊者反彈'},
+      {icon:'◎', name:'鋁箔紙',   eff:'10 秒盔甲：任何推擊反彈攻擊者，免疫慢速/打滑/暈眩/視野'},
       {icon:'★', name:'大蒜',     eff:'5 秒推力 ×1.7；最後 1 秒 AOE 爆發'},
       {icon:'🍶',name:'醬油',     eff:'持有 5 秒，按 S 佈下黏滯陷阱'},
       {icon:'🌶',name:'胡椒粉',   eff:'15 秒內撞到人→散出辣粉，減速+AI 混亂；AI 打到玩家→視野限制'},
@@ -2268,7 +2268,7 @@ class GameScene extends Phaser.Scene {
   applyItem(item){
     const ae=this.activeEffects;
     if(item.type==='ice')   {this.heat=Math.max(0,this.heat-42); ae.iceBoost=5; this.showPop('❄️ 冰塊！冷卻 -42%＋加速 5秒！'); this.playSound('good');}
-    if(item.type==='foil')  {ae.foil=item.dur+3;  this.showPop('◎ 鋁箔紙！隔熱 7 秒！'); this.playSound('good');}
+    if(item.type==='foil')  {ae.foil=item.dur+6;  this.showPop('◎ 鋁箔紙！10 秒盔甲！推不動！'); this.playSound('good');}
     if(item.type==='garlic'){ae.garlic=item.dur+2; this._garlicAoeDone=false; this.showPop('★ 大蒜！推力 ×1.7！最後 1 秒會爆發！'); this.playSound('good');}
     if(item.type==='sauce') {ae.sauceCharge=5.0; this.showPop('🍶 醬油！按 S 佈陣！5 秒後自動！'); this.playSound('good');}
     if(item.type==='pepper'){ae.pepBoost=15.0; this.showPop('🌶 胡椒粉！撞到人會散出辣粉！15 秒！'); this.playSound('good');}
@@ -2608,9 +2608,9 @@ class GameScene extends Phaser.Scene {
           dHit=true;
           const resist=(e.heat||0)<50?0.65:1.0;
           const charBst=Math.min(2.2,1+(e.heat||0)/100*1.2); // 越熟越容易被打飛
-          // foil 反彈：AI 有 foil 且玩家有 garlic → 玩家被彈回
-          if((e.activeEffects&&e.activeEffects.foil>0)&&(this.activeEffects.garlic>0)){
-            const rx=this.p.x-mx*this.dashState.force*resist*charBst*2, ry=this.p.y-my*this.dashState.force*resist*charBst*2;
+          // foil 反彈：AI 有 foil → 任何推擊都反彈玩家，力道 ×0.8
+          if(e.activeEffects&&e.activeEffects.foil>0){
+            const rx=this.p.x-mx*this.dashState.force*resist*charBst*0.8, ry=this.p.y-my*this.dashState.force*resist*charBst*0.8;
             this.tweens.add({targets:this.p,x:rx,y:ry,duration:240,ease:'Cubic.easeOut',
               onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this.subTxt.setText('反彈落下！');this.endGame(false);}}});
             this.showPop('🪞 反彈！');
@@ -3080,10 +3080,10 @@ class GameScene extends Phaser.Scene {
           const _eGarlicBst=(e.activeEffects&&e.activeEffects.garlic>0)?1.7:1.0;
           const pForce=95*Math.min(2.0,1+e.heat/100*1.5)*_eGarlicBst; // AI 越熟推越猛，大蒜加成
           if(pTgt.isPlayer){
-              // foil 反彈：玩家有 foil 且 AI 有 garlic → AI 被彈回
-              if(this.activeEffects.foil>0&&(e.activeEffects&&e.activeEffects.garlic>0)){
+              // foil 反彈：玩家有 foil → 任何 AI 推擊都反彈，AI 被彈回
+              if(this.activeEffects.foil>0){
                 const rnx=(e.x-this.p.x)/pd, rny=(e.y-this.p.y)/pd;
-                this.tweens.add({targets:e,x:e.x+rnx*pForce*2,y:e.y+rny*pForce*2,
+                this.tweens.add({targets:e,x:e.x+rnx*pForce*1.6,y:e.y+rny*pForce*1.6,
                   duration:240,ease:'Cubic.easeOut',
                   onComplete:()=>this.checkEnemyFall(e,i)});
                 this.showPop('🪞 鋁箔反彈 '+e.label+'！');
@@ -3416,7 +3416,11 @@ class GameScene extends Phaser.Scene {
     }
     // 效果指示器
     const eff2=[];
-    if(ae2.foil>0)    eff2.push('◎隔熱 '+ae2.foil.toFixed(0)+'s');
+    // 鋁箔盔甲：免疫負面效果
+    if(ae2.foil>0){
+      ae2.slowpow=0; ae2.slip=0; ae2.stun=0; ae2.pepperVision=0; // 清除負面狀態
+      eff2.push('◎盔甲 '+ae2.foil.toFixed(0)+'s');
+    }
     if(ae2.garlic>0)  eff2.push('★推力x2 '+ae2.garlic.toFixed(0)+'s');
     if(ae2.pepBoost>0) eff2.push('🌶辣粉 '+ae2.pepBoost.toFixed(0)+'s');
     if(ae2.pepperVision>0) eff2.push('👁視野受限 '+ae2.pepperVision.toFixed(0)+'s');
