@@ -3060,6 +3060,8 @@ class GameScene extends Phaser.Scene {
           } else {
             const eRef=pTgt.ref, eIdx=pTgt.idx;
             const cBst=Math.min(1.5,1+(eRef.heat||0)/100*0.8);
+            // AI 互推：碰撞點也噴油
+            this._spawnCollisionOil((e.x+eRef.x)/2,(e.y+eRef.y)/2);
             this.tweens.add({targets:eRef,
               x:eRef.x+pnx*pForce*cBst,y:eRef.y+pny*pForce*cBst,
               duration:240,ease:'Cubic.easeOut',
