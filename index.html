@@ -836,7 +836,8 @@ class SelectScene extends Phaser.Scene {
     });
 
     // ── 場地事件 / 道具 說明欄（點擊展開詳細）───────────────
-    const HY=490;
+    const lvBottom=lsy+LH/2;  // 關卡卡片實際底部
+    const HY=lvBottom+52;      // 欄位 Y 置於關卡卡片下方 52px
     const panW=W-40;
     const hazBg=this.add.rectangle(W/2,HY,panW,80,0x070402,0.93).setStrokeStyle(1,0x553300).setDepth(5).setInteractive();
     hazBg.on('pointerover',()=>hazBg.setStrokeStyle(1,0xaa7744));
@@ -2578,7 +2579,8 @@ class GameScene extends Phaser.Scene {
       this._slipVy=this.p.y-(this._lastPY||this.p.y);
     }
     if(this.activeEffects.slip<=0){this._slipInit=false;this._slipVx=0;this._slipVy=0;}
-    const SPD=isDash?120:this.charData.speed*(this.activeEffects.slowpow>0?0.5:1)*ultSpd*_ultSpdMul*_goldenSpd*_iceSpd;
+    const _sauceStuckMul=this._inSauce?0.25:1.0; // 醬油灘黏住效果
+    const SPD=isDash?120:this.charData.speed*(this.activeEffects.slowpow>0?0.5:1)*_sauceStuckMul*ultSpd*_ultSpdMul*_goldenSpd*_iceSpd;
     let mx=0, my=0;
     const _ctrlRev=(this.ultState&&this.ultState.reversed)?-1:1;
     if(this.keys.left.isDown  ||GKEYS['ArrowLeft'])  mx=-_ctrlRev;
@@ -3266,15 +3268,16 @@ class GameScene extends Phaser.Scene {
       return s.life>0;
     });
     // 醬油灘更新
+    this._inSauce=false; // 每幀重置
     this.saucePools=this.saucePools.filter(sp=>{
       sp.life-=dt;
       if(sp.life<=0) return false;
       if(sp.ownerId!=='player'&&Math.hypot(this.p.x-sp.x,this.p.y-sp.y)<sp.r){
-        this.activeEffects.slowpow=Math.max(this.activeEffects.slowpow,0.3);
+        this._inSauce=true; // 玩家在醬油灘裡
       }
       this.enemies.forEach(e=>{
         if(!e.alive||sp.ownerId===e.label) return;
-        if(Math.hypot(e.x-sp.x,e.y-sp.y)<sp.r) e._sauceSlow=0.7;
+        if(Math.hypot(e.x-sp.x,e.y-sp.y)<sp.r) e._sauceSlow=0.30;
       });
       return true;
     });
