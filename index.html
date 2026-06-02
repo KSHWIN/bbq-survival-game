@@ -1637,6 +1637,15 @@ class GameScene extends Phaser.Scene {
     gAnBtn.on('pointerover',()=>gAnBtn.setAlpha(0.75));
     gAnBtn.on('pointerout', ()=>gAnBtn.setAlpha(1));
     gAnBtn.on('pointerdown',()=>openAnimModal());
+    // ── 道具加速測試按鈕 ─────────────────────────────────────────
+    this._itemFast=false;
+    this._itemFastBtn=this.add.text(W-14,92,'🎁 道具x1',{fontSize:'13px',color:'#aaffaa',backgroundColor:'rgba(0,60,0,0.7)',padding:{x:6,y:3}}).setOrigin(1,0).setDepth(30).setInteractive({useHandCursor:true});
+    this._itemFastBtn.on('pointerdown',()=>{
+      this._itemFast=!this._itemFast;
+      this._itemFastBtn.setText(this._itemFast?'🎁 道具x5 🔴':'🎁 道具x1');
+      this._itemFastBtn.setColor(this._itemFast?'#ffff44':'#aaffaa');
+      if(this._itemFast) this.itemTimer=0.3; // 立刻觸發一次
+    });
     // ── 正向循環 UI ──────────────────────────────────────────────
     // 第二條 HUD 背景（緊接 100px 面板）
     this.add.rectangle(0,100,320,24,0x000000,0.50).setOrigin(0,0).setDepth(19);
@@ -3222,7 +3231,7 @@ class GameScene extends Phaser.Scene {
     }
     // 道具生成
     this.itemTimer-=dt;
-    if(this.itemTimer<=0){this.spawnItem();this.itemTimer=5+Math.random()*4;}
+    if(this.itemTimer<=0){this.spawnItem();this.itemTimer=this._itemFast?(0.8+Math.random()*0.4):(5+Math.random()*4);}
     this.evtTimer-=dt;
     if(this.evtTimer<=0){this.spawnRandEvent();this.evtTimer=11+Math.random()*5;}
     this.updateRandEvents(dt); if(!this.alive) return;
