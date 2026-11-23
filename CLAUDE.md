@@ -13,6 +13,12 @@
 - 再次「單人遊玩」時，`showSingle()` 偵測到 `gameInstance === null` 才重建
 - BootScene 支援 `window._PENDING_GAME_START`，供多人模式 destroy/recreate 後直接跳 TeamScene
 
+## 美術素材
+- 角色/道具/廚師圖已預先去背成透明 PNG 再嵌入 `IMG`（300px / 道具 80px）。**不要再加執行期「去白」**：它會把角色身上的白色（豆腐、眼睛反光）一起挖空。
+- 新圖流程：`python tools/cutout.py assets/原圖.png 輸出.png 300` → base64 換進 `IMG`。只去「跟邊框連通的白底」，角色內部白色保留。
+- 只有正面圖，所以移動不換貼圖；轉身/跳步/前傾/Q 彈/陰影都在 `GameScene._animChar()`（玩家與 AI 共用）。
+- 打擊感集中在 `_hitFeel()`：頓幀（`_hitStop` + `tweens.timeScale=0`）、閃白、擠壓、衝擊星、重擊音。
+
 ---
 
 ## Phaser 除錯速查
