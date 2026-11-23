@@ -339,6 +339,7 @@ document.getElementById('anim-modal').addEventListener('click',function(e){
 <script>
 
 const W = 960, H = 680;
+const TOPX = 595, TOPY = 44, TOPW = 500; // 烤盤上方的訊息區（橫幅、第一次說明）
 const G = { x: 110, y: 85, w: 740, h: 510 };
 
 // ── 食材基礎類別 ──────────────────────────────────────────────
@@ -1744,7 +1745,7 @@ class GameScene extends Phaser.Scene {
     this.popTxt   =this.add.text(W/2,G.y-28,'',ts(17,'#ffff44')).setOrigin(0.5).setDepth(30);
     this.statusTxt=this.add.text(W/2,H/2-30,'',{fontSize:'44px',color:'#ff3333',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:6}).setOrigin(0.5).setDepth(40);
     this.subTxt   =this.add.text(W/2,H/2+28,'',ts(20,'#ffaaaa')).setOrigin(0.5).setDepth(40);
-    this.effectTxt=this.add.text(W/2,H-16,'',ts(12,'#ffff88')).setOrigin(0.5).setDepth(35);
+    this.effectTxt=this.add.text(W-14,G.y+G.h+22,'',ts(13,'#ffff88')).setOrigin(1,0.5).setDepth(35); // 訊息列右側
     this.tiltTxt  =this.add.text(W/2,G.y+24,'',{fontSize:'24px',color:'#ffee00',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:5}).setOrigin(0.5).setDepth(36).setVisible(false);
 
     // 輸入（方向鍵移動，S 推擠）
@@ -1992,7 +1993,7 @@ class GameScene extends Phaser.Scene {
     this._burn=Phaser.Math.Clamp(prev+(inF&&!imm?dt*1.1:-dt*1.4),0,1);
     if(prev<0.6&&this._burn>=0.6&&this.time.now>(this._burnMsgT||0)){
       this._burnMsgT=this.time.now+2500;
-      this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'🔥 燒起來了！快離開火','#ff8a4a',true);
+      this._notice('🔥 燒起來了！快離開火','#ff8a4a');
     }
     if(this._burn>0.45){ this._burnShT=(this._burnShT||0)-dt; if(this._burnShT<=0){ this._burnShT=0.28; this._addTrauma(0.07*this._burn); } }
     const g=this.burnLayer; g.clear();
@@ -2034,18 +2035,34 @@ class GameScene extends Phaser.Scene {
       }
     }
   }
+  // 訊息列：烤盤正下方一行，長訊息都放這裡，不擋戰局
+  _notice(msg,col){
+    try{
+      if(!this._noticeTxt||!this._noticeTxt.scene){
+        this._noticeTxt=this.add.text(W/2-40,G.y+G.h+22,'',{fontSize:'19px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:5}).setOrigin(0.5).setDepth(63);
+      }
+      const t=this._noticeTxt;
+      if(this._noticeTw) this._noticeTw.stop();
+      t.setText(msg).setColor(col||'#ffffff').setAlpha(1).setScale(1.25);
+      this.tweens.add({targets:t,scaleX:1,scaleY:1,duration:160,ease:'Back.easeOut'});
+      this._noticeTw=this.tweens.add({targets:t,alpha:0,delay:1800,duration:400});
+    }catch(e){ console.error('[notice]',e); }
+  }
   // 事件：每次發生都在畫面中間出現橫幅，第一次還會在地圖上標示位置
-  _evt(key,x,y,title,desc){ this._banner(title,desc); this._tip(key,x,y,title,desc); }
+  _evt(key,x,y,title,desc){ this._banner(title,desc); this._tip(key,x,y,title,desc,true); } // 橫幅已寫說明，地圖上只畫圈標位置
   _banner(title,desc){
     try{
       if(this._bannerObjs) this._bannerObjs.forEach(o=>{ if(o&&o.scene) o.destroy(); });
-      const y=G.y+58;
-      const t1=this.add.text(W/2,y-12,title,{fontSize:'30px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:6}).setOrigin(0.5).setDepth(58);
-      const t2=this.add.text(W/2,y+20,desc,{fontSize:'17px',color:'#ffe2a8',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:4}).setOrigin(0.5).setDepth(58);
-      const bw=Math.max(t1.width,t2.width)+50;
+      this._bannerUntil=this.time.now+2300; // 橫幅期間，上方說明框先讓位
+      const _cur=this._tipCur;
+      if(_cur&&!_cur.ringOnly){ this._clearTips(true); this._tipQ.unshift(_cur.n); }
+      const y=TOPY, X=TOPX;
+      const t1=this.add.text(X,y-13,title,{fontSize:'24px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:5}).setOrigin(0.5).setDepth(58);
+      const t2=this.add.text(X,y+14,desc,{fontSize:'15px',color:'#ffe2a8',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:4}).setOrigin(0.5).setDepth(58);
+      const bw=Math.min(TOPW,Math.max(t1.width,t2.width)+40);
       const bg=this.add.graphics().setDepth(57);
-      bg.fillStyle(0x140a04,0.85); bg.fillRoundedRect(W/2-bw/2,y-38,bw,80,12);
-      bg.lineStyle(3,0xffaa33,1); bg.strokeRoundedRect(W/2-bw/2,y-38,bw,80,12);
+      bg.fillStyle(0x140a04,0.9); bg.fillRoundedRect(X-bw/2,y-34,bw,66,10);
+      bg.lineStyle(3,0xffaa33,1); bg.strokeRoundedRect(X-bw/2,y-34,bw,66,10);
       const objs=[bg,t1,t2]; this._bannerObjs=objs;
       objs.forEach(o=>o.setAlpha(0));
       this.tweens.add({targets:objs,alpha:1,duration:160});
@@ -2060,7 +2077,7 @@ class GameScene extends Phaser.Scene {
              ['slip','🧊 打滑！','#8fe8ff'],['oilSlick','🛢 踩到油，滑走了！','#ffd27a'],['pepperVision','🌶 被胡椒噴到，看不清楚！','#ff9a6a']];
     S.forEach(([k,msg,col])=>{
       const on=(ae[k]||0)>0;
-      if(on&&!prev[k]) this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,msg,col,true);
+      if(on&&!prev[k]) this._notice(msg,col);
       prev[k]=on;
     });
   }
@@ -2149,7 +2166,7 @@ class GameScene extends Phaser.Scene {
   }
   // 底部常駐按鍵列（在烤盤下方，不擋畫面）
   _buildKeyBar(){
-    const y=G.y+G.h+26;
+    const y=H-21; // 最底部；烤盤正下方留給訊息列
     const items=[['←↑↓→','移動'],['A','推擠'],['S',(this.charData&&this.charData.ability)||'技能'],['D','大絕'],['H','說明']];
     const cont=this.add.container(0,0).setDepth(30);
     const g=this.add.graphics(); cont.add(g);
@@ -2257,47 +2274,52 @@ class GameScene extends Phaser.Scene {
     step();
   }
   // 地圖元素第一次出現：旁邊跳出名稱 + 效果（每種只教一次，一次一個）
-  _tip(key,x,y,title,desc){
+  _tip(key,x,y,title,desc,ringOnly){
     window._bbqTips=window._bbqTips||{};
     if(window._bbqTips[key]||!this._tipQ) return;
     window._bbqTips[key]=1;
-    if(this._tipQ.length<4) this._tipQ.push({x,y,title,desc});
+    if(this._tipQ.length<4) this._tipQ.push({x,y,title,desc,ringOnly});
   }
   _updateTips(delta){
     if(!this._tipQ) return;
     const t=this._tipCur;
     if(!t){
       if(!this._tipQ.length||!this.alive) return;
+      if(this.time.now<(this._bannerUntil||0)&&!this._tipQ[0].ringOnly){
+        const i=this._tipQ.findIndex(q=>q.ringOnly); if(i<0) return;
+        this._tipQ.unshift(this._tipQ.splice(i,1)[0]);
+      }
       const n=this._tipQ.shift();
-      // 預設放在目標上方；若會蓋到玩家頭頂狀態條，改放另一側
-      const ovY=this.p.y-this._ovTop()-20;
-      const hitsHud=(cy)=>Math.abs(cy-ovY)<60&&Math.abs(n.x-this.p.x)<170;
-      let above=n.y>G.y+110;
-      if(hitsHud(above?n.y-74:n.y+74)) above=!above;
-      const by=above?n.y-74:n.y+74;
+      const g=this.add.graphics().setDepth(60);
+      if(n.ringOnly){ this._tipCur={n,g,age:0,ringOnly:true}; return; }
+      // 說明框放在烤盤上方（戰場外），不擋住正在打的地方
+      const by=TOPY, bh=56;
       const title=this.add.text(0,0,n.title,{fontSize:'17px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:4}).setOrigin(0.5).setDepth(61);
       const desc=this.add.text(0,0,n.desc,{fontSize:'14px',color:'#ffe9c4',fontFamily:'sans-serif',stroke:'#000000',strokeThickness:3}).setOrigin(0.5).setDepth(61);
-      const bw=Math.max(title.width,desc.width)+24, bh=52;
-      const bx=Phaser.Math.Clamp(n.x,bw/2+8,W-bw/2-8);
+      const bw=Math.min(TOPW,Math.max(title.width,desc.width)+28), bx=TOPX;
       title.setPosition(bx,by-11); desc.setPosition(bx,by+12);
-      const g=this.add.graphics().setDepth(60);
       this._tipCur={n,g,title,desc,bx,by,bw,bh,age:0};
       return;
     }
     t.age+=delta/1000;
-    const LIFE=3.4, a=Math.min(1,t.age/0.18,(LIFE-t.age)/0.35);
+    const LIFE=t.ringOnly?2.6:3.4, a=Math.max(0,Math.min(1,t.age/0.18,(LIFE-t.age)/0.35));
     if(t.age>=LIFE){ this._clearTips(true); return; }
     const pulse=1+0.15*Math.sin(t.age*10);
-    t.g.clear(); t.g.setAlpha(Math.max(0,a)); t.title.setAlpha(Math.max(0,a)); t.desc.setAlpha(Math.max(0,a));
+    t.g.clear(); t.g.setAlpha(a);
     t.g.lineStyle(3,0xffffff,0.9); t.g.strokeCircle(t.n.x,t.n.y,26*pulse);
-    const edgeY=t.by>t.n.y?t.by-t.bh/2:t.by+t.bh/2;
-    t.g.lineStyle(2,0xffffff,0.8); t.g.lineBetween(t.n.x,t.n.y+(t.by>t.n.y?26:-26),t.bx,edgeY);
-    t.g.fillStyle(0x140a04,0.88); t.g.fillRoundedRect(t.bx-t.bw/2,t.by-t.bh/2,t.bw,t.bh,8);
+    if(t.ringOnly) return;
+    t.title.setAlpha(a); t.desc.setAlpha(a);
+    // 細虛線從說明框連到目標
+    const x0=t.bx, y0=t.by+t.bh/2, x1=t.n.x, y1=t.n.y-26, L=Math.hypot(x1-x0,y1-y0), seg=10;
+    t.g.lineStyle(2,0xffffff,0.55);
+    for(let d=0;d<L;d+=seg*2){ const f0=d/L, f1=Math.min(1,(d+seg)/L); t.g.lineBetween(x0+(x1-x0)*f0,y0+(y1-y0)*f0,x0+(x1-x0)*f1,y0+(y1-y0)*f1); }
+    t.g.fillStyle(0x140a04,0.92); t.g.fillRoundedRect(t.bx-t.bw/2,t.by-t.bh/2,t.bw,t.bh,8);
     t.g.lineStyle(2,0xffcc44,1); t.g.strokeRoundedRect(t.bx-t.bw/2,t.by-t.bh/2,t.bw,t.bh,8);
   }
   _clearTips(keepQueue){
     const t=this._tipCur;
     if(t){ [t.g,t.title,t.desc].forEach(o=>{ try{ if(o&&o.scene) o.destroy(); }catch(e){} }); }
+    if(!keepQueue&&this._noticeTxt&&this._noticeTxt.scene) this._noticeTxt.setText('');
     this._tipCur=null;
     if(!keepQueue&&this._tipQ) this._tipQ.length=0;
   }
@@ -2978,7 +3000,8 @@ class GameScene extends Phaser.Scene {
       }
       this.showPop(e.label+' 掉落！');
       if(this.stats) this.stats.kos++;
-      this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'擊落！熟度 -25% 🧊','#8fe8ff',true);
+      this._notice('🏆 擊落！熟度 -25% 🧊','#8fe8ff');
+      this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'-25%','#8fe8ff');
 
       // ── 正向循環：擊殺 → 多汁排熱 ─────────────────────────
       this.killCount++;
