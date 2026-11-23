@@ -589,6 +589,21 @@ class TeamScene extends Phaser.Scene {
       _diffBtns.push(db);
     });
     // ── 道具出現頻率 ─────────────────────────────────────
+    // ── 熱源模式：🔥 火焰圈 / 🎯 中心熱區 ─────────────────────
+    if(!this.gameData.heatMode){ try{ this.gameData.heatMode=localStorage.getItem('bbq_heatmode')||'fire'; }catch(e){ this.gameData.heatMode='fire'; } }
+    const _hmY=H-176;
+    this.add.text(cx-170,_hmY-14,'熱源模式：',{fontSize:'13px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(6);
+    const _hmBtns=[];
+    [['fire','🔥 火焰圈',0x883300],['ring','🎯 中心熱區',0x8a1a1a]].forEach(([k,label,col],hi)=>{
+      const bx=cx-62+hi*104;
+      const hb=this.add.rectangle(bx,_hmY,96,24,this.gameData.heatMode===k?col:0x333333,1).setDepth(6).setInteractive({useHandCursor:true});
+      this.add.text(bx,_hmY,label,{fontSize:'12px',color:'#ffffff',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(7);
+      hb.on('pointerdown',()=>{
+        this.gameData.heatMode=k; try{ localStorage.setItem('bbq_heatmode',k); }catch(e){}
+        _hmBtns.forEach((b,j)=>b.setFillStyle(j===hi?[0x883300,0x8a1a1a][j]:0x333333));
+      });
+      _hmBtns.push(hb);
+    });
     if(!this.gameData.itemRate) this.gameData.itemRate=1; // 0=少 1=正常 2=多
     const _irY=H-54;
     this.add.text(cx-170,_irY-14,'道具頻率：',{fontSize:'13px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(6);
@@ -803,6 +818,7 @@ class TeamScene extends Phaser.Scene {
       enemyCnt:d.enemyCnt||2,
       aiDiff:d.aiDiff??1,
       itemRate:d.itemRate??1,
+      heatMode:d.heatMode||'fire',
       multiplay:this.mpMode,
       gameMode:this.gameMode,
       teams:aiTeams,
@@ -1553,7 +1569,7 @@ class SelectScene extends Phaser.Scene {
 
 class GameScene extends Phaser.Scene {
   constructor(){ super('Game'); }
-  init(data){ this.charData=data.char||this.charData||CHARS[0]; this.levelData=data.level||this.levelData||LEVELS[0]; this.enemyCnt=data.enemyCnt||2; this.aiDiff=data.aiDiff??1; this.itemRate=data.itemRate??1; this.multiplay=data.multiplay||false; this.syncTimer=0; this.gameMode=data.gameMode||'individual'; this.playerTeam=data.playerTeam||'none'; this.aiTeams=(data.teams||[]).reduce((m,t)=>{m[t.id]=t.team||'none';return m;},{}); this._teamLabels=null; }
+  init(data){ this.charData=data.char||this.charData||CHARS[0]; this.levelData=data.level||this.levelData||LEVELS[0]; this.enemyCnt=data.enemyCnt||2; this.aiDiff=data.aiDiff??1; this.itemRate=data.itemRate??1; this.heatMode=data.heatMode||(()=>{ try{ return localStorage.getItem('bbq_heatmode')||'fire'; }catch(e){ return 'fire'; } })(); this.multiplay=data.multiplay||false; this.syncTimer=0; this.gameMode=data.gameMode||'individual'; this.playerTeam=data.playerTeam||'none'; this.aiTeams=(data.teams||[]).reduce((m,t)=>{m[t.id]=t.team||'none';return m;},{}); this._teamLabels=null; }
 
   create(){
     bbqFitCam(this);
@@ -1771,7 +1787,8 @@ class GameScene extends Phaser.Scene {
     this.time.addEvent({delay:1000,loop:true,callback:()=>{
       if(!this.alive) return;
       this.timeLeft--;
-      if(this.timeLeft===20&&this.fx&&this.fx.fire){ this._fireMul=1.35; this._banner('🔥 火力全開！','最後 20 秒：火變大、熄了很快又燒起來'); this._addTrauma(0.35); }
+      if(this.timeLeft===20&&this.fx&&(this.fx.fire||this.heatMode==='ring')){ this._fireMul=1.35;
+        this._banner('🔥 火力全開！',this.heatMode==='ring'?'最後 20 秒：中間的高溫區變大了':'最後 20 秒：火變大、熄了很快又燒起來'); this._addTrauma(0.35); }
       if(this.timeLeft<=0) this.endGame(true);
     }});
     this._setupHelpUI(); // 操作說明卡 + 底部按鍵列 + 震動系統
@@ -1958,6 +1975,79 @@ class GameScene extends Phaser.Scene {
 
 
 
+
+
+  // ══ AI 大腦：①離邊緣遠一點 ②不讓背後是邊緣（站到對手和中心之間）③看到衝刺會側閃 ④中心熱區模式會看熱度選位置 ══
+  _aiBrain(e,diff,dt){
+    const cx=G.x+G.w/2, cy=G.y+G.h/2, pad=this.shrinkPad||0;
+    const left=e.x-(G.x+pad), right=(G.x+G.w-pad)-e.x, top=e.y-(G.y+pad), bot=(G.y+G.h-pad)-e.y;
+    // ① 邊緣迴避：越靠近邊越用力往內
+    const M=[55,95,130][diff], K=[0.18,0.42,0.7][diff];
+    if(left<M) e.vx+=K*(1-left/M); if(right<M) e.vx-=K*(1-right/M);
+    if(top<M)  e.vy+=K*(1-top/M);  if(bot<M)   e.vy-=K*(1-bot/M);
+    // ② 不背對邊緣：玩家靠近時，移到「玩家和中心之間」，讓玩家推的方向是往內
+    const px=this.p.x, py=this.p.y, dP=Math.hypot(e.x-px,e.y-py)||1;
+    if(this.alive&&dP<230&&diff>0){
+      const ax=(e.x-px)/dP, ay=(e.y-py)/dP;             // 被推的方向
+      const fx=e.x+ax*140, fy=e.y+ay*140;                // 被推 140px 後的位置
+      if(!inGrill(fx,fy)||Math.min(fx-G.x,G.x+G.w-fx,fy-G.y,G.y+G.h-fy)<pad+40){
+        const tcx=cx-px, tcy=cy-py, tl=Math.hypot(tcx,tcy)||1;
+        const wx=px+tcx/tl*70, wy=py+tcy/tl*70;          // 目標點：玩家靠中心那一側
+        const wdx=wx-e.x, wdy=wy-e.y, wd=Math.hypot(wdx,wdy)||1;
+        const S=[0,0.32,0.55][diff];
+        e.vx+=wdx/wd*S; e.vy+=wdy/wd*S;
+      }
+    }
+    // ③ 閃衝刺：玩家朝自己衝過來時，往中心那一側閃開（每次衝刺只判斷一次）
+    const ds=this.dashState;
+    if(ds&&ds.active&&e._dodgeId!==ds){
+      const rx=e.x-px, ry=e.y-py, along=rx*ds.dx+ry*ds.dy, perp=Math.abs(rx*ds.dy-ry*ds.dx);
+      if(along>0&&along<230&&perp<50){
+        e._dodgeId=ds;
+        if(Math.random()<[0.15,0.45,0.75][diff]){
+          let sx=-ds.dy, sy=ds.dx;                           // 垂直方向
+          if((cx-e.x)*sx+(cy-e.y)*sy<0){ sx=-sx; sy=-sy; }    // 選靠中心那邊
+          e._dodgeVx=sx*6; e._dodgeVy=sy*6; e._dodgeT=0.24; // 約 85px 的側閃
+        }
+      }
+    }
+    // ④ 中心熱區模式：不燙時待中圈，變熱就往外圈涼的地方（但不貼邊）
+    if(this.heatMode==='ring'){
+      const q=this._ringQ(e.x,e.y), want=(e.heat||0)>45?0.8:0.52;
+      const dl=Math.hypot(e.x-cx,e.y-cy)||1, R=[0.06,0.13,0.22][diff];
+      const sgn=q<want?1:-1;                               // 太裡面就往外、太外面就往內
+      if(Math.abs(q-want)>0.06){ e.vx+=(e.x-cx)/dl*R*sgn; e.vy+=(e.y-cy)/dl*R*sgn; }
+    }
+  }
+
+  // ══ 中心熱區模式：越靠中間越燙，外圈涼但靠近邊緣（安全 vs 不被烤熟的取捨）══════
+  // q = 位置在烤盤橢圓中的比例（0 = 正中央，1 = 邊緣）
+  _ringQ(x,y){ const cx=G.x+G.w/2, cy=G.y+G.h/2; return Math.hypot((x-cx)/(G.w/2),(y-cy)/(G.h/2)); }
+  _ringBounds(){ const m=this._fireMul||1, inner=0.36*m; return {inner, mid:Math.max(0.68,inner+0.12)}; }
+  _ringHeat(x,y){ const q=this._ringQ(x,y), b=this._ringBounds(); return q<b.inner?11:(q<b.mid?3.5:0); } // 每秒熟度
+  _drawRings(){
+    if(this.heatMode!=='ring'){ if(this.ringLayer&&this.ringLayer.scene) this.ringLayer.clear(); return; }
+    if(!this.ringLayer||!this.ringLayer.scene){
+      this.ringLayer=this.add.graphics().setDepth(1);
+      this.ringLbl=this.add.text(G.x+G.w/2,G.y+G.h/2,'🔥 中心最燙',{fontSize:'15px',color:'#ffd0a0',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:3}).setOrigin(0.5).setDepth(2).setAlpha(0.7);
+    }
+    const g=this.ringLayer; g.clear();
+    const cx=G.x+G.w/2, cy=G.y+G.h/2, rx=G.w/2, ry=G.h/2, b=this._ringBounds(), t=this.time.now*0.001;
+    const pulse=0.85+0.15*Math.sin(t*3);
+    // 中圈（溫）
+    g.fillStyle(0xff7a1a,0.13); g.fillEllipse(cx,cy,rx*2*b.mid,ry*2*b.mid);
+    // 內圈（燙）：多層漸層
+    for(let k=0;k<4;k++){ const f=b.inner*(1-k*0.22); g.fillStyle(k<2?0xff3300:0xffaa22,(0.14+k*0.05)*pulse); g.fillEllipse(cx,cy,rx*2*f,ry*2*f); }
+    g.lineStyle(3,0xff5522,0.75*pulse); g.strokeEllipse(cx,cy,rx*2*b.inner,ry*2*b.inner);
+    // 中圈邊界：虛線
+    g.lineStyle(2,0xffaa55,0.5);
+    for(let i=0;i<48;i++){ if(i%2) continue; const a0=i/48*Math.PI*2, a1=(i+1)/48*Math.PI*2;
+      g.lineBetween(cx+Math.cos(a0)*rx*b.mid,cy+Math.sin(a0)*ry*b.mid,cx+Math.cos(a1)*rx*b.mid,cy+Math.sin(a1)*ry*b.mid); }
+    // 熱氣往上飄
+    for(let i=0;i<6;i++){ const a=i/6*Math.PI*2+t*0.3, r=b.inner*0.6, hx=cx+Math.cos(a)*rx*r, hy=cy+Math.sin(a)*ry*r-((t*30+i*20)%40);
+      g.lineStyle(2,0xffe0b0,0.12); g.lineBetween(hx,hy,hx+Math.sin(t*4+i)*4,hy-16); }
+  }
+
   // ══ 冷卻圈（搶地盤）：唯一會降溫的地方，每 10 秒換位置 → 逼大家擠在一起 ══════
   _pickCoolPos(){
     const pad=(this.shrinkPad||0)+80;
@@ -2133,7 +2223,7 @@ class GameScene extends Phaser.Scene {
       this.burnLayer=this.add.graphics().setDepth(11);
       this.vignette=this.add.graphics().setDepth(55);
     }
-    const inF=this.onFire(this.p.x,this.p.y);
+    const inF=this.onFire(this.p.x,this.p.y)||(this.heatMode==='ring'&&this._ringHeat(this.p.x,this.p.y)>=10);
     const imm=(this.activeEffects.foil>0)||(this.ultState&&this.ultState.type==='tofu');
     const prev=this._burn||0;
     this._burn=Phaser.Math.Clamp(prev+(inF&&!imm?dt*1.1:-dt*1.4),0,1);
@@ -2166,7 +2256,8 @@ class GameScene extends Phaser.Scene {
     // AI 也會燒（不加邊框）
     this.enemies.forEach((e,i)=>{
       const sp=this.enemySprites[i]; if(!e.alive||!sp||!sp.visible) return;
-      e._burn=Phaser.Math.Clamp((e._burn||0)+(this.onFire(e.x,e.y)?dt*1.1:-dt*1.4),0,1);
+      const _eInF=this.onFire(e.x,e.y)||(this.heatMode==='ring'&&this._ringHeat(e.x,e.y)>=10);
+      e._burn=Phaser.Math.Clamp((e._burn||0)+(_eInF?dt*1.1:-dt*1.4),0,1);
       drawFlames(e.x,e.y,e._burn,(sp.baseScale||0.23)*sp.height,(sp.baseScale||0.23)*sp.width*0.6);
     });
     // 邊框泛紅：只畫畫面四周，中間保持清楚
@@ -2373,7 +2464,7 @@ class GameScene extends Phaser.Scene {
     T(PX,y,'── 地圖上的東西 ──',16,'#ffaa44',{fontStyle:'bold'}).setOrigin(0.5);
     y+=34;
     const legend=[
-      ['fire','火焰圈','站在圈內會越烤越熟'],
+      this.heatMode==='ring'?['fire','🎯 中心熱區','越靠中間越燙；外圈涼，但靠近邊緣']:['fire','火焰圈','站在圈內會越烤越熟'],
       ['warn','預警圈（虛線、閃爍）','等一下這裡會出事，先離開'],
       ['item','道具（圓圈裡的圖示）','走過去就會撿起來'],
       ['hole','破洞／外圈崩塌','掉下去直接出局'],
@@ -3552,7 +3643,7 @@ class GameScene extends Phaser.Scene {
           dHit=true;
           const _hk=this.fx&&this.fx.heatKnock; // 越熟飛越遠：拿掉低熟度的減傷，熟度直接決定飛多遠（最多 3 倍）
           const resist=_hk?1.0:((e.heat||0)<50?0.65:1.0);
-          const charBst=_hk?Math.min(3.0,1+(e.heat||0)/100*2.0):Math.min(2.2,1+(e.heat||0)/100*1.2); // 越熟越容易被打飛
+          const charBst=_hk?(0.55+(e.heat||0)/100*2.0):Math.min(2.2,1+(e.heat||0)/100*1.2); // 越熟飛越遠：0% 熟只飛 0.55 倍，100% 飛 2.55 倍
           // foil 反彈：AI 有 foil → 任何推擊都反彈玩家，力道 ×0.8
           if(e.activeEffects&&e.activeEffects.foil>0){
             const rx=this.p.x-mx*this.dashState.force*resist*charBst*0.8, ry=this.p.y-my*this.dashState.force*resist*charBst*0.8;
@@ -3688,6 +3779,7 @@ class GameScene extends Phaser.Scene {
       this.sizzleTimer-=dt;
       if(this.sizzleTimer<=0&&!fireImmune){this.playSound('sizzle');this.sizzleTimer=0.6;}
     } else this.heat=Math.min(heatCap,this.heat+(this.fx.passiveHeat?1.0:0.2)*dt); // 待著會熟：一局 60 秒約 +60%
+    if(this.heatMode==='ring'&&!fireImmune){ const _rh=this._ringHeat(this.p.x,this.p.y); if(_rh>0) this.heat=Math.min(heatCap,this.heat+_rh*mult*dt); }
     if(ae.toxic>0) this.heat=Math.min(heatCap,this.heat+18*dt);
     if(shieldOn){
       this.enemies.forEach(e=>{
@@ -3778,7 +3870,7 @@ class GameScene extends Phaser.Scene {
     // 火焰狀態機：cooldown → warning → active → dying → cooldown
     this.firePts.forEach(f=>{
       f.timer-=dt;
-      if(!this.fx.fire&&!f.collision){ f.state='cooldown'; f.alpha=0; f.timer=1; return; } // 關閉火焰圈
+      if((!this.fx.fire||this.heatMode==='ring')&&!f.collision){ f.state='cooldown'; f.alpha=0; f.timer=1; return; } // 關閉火焰圈 / 中心熱區模式不用火焰圈
       if(f.state==='active'){
         f.alpha=Math.min(1.0,(f.alpha||0)+dt*4); // 快速淡入
         if(f.timer<=0){ f.state='dying'; f.timer=0.50; }
@@ -3963,12 +4055,14 @@ class GameScene extends Phaser.Scene {
       // 衝刺：難度決定頻率，速度固定 4.5
       const chargeCd=diff===0?6+Math.random()*4:diff===1?3.5+Math.random()*3:2+Math.random()*2;
       if(!onIceTrail){
-      if(e.chargeTimer<=0&&edist<(diff===1?165:200)&&!onOil){
+      const _nearEdge=Math.min(e.x-G.x,G.x+G.w-e.x,e.y-G.y,G.y+G.h-e.y)<(this.shrinkPad||0)+95;
+      if(e.chargeTimer<=0&&edist<(diff===1?165:200)&&!onOil&&!(diff>0&&_nearEdge)){ // 中/強：靠邊時不亂衝刺
         e.chargeTimer=chargeCd;
         e.charging=true; e.chargeTime=0.32;
         e.chDx=edx/edist; e.chDy=edy/edist;
       }
-      if(e.charging){
+      if((e._dodgeT||0)>0){ e._dodgeT-=dt; e.vx=e._dodgeVx; e.vy=e._dodgeVy; } // 閃避衝刺中
+      else if(e.charging){
         e.chargeTime-=dt;
         e.vx=e.chDx*4.5; e.vy=e.chDy*4.5;
         if(e.chargeTime<=0){e.charging=false; e.vx*=0.25; e.vy*=0.25;}
@@ -3976,6 +4070,7 @@ class GameScene extends Phaser.Scene {
         e.vx+=(edx/edist)*0.20;
         e.vy+=(edy/edist)*0.20;
       }
+      if(!e.charging&&!onOil) this._aiBrain(e,diff,dt);
       const espd=Math.hypot(e.vx,e.vy)||1;
       const capSlow=(e.capsaicinTimer||0)>0?0.25:1.0;
       const _eAE=e.activeEffects||{};
@@ -4020,7 +4115,7 @@ class GameScene extends Phaser.Scene {
             } else {
             const _kRes=(this.ultState&&this.ultState.knockRes)?this.ultState.knockRes:1;
             const _juicyRes=this.activeEffects.juicy>0?0.5:1.0; // 多汁狀態：被推距離減半
-            const cBst=(this.fx&&this.fx.heatKnock)?Math.min(2.8,1+this.heat/100*1.8):Math.min(1.5,1+this.heat/100*0.8);
+            const cBst=(this.fx&&this.fx.heatKnock)?(0.55+this.heat/100*2.0):Math.min(1.5,1+this.heat/100*0.8);
             // AI 有胡椒推玩家 → 散出胡椒（玩家視野受限）
             if(e.activeEffects&&e.activeEffects.pepBoost>0) this._scatterPepper(this.p.x,this.p.y,true);
             this.tweens.add({targets:this.p,
@@ -4038,7 +4133,7 @@ class GameScene extends Phaser.Scene {
             }
           } else {
             const eRef=pTgt.ref, eIdx=pTgt.idx;
-            const cBst=(this.fx&&this.fx.heatKnock)?Math.min(2.8,1+(eRef.heat||0)/100*1.8):Math.min(1.5,1+(eRef.heat||0)/100*0.8);
+            const cBst=(this.fx&&this.fx.heatKnock)?(0.55+(eRef.heat||0)/100*2.0):Math.min(1.5,1+(eRef.heat||0)/100*0.8);
             // AI 互推：碰撞點也噴油
             this._spawnCollisionOil((e.x+eRef.x)/2,(e.y+eRef.y)/2);
             this._hitFeel({x:(e.x+eRef.x)/2,y:(e.y+eRef.y)/2,dx:pnx,dy:pny,power:0.5,anim:eRef.anim,freeze:0});
@@ -4082,6 +4177,7 @@ class GameScene extends Phaser.Scene {
         if(!inGrill(e.x,e.y)&&e.alive) this.checkEnemyFall(e,i);
       }
       const _eFoil=e.activeEffects&&e.activeEffects.foil>0;
+      if(this.heatMode==='ring'&&!_eFoil){ const _erh=this._ringHeat(e.x,e.y); if(_erh>0) e.heat=Math.min(100,(e.heat||0)+_erh*dt); }
       if(!_eFoil&&this.onFire(e.x,e.y)) e.heat=Math.min(100,e.heat+24*dt);
       else if(!_eFoil)                   e.heat=Math.min(100,e.heat+(this.fx.passiveHeat?1.0:0.8)*dt);
       if(e.heat>=100){
@@ -4178,6 +4274,7 @@ class GameScene extends Phaser.Scene {
     if(this.evtTimer<=0){this.spawnRandEvent();this.evtTimer=11+Math.random()*5;}
     this._updatePours(dt);
     this._updateCool(dt);
+    this._drawRings();
     this.updateRandEvents(dt); if(!this.alive) return;
     this.updateShrink(dt);    if(!this.alive) return;
     this.updateHoles(dt);     if(!this.alive) return;
