@@ -358,6 +358,19 @@ const LEVELS = [
 
 function inGrill(x,y,m=0){ return x>=G.x+m&&x<=G.x+G.w-m&&y>=G.y+m&&y<=G.y+G.h-m; }
 
+// ── 場地效果開關（開戰前設定畫面可勾選；存在瀏覽器裡，下次還在）─────
+const FX_LIST=[
+  {k:'fire',    n:'🔥 火焰圈'},   {k:'oilFire', n:'💧 互撞油火'}, {k:'items',  n:'🎁 道具'},
+  {k:'brush',   n:'🖌 神之刷'},   {k:'lemon',   n:'🍋 檸檬雨'},   {k:'skewer', n:'🍢 竹簽串'},
+  {k:'iceDrop', n:'🧊 冰塊空投'}, {k:'flare',   n:'💥 火柱爆發'}, {k:'holes',  n:'🕳 烤盤破洞'},
+  {k:'shrink',  n:'⚠ 外圈崩塌'},  {k:'tilt',    n:'↔ 廚師翻面'},  {k:'fork',   n:'🍴 廚師叉子'},
+];
+function bbqFx(){
+  const d={}; FX_LIST.forEach(f=>d[f.k]=true);
+  try{ return Object.assign(d, JSON.parse(localStorage.getItem('bbq_fx')||'{}')); }catch(e){ return d; }
+}
+function bbqFxSave(o){ try{ localStorage.setItem('bbq_fx',JSON.stringify(o)); }catch(e){} }
+
 // ── Boot Scene ──────────────────────────────────────────
 class BootScene extends Phaser.Scene {
   constructor(){ super('Boot'); }
@@ -566,6 +579,16 @@ class TeamScene extends Phaser.Scene {
       _irBtns.push(ib);
     });
 
+    // ── 場地效果開關按鈕 ────────────────────────────────────────
+    if(!this.mpMode||window.MP.isHost){
+      const fxBtn=this.add.rectangle(cx+240,H-78,180,30,0x2a1a08,1).setStrokeStyle(2,0xffaa44).setDepth(20).setInteractive({useHandCursor:true});
+      this.fxBtnTxt=this.add.text(cx+240,H-78,'',{fontSize:'15px',color:'#ffdd99',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(21);
+      this._refreshFxBtn();
+      fxBtn.on('pointerover',()=>fxBtn.setFillStyle(0x4a2a10));
+      fxBtn.on('pointerout', ()=>fxBtn.setFillStyle(0x2a1a08));
+      fxBtn.on('pointerdown',()=>this._showFxPanel());
+    }
+
     // ── 確認開始按鈕 ──────────────────────────────────────────
     const sBx=cx+240,sByOff=H-30;
     const isHost=!this.mpMode||window.MP.isHost;
@@ -692,6 +715,53 @@ class TeamScene extends Phaser.Scene {
       window.MP.socket.emit('game_event',{type:'team_confirmed',teams:teamsData});
     }
     this._launchFromTeamData(teamsData);
+  }
+
+
+  _refreshFxBtn(){
+    if(!this.fxBtnTxt||!this.fxBtnTxt.scene) return;
+    const fx=bbqFx(), on=FX_LIST.filter(f=>fx[f.k]).length;
+    this.fxBtnTxt.setText('⚙ 場地效果（'+on+'/'+FX_LIST.length+'）');
+  }
+  _showFxPanel(){
+    if(this._fxOpen) return; this._fxOpen=true;
+    const objs=[]; const add=o=>{objs.push(o);return o;};
+    const D=100, fx=bbqFx();
+    add(this.add.rectangle(W/2,H/2,W,H,0x000000,0.78).setDepth(D).setInteractive());
+    const PW=600,PH=380,PX=W/2,PY=H/2;
+    add(this.add.rectangle(PX,PY,PW,PH,0x1a0d05,0.98).setStrokeStyle(3,0xffaa44).setDepth(D));
+    add(this.add.text(PX,PY-PH/2+28,'⚙ 場地效果開關',{fontSize:'22px',color:'#ffcc44',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+1));
+    add(this.add.text(PX,PY-PH/2+58,'勾掉的效果這局不會出現，設定會記住。用來測試哪些讓遊戲更好玩。',{fontSize:'14px',color:'#d9c7b0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1));
+    const g=add(this.add.graphics().setDepth(D+1));
+    const cols=3, colW=(PW-60)/cols, x0=PX-PW/2+40, y0=PY-PH/2+100, rowH=48;
+    const boxes=[];
+    const draw=()=>{
+      g.clear();
+      boxes.forEach(b=>{
+        const on=fx[b.k];
+        g.fillStyle(on?0xffaa33:0x2a2a2a,1); g.fillRoundedRect(b.x,b.y-12,24,24,5);
+        g.lineStyle(2,on?0xffe2a8:0x777777,1); g.strokeRoundedRect(b.x,b.y-12,24,24,5);
+        if(on){ g.lineStyle(3,0x1a0d05,1); g.beginPath(); g.moveTo(b.x+5,b.y); g.lineTo(b.x+10,b.y+6); g.lineTo(b.x+19,b.y-6); g.strokePath(); }
+        b.t.setColor(on?'#ffffff':'#777777');
+      });
+      bbqFxSave(fx);
+    };
+    FX_LIST.forEach((f,i)=>{
+      const x=x0+(i%cols)*colW, y=y0+Math.floor(i/cols)*rowH;
+      const t=add(this.add.text(x+34,y,f.n,{fontSize:'17px',color:'#ffffff',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1));
+      const hit=add(this.add.rectangle(x+colW/2-10,y,colW-10,rowH-8,0xffffff,0.001).setDepth(D+2).setInteractive({useHandCursor:true}));
+      hit.on('pointerdown',()=>{ fx[f.k]=!fx[f.k]; draw(); });
+      boxes.push({k:f.k,x,y,t});
+    });
+    draw();
+    const btn=(x,label,cb,col)=>{
+      const b=add(this.add.rectangle(x,PY+PH/2-34,130,36,col,1).setStrokeStyle(2,0xffcc77).setDepth(D+1).setInteractive({useHandCursor:true}));
+      add(this.add.text(x,PY+PH/2-34,label,{fontSize:'16px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+2));
+      b.on('pointerdown',cb);
+    };
+    btn(PX-150,'全部開啟',()=>{ FX_LIST.forEach(f=>fx[f.k]=true); draw(); },0x335533);
+    btn(PX,'全部關閉',()=>{ FX_LIST.forEach(f=>fx[f.k]=false); draw(); },0x553333);
+    btn(PX+150,'✓ 完成',()=>{ objs.forEach(o=>{ try{o.destroy();}catch(e){} }); this._fxOpen=false; this._refreshFxBtn(); },0xff6600);
   }
 
   _launchFromTeamData(teamsData){
@@ -1462,6 +1532,7 @@ class GameScene extends Phaser.Scene {
     const c=this.charData;
     this.heat=0; this.alive=true; this.pushCD=0; this.timeLeft=this.levelData.timer;
     this.lastDir={x:1,y:0}; this.firePhase=0; this.pushWas=false; this.wobbleTween=null; this.dashState=null; this.dashTrail=[];
+    this.fx=bbqFx(); // 場地效果開關
     this.tweens.timeScale=1; this.time.paused=false; this._introOpen=false; this._hitStop=0; this.pAnim=this._mkAnim(); this.pv={x:0,y:0}; // 頓幀重置 + 玩家動態狀態
     this.forkTimer=4; this.fork=null;
     this.activeEffects={foil:0,garlic:0,slowpow:0,pepBoost:0,stun:0,toxic:0,oilSlick:0,slip:0,sauceCharge:0,pepperVision:0,
@@ -2577,6 +2648,7 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnItem(){
+    if(!this.fx.items) return;
     const TYPES=[
       {type:'ice',    label:'❌冰塊',   good:true,  dur:0},
       {type:'foil',   label:'◎鋁箔紙', good:true,  dur:4},
@@ -2661,6 +2733,7 @@ class GameScene extends Phaser.Scene {
   }
 
   _spawnCollisionOil(x,y){
+    if(!this.fx.oilFire) return;
     this._tip('oil',x,y,'💧 油漬','互撞噴出的油，約 1.5 秒後會點燃成青色油火');
     const cnt=2+Math.floor(Math.random()*2);
     for(let i=0;i<cnt;i++){
@@ -3224,6 +3297,7 @@ class GameScene extends Phaser.Scene {
     // 火焰狀態機：cooldown → warning → active → dying → cooldown
     this.firePts.forEach(f=>{
       f.timer-=dt;
+      if(!this.fx.fire&&!f.collision){ f.state='cooldown'; f.alpha=0; f.timer=1; return; } // 關閉火焰圈
       if(f.state==='active'){
         f.alpha=Math.min(1.0,(f.alpha||0)+dt*4); // 快速淡入
         if(f.timer<=0){ f.state='dying'; f.timer=0.50; }
@@ -3247,7 +3321,7 @@ class GameScene extends Phaser.Scene {
 
     // 叉子計時
     this.forkTimer-=dt;
-    if(this.forkTimer<=0&&!this.fork){ this.spawnFork(); this.forkTimer=this.forkInterval(); }
+    if(this.forkTimer<=0&&!this.fork&&this.fx.fork){ this.spawnFork(); this.forkTimer=this.forkInterval(); }
     if(this.fork){
       this.fork.timer+=dt;
       if(this.fork.phase==='warn'&&this.fork.timer>=1.5){ this.fork.phase='attack'; this.fork.timer=0; this.checkForkHit(); }
@@ -3257,7 +3331,7 @@ class GameScene extends Phaser.Scene {
 
     // 翻面系統
     this.tiltTimer-=dt;
-    if(this.tiltTimer<=0&&!this.tilt){
+    if(this.tiltTimer<=0&&!this.tilt&&this.fx.tilt){
       const DIRS=[
         {x:0,y:1,lbl:'\u2193 \u5f80\u4e0b\u6ed1\uff01',rot:0.035},
         {x:0,y:-1,lbl:'\u2191 \u5f80\u4e0a\u6ed1\uff01',rot:-0.035},
@@ -3955,7 +4029,9 @@ class GameScene extends Phaser.Scene {
 
   spawnRandEvent(){
     const types=['brush','lemon','lemon','lemon','skewer','ice','ice'];
-    const type=types[Math.floor(Math.random()*types.length)];
+    const _ok=types.filter(t=>this.fx[t==='ice'?'iceDrop':t]!==false); // 只抽有開啟的事件
+    if(!_ok.length) return;
+    const type=_ok[Math.floor(Math.random()*_ok.length)];
     if(type==='brush'){
       const fromTop=Math.random()<0.5;
       const sauceType=Math.random()<0.5?'sticky':'toxic';
@@ -4355,6 +4431,7 @@ class GameScene extends Phaser.Scene {
   }
 
   updateShrink(dt){
+    if(!this.fx.shrink) return;
     if(this.shrinkPad>=this.shrinkMax) return;
     this.shrinkTimer-=dt;
     if(this.shrinkTimer<=0&&!this.shrinkWarning){
@@ -4502,6 +4579,7 @@ class GameScene extends Phaser.Scene {
   }
 
   updateHoles(dt){
+    if(!this.fx.holes) return;
     // 生成計時
     this.holeTimer-=dt;
     if(this.holeTimer<=0){
@@ -5458,6 +5536,7 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnFlareZone(){
+    if(!this.fx.flare) return;
     if(this.flares.filter(f=>f.state!=='done').length>=2) return;
     const x=G.x+80+Math.random()*(G.w-160), y=G.y+80+Math.random()*(G.h-160);
     this.flares.push({x,y,sz:68,state:'warning',timer:3.0,ph:Math.random()*Math.PI*2,burst:false});
