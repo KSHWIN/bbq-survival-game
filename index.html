@@ -2280,7 +2280,7 @@ class GameScene extends Phaser.Scene {
     this.input.keyboard.on('keydown-H',()=>{ if(!this._introOpen) this._helpReq=true; }); // 用事件，快速點按也收得到
     if(!window._bbqIntroSeen&&!this.multiplay) this._showIntro(true);
   }
-  _addTrauma(a){ this._trauma=Math.min(1,(this._trauma||0)+a); }
+  _addTrauma(a,cap){ const c=cap||1; const t=this._trauma||0; if(t>=c) return; this._trauma=Math.min(c,t+a); } // cap：連續事件的震動上限
   _updateShake(delta){
     const cam=this.cameras&&this.cameras.main; if(!cam) return;
     if(!(this._trauma>0)&&!this._shX&&!this._shY) return;
@@ -2657,16 +2657,17 @@ class GameScene extends Phaser.Scene {
   _bigChefIn(cx){
     if(this.bigChef&&this.bigChef.scene) this.bigChef.destroy();
     if(!this._forkDim||!this._forkDim.scene) this._forkDim=this.add.rectangle(W/2,H/2,W,H,0x000000,1).setDepth(3).setAlpha(0);
-    this.tweens.add({targets:this._forkDim,alpha:0.3,duration:400});
+    this.tweens.add({targets:this._forkDim,alpha:0.15,duration:400});
     if(!this.textures.exists('chef')) return;
     // 站在危險區旁邊（不蓋住黃色區域），叉子那隻手朝向區域
     const onRight=cx<G.x+G.w/2;
     const x=Phaser.Math.Clamp(cx+(onRight?250:-250),G.x+120,G.x+G.w-120);
-    const c=this.add.image(x,G.y-280,'chef').setDepth(4).setAlpha(0).setFlipX(!onRight);
-    const sc=480/c.height; c.setScale(sc*0.6);
+    // 淡淡的巨大剪影：看得出廚師在背後，但不擋住火、液體和危險區
+    const c=this.add.image(x,G.y-280,'chef').setDepth(1).setAlpha(0).setFlipX(!onRight).setTint(0xffd9b0);
+    const sc=520/c.height; c.setScale(sc*0.6);
     this.bigChef=c; this._chefY=G.y+170;
-    this.tweens.add({targets:c,y:this._chefY,alpha:0.7,scaleX:sc,scaleY:sc,duration:650,ease:'Back.easeOut'});
-    this._addTrauma(0.4);
+    this.tweens.add({targets:c,y:this._chefY,alpha:0.22,scaleX:sc,scaleY:sc,duration:650,ease:'Back.easeOut'});
+    this._addTrauma(0.2);
     const ac=this.ac; if(ac){ try{ const t=ac.currentTime,o=ac.createOscillator(),g=ac.createGain(),l=ac.createOscillator(),lg=ac.createGain();
       o.type='sawtooth'; o.frequency.setValueAtTime(95,t); o.frequency.linearRampToValueAtTime(70,t+0.6);
       l.frequency.value=11; lg.gain.value=12; l.connect(lg); lg.connect(o.frequency);
@@ -2696,7 +2697,7 @@ class GameScene extends Phaser.Scene {
       // 最後全區重擊：還在區域裡就出局
       f.stab={x:f.cx,y:f.cy,t:f.timer,all:true};
       for(let r=0;r<f.zone;r++) for(let c=0;c<f.zone;c++) f.marks.push({x:x0+(c+0.5)*C,y:y0+(r+0.5)*C});
-      this._addTrauma(0.9); this._playImpact(1.8);
+      this._addTrauma(0.5,0.6); this._playImpact(1.8);
       const inZ=(x,y)=>Math.abs(x-f.cx)<f.half+4&&Math.abs(y-f.cy)<f.half+4;
       this.enemies.forEach((e,i)=>{
         if(!e.alive||!inZ(e.x,e.y)) return;
@@ -2710,7 +2711,7 @@ class GameScene extends Phaser.Scene {
     // 亂刺：刺到的那一格 → 熟度 +20、短暫定身
     const sx=x0+(s.c+0.5)*C, sy=y0+(s.r+0.5)*C;
     f.stab={x:sx,y:sy,t:f.timer}; f.marks.push({x:sx,y:sy});
-    this._addTrauma(0.3); this._playImpact(0.7);
+    this._addTrauma(0.24,0.34); this._playImpact(0.7); // 亂刺：每下輕輕一震，最多約 2px
     const hit=(x,y)=>Math.abs(x-sx)<C/2+8&&Math.abs(y-sy)<C/2+8;
     if(this.alive&&hit(this.p.x,this.p.y)){
       this.heat=Math.min(100,this.heat+20); this.activeEffects.stun=Math.max(this.activeEffects.stun,0.35);
