@@ -75,6 +75,14 @@ const IMG = {
   margin-bottom: 8px;
 }
 .lobby-sub { font-size: 0.88rem; color: #cc9966; text-align: center; margin-bottom: 28px; }
+.lobby-tagline { font-size: 1.05rem; color: #fff1d6; text-align: center; margin-bottom: 10px; font-weight: 700; }
+.lobby-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 14px; }
+.lobby-chips span { font-size: 0.82rem; padding: 3px 10px; border-radius: 999px; background: rgba(255,170,68,0.15); border: 1px solid #aa6633; color: #ffd9a0; }
+.lobby-rules { background: rgba(0,0,0,0.35); border: 1px solid #663300; border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-size: 0.92rem; line-height: 1.55; color: #f3e2c4; }
+.lobby-rules > div { display: flex; gap: 10px; }
+.lobby-rules b { flex: 0 0 4.2em; color: #ffcc66; white-space: nowrap; }
+.lobby-rules .lobby-keys { margin-top: 6px; justify-content: center; color: #ffe9c4; font-size: 0.88rem; }
+.lobby-rules kbd { display: inline-block; min-width: 1.5em; padding: 0 6px; margin: 0 2px; border-radius: 5px; background: #ffe2a8; color: #2a1608; font-weight: 700; font-family: inherit; text-align: center; box-shadow: 0 2px 0 #6b4a2a; }
 .lobby-btn {
   display: block; width: 100%;
   padding: 14px; margin-bottom: 12px;
@@ -85,6 +93,9 @@ const IMG = {
   cursor: pointer; transition: background 0.2s;
 }
 .lobby-btn:hover { background: rgba(255,102,0,0.35); }
+.lobby-btn-row { display: flex; gap: 8px; }
+.lobby-btn-row .lobby-btn { padding: 11px 6px; }
+#screen-landing { max-height: 96vh; overflow-y: auto; }
 .lobby-btn.secondary { border-color: #886644; color: #cc9966; font-size: 0.95rem; font-weight: 400; }
 .lobby-input {
   width: 100%; padding: 10px 14px; margin-bottom: 12px;
@@ -193,12 +204,23 @@ const IMG = {
   <!-- Screen: Landing -->
   <div id="screen-landing" class="lobby-card">
     <div class="lobby-title">🥩 烤肉求生</div>
-    <div class="lobby-sub">選擇遊戲模式</div>
+    <div class="lobby-tagline">你是烤盤上的食材——把別人推下去，別讓自己被烤熟！</div>
+    <div class="lobby-chips"><span>💥 互推大亂鬥</span><span>🔥 求生</span><span>👥 1–8 人</span><span>⏱ 一局約 1 分鐘</span></div>
+    <div class="lobby-rules">
+      <div><b>🎯 目標</b>撐到時間結束，或把其他食材全部推出烤盤</div>
+      <div><b>💥 互推</b>按 <kbd>A</kbd> 衝撞，把對手撞出烤盤邊緣</div>
+      <div><b>⛔ 出局</b>掉出烤盤（被推出去、踩進破洞）或熟度到 100%</div>
+      <div><b>🌡 熟度</b>站在火裡、待太久、被別人撞都會變熟；撞別人、推掉對手可以降溫</div>
+      <div><b>🎁 變數</b>道具和場地事件會隨機出現，看到提示就閃或去搶</div>
+      <div class="lobby-keys"><kbd>←↑↓→</kbd> 移動　<kbd>A</kbd> 推擠　<kbd>S</kbd> 技能　<kbd>D</kbd> 大絕　<kbd>H</kbd> 說明</div>
+    </div>
     <button class="lobby-btn" onclick="Lobby.showSingle()">🎮 單人遊玩</button>
     <button class="lobby-btn" onclick="Lobby.showCreate()">🏠 開房間（主機）</button>
-    <button class="lobby-btn secondary" onclick="Lobby.showJoin()">🚪 加入房間</button>
-    <button class="lobby-btn secondary" onclick="openAnimModal()">🎬 烤肉動畫</button>
-    <button class="lobby-btn secondary" onclick="window.open('changelog.html','_blank')">📋 更新日誌</button>
+    <div class="lobby-btn-row">
+      <button class="lobby-btn secondary" onclick="Lobby.showJoin()">🚪 加入房間</button>
+      <button class="lobby-btn secondary" onclick="openAnimModal()">🎬 烤肉動畫</button>
+      <button class="lobby-btn secondary" onclick="window.open('changelog.html','_blank')">📋 更新日誌</button>
+    </div>
   </div>
 
   <!-- Screen: Create Room -->
@@ -364,6 +386,8 @@ const FX_LIST=[
   {k:'brush',   n:'🖌 神之刷'},   {k:'lemon',   n:'🍋 檸檬雨'},   {k:'skewer', n:'🍢 竹簽串'},
   {k:'iceDrop', n:'🧊 冰塊空投'}, {k:'flare',   n:'💥 火柱爆發'}, {k:'holes',  n:'🕳 烤盤破洞'},
   {k:'shrink',  n:'⚠ 外圈崩塌'},  {k:'tilt',    n:'↔ 廚師翻面'},  {k:'fork',   n:'🍴 廚師叉子'},
+  // 規則（實驗）：預設開啟，可關掉跟舊規則比較
+  {k:'heatXfer',    n:'🌡 撞人傳熱'}, {k:'passiveHeat', n:'⏱ 待著會熟'},
 ];
 function bbqFx(){
   const d={}; FX_LIST.forEach(f=>d[f.k]=true);
@@ -731,7 +755,7 @@ class TeamScene extends Phaser.Scene {
     const PW=600,PH=380,PX=W/2,PY=H/2;
     add(this.add.rectangle(PX,PY,PW,PH,0x1a0d05,0.98).setStrokeStyle(3,0xffaa44).setDepth(D));
     add(this.add.text(PX,PY-PH/2+28,'⚙ 場地效果開關',{fontSize:'22px',color:'#ffcc44',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+1));
-    add(this.add.text(PX,PY-PH/2+58,'勾掉的效果這局不會出現，設定會記住。用來測試哪些讓遊戲更好玩。',{fontSize:'14px',color:'#d9c7b0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1));
+    add(this.add.text(PX,PY-PH/2+58,'勾掉的效果這局不會出現，設定會記住。最後一排是新規則，可關掉跟舊玩法比較。',{fontSize:'14px',color:'#d9c7b0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1));
     const g=add(this.add.graphics().setDepth(D+1));
     const cols=3, colW=(PW-60)/cols, x0=PX-PW/2+40, y0=PY-PH/2+100, rowH=48;
     const boxes=[];
@@ -1533,6 +1557,7 @@ class GameScene extends Phaser.Scene {
     this.heat=0; this.alive=true; this.pushCD=0; this.timeLeft=this.levelData.timer;
     this.lastDir={x:1,y:0}; this.firePhase=0; this.pushWas=false; this.wobbleTween=null; this.dashState=null; this.dashTrail=[];
     this.fx=bbqFx(); // 場地效果開關
+    this.stats={pushes:0,hits:0,kos:0,pushed:0}; // 本局統計（結算顯示）
     this.tweens.timeScale=1; this.time.paused=false; this._introOpen=false; this._hitStop=0; this.pAnim=this._mkAnim(); this.pv={x:0,y:0}; // 頓幀重置 + 玩家動態狀態
     this.forkTimer=4; this.fork=null;
     this.activeEffects={foil:0,garlic:0,slowpow:0,pepBoost:0,stun:0,toxic:0,oilSlick:0,slip:0,sauceCharge:0,pepperVision:0,
@@ -1903,6 +1928,25 @@ class GameScene extends Phaser.Scene {
 
 
 
+
+  // 撞人傳熱：推的人 -15%、被撞的人 +15%（from/to 為 null 代表玩家）
+  _xferHeat(from,to){
+    if(!this.fx||!this.fx.heatXfer) return;
+    const A=15;
+    if(from===null){ const d=Math.min(A,this.heat); this.heat-=d; if(d>0.5) this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'-'+Math.round(d)+'% 🧊','#8fe8ff'); }
+    else from.heat=Math.max(0,(from.heat||0)-A);
+    if(to===null){ this.heat=Math.min(100,this.heat+A); this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'+'+A+'% 🔥','#ff7a4a'); }
+    else { to.heat=Math.min(100,(to.heat||0)+A); if(from===null) this._floatTxt(to.x,to.y-46,'+'+A+'% 🔥','#ff7a4a'); }
+  }
+  _floatTxt(x,y,str,col,big){
+    try{
+      const t=this.add.text(x,y,str,{fontSize:(big?22:17)+'px',color:col,fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:5}).setOrigin(0.5).setDepth(62);
+      t.setScale(0.6);
+      this.tweens.add({targets:t,scaleX:1,scaleY:1,duration:140,ease:'Back.easeOut'});
+      this.tweens.add({targets:t,y:y-(big?44:30),alpha:0,delay:big?650:380,duration:big?600:450,ease:'Quad.easeIn',onComplete:()=>{ if(t.scene) t.destroy(); }});
+    }catch(e){ console.error('[floatTxt]',e); }
+  }
+
   // ── 頭頂狀態（熟度條 + A/S/D 冷卻）：視線不用離開角色 ─────────────
   _ovTop(){ const sp=this.playerSprite; return sp?(sp.baseScale||0.26)*sp.height*0.46+6:42; }
   _drawOverheadHUD(){
@@ -2024,9 +2068,13 @@ class GameScene extends Phaser.Scene {
     let y=PY-PH/2+34;
     T(PX,y,'🔥 烤肉求生：怎麼玩',28,'#ffcc44',{fontStyle:'bold'}).setOrigin(0.5);
     y+=44;
-    T(PX,y,'把其他食材推出烤盤！自己別被烤熟（熟度到 100% 就輸），撐到時間結束就贏。',17,'#ffffff',{align:'center'}).setOrigin(0.5);
+    // 每條規則各佔一行，避免句子在奇怪的地方斷行
+    const _r3=[this.fx&&this.fx.heatXfer?'撞到人會把熱傳給他（你 -15%、他 +15%）':'',
+               this.fx&&this.fx.passiveHeat?'待著不動也會慢慢熟！':''].filter(Boolean).join('；');
+    const _rules='目標：撐到時間結束，或把其他食材全部推出烤盤。\n掉出烤盤、或熟度到 100% 就出局。'+(_r3?'\n'+_r3:'');
+    const _gt=T(PX,y-10,_rules,16,'#ffffff',{align:'center',lineSpacing:6}).setOrigin(0.5,0);
     // 按鍵
-    y+=44;
+    y+=_gt.height+16;
     const g=add(this.add.graphics().setDepth(D+1));
     const keys=[['←↑↓→','移動'],['A','推擠／衝撞'],['S','技能：'+((this.charData&&this.charData.ability)||'')],['D','大絕（集滿才能用）']];
     const colW=(PW-40)/2;
@@ -2761,6 +2809,7 @@ class GameScene extends Phaser.Scene {
 
   doPush(){
     this.pushCD=1.2;
+    if(this.stats) this.stats.pushes++;
     this.playSound('push');
     const ae=this.activeEffects;
     const c=this.charData;
@@ -2777,7 +2826,7 @@ class GameScene extends Phaser.Scene {
         const d=Math.hypot(this.p.x-e.x,this.p.y-e.y);
         if(d<150){const nx2=d>0?(e.x-this.p.x)/d:1,ny2=d>0?(e.y-this.p.y)/d:0;
           const myB=Math.min(2.0,1+this.heat/100*1.5);
-          this._charImpact(e.anim,nx2,ny2,1.2);
+          this._charImpact(e.anim,nx2,ny2,1.2); e._lastHitBy='player'; e._lastHitT=this.time.now;
           this.tweens.add({targets:e,x:e.x+nx2*110*myB,y:e.y+ny2*110*myB,
             duration:200,ease:'Cubic.easeOut',onComplete:()=>this.checkEnemyFall(e,i)});
           this.spawnOilSplat(e.x,e.y,nx2,ny2);}
@@ -2803,8 +2852,17 @@ class GameScene extends Phaser.Scene {
       e.alive=false;
       if(this.enemySprites[i]) this.enemySprites[i].setVisible(false);
       if(this.enemyFx[i])      this.enemyFx[i].setVisible(false);
-      this.showPop(e.label+' 掉落！');
       this._hitFeel({x:e.x,y:e.y,power:1.8,freeze:110});
+      // 3 秒內最後碰到他的是別的 AI → 不算你的擊落
+      const _byAI=e._lastHitBy&&e._lastHitBy!=='player'&&this.time.now-(e._lastHitT||0)<3000;
+      if(_byAI){
+        this.showPop(e.label+' 被 '+e._lastHitBy+' 推下去了！');
+        if(this._checkWinCondition()) this.time.delayedCall(600,()=>this.endGame(true));
+        return;
+      }
+      this.showPop(e.label+' 掉落！');
+      if(this.stats) this.stats.kos++;
+      this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'擊落！熟度 -25% 🧊','#8fe8ff',true);
 
       // ── 正向循環：擊殺 → 多汁排熱 ─────────────────────────
       this.killCount++;
@@ -2877,6 +2935,9 @@ class GameScene extends Phaser.Scene {
     this.statusTxt.setColor(win?'#44ff88':'#ff3333').setText(winMsg);
     this.time.delayedCall(500,()=>{
       this.add.text(W/2,H/2+75,'按 R 重開  |  ESC 選角',{fontSize:'16px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(40);
+      const st=this.stats||{pushes:0,hits:0,kos:0,pushed:0};
+      this.add.text(W/2,H/2+108,'本局：推擊 '+st.pushes+' 次（撞中 '+st.hits+'）｜ 擊落 '+st.kos+' ｜ 被推 '+st.pushed+' 次',
+        {fontSize:'18px',color:'#ffe9c4',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:4}).setOrigin(0.5).setDepth(40);
     });
   }
 
@@ -3071,7 +3132,7 @@ class GameScene extends Phaser.Scene {
       let dHit=false;
       this.enemies.forEach((e,i)=>{
         if(!e.alive||dHit)return;
-        if(Math.hypot(this.p.x-e.x,this.p.y-e.y)<38){
+        if(Math.hypot(this.p.x-e.x,this.p.y-e.y)<42){ /* 命中距離要大於碰撞分離距離 38（2×CR），否則撞不到 */
           dHit=true;
           const resist=(e.heat||0)<50?0.65:1.0;
           const charBst=Math.min(2.2,1+(e.heat||0)/100*1.2); // 越熟越容易被打飛
@@ -3086,6 +3147,7 @@ class GameScene extends Phaser.Scene {
             this.dashState.active=false;
           } else {
           this._hitFeel({x:(this.p.x+e.x)/2,y:(this.p.y+e.y)/2,dx:mx,dy:my,power:charBst*resist,anim:e.anim});
+          this._xferHeat(null,e); e._lastHitBy='player'; e._lastHitT=this.time.now; if(this.stats) this.stats.hits++;
           this._charImpact(this.pAnim,mx,my,0.45); this.pAnim.flash=0; // 攻擊方也小震一下（不閃白）
           if(charBst>1.8)this.showPop('🔥 脆了！飛出去！');
           else if(resist<1)this.showPop('💪 撐住了！');
@@ -3208,7 +3270,7 @@ class GameScene extends Phaser.Scene {
       if(!fireImmune) this.heat=Math.min(heatCap,this.heat+15*mult*(this.charData.fireMult||1.0)*dt);
       this.sizzleTimer-=dt;
       if(this.sizzleTimer<=0&&!fireImmune){this.playSound('sizzle');this.sizzleTimer=0.6;}
-    } else this.heat=Math.min(heatCap,this.heat+0.2*dt);
+    } else this.heat=Math.min(heatCap,this.heat+(this.fx.passiveHeat?1.0:0.2)*dt); // 待著會熟：一局 60 秒約 +60%
     if(ae.toxic>0) this.heat=Math.min(heatCap,this.heat+18*dt);
     if(shieldOn){
       this.enemies.forEach(e=>{
@@ -3548,6 +3610,7 @@ class GameScene extends Phaser.Scene {
               onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this.subTxt.setText('被推落！');this.endGame(false);}else{this._spawnCollisionOil(this.p.x,this.p.y);}}});
             this.cameras.main.shake(120,0.004+cBst*_juicyRes*0.005);
             this._hitFeel({x:(this.p.x+e.x)/2,y:(this.p.y+e.y)/2,dx:pnx,dy:pny,power:cBst*_juicyRes,anim:this.pAnim});
+            this._xferHeat(e,null); if(this.stats) this.stats.pushed++;
             this._charImpact(e.anim,pnx,pny,0.4); e.anim.flash=0;
             if(this.activeEffects.juicy>0) this.showPop('💧 多汁彈開！');
             else if(cBst>1.8) this.showPop('🔥 脆了！被 '+e.label+' 推飛！');
@@ -3559,6 +3622,7 @@ class GameScene extends Phaser.Scene {
             // AI 互推：碰撞點也噴油
             this._spawnCollisionOil((e.x+eRef.x)/2,(e.y+eRef.y)/2);
             this._hitFeel({x:(e.x+eRef.x)/2,y:(e.y+eRef.y)/2,dx:pnx,dy:pny,power:0.5,anim:eRef.anim,freeze:0});
+            this._xferHeat(e,eRef); eRef._lastHitBy=e.label; eRef._lastHitT=this.time.now;
             this.tweens.add({targets:eRef,
               x:eRef.x+pnx*pForce*cBst,y:eRef.y+pny*pForce*cBst,
               duration:240,ease:'Cubic.easeOut',
@@ -3599,7 +3663,7 @@ class GameScene extends Phaser.Scene {
       }
       const _eFoil=e.activeEffects&&e.activeEffects.foil>0;
       if(!_eFoil&&this.onFire(e.x,e.y)) e.heat=Math.min(100,e.heat+14*dt);
-      else if(!_eFoil)                   e.heat=Math.min(100,e.heat+0.8*dt);
+      else if(!_eFoil)                   e.heat=Math.min(100,e.heat+(this.fx.passiveHeat?1.0:0.8)*dt);
       if(e.heat>=100){
         e.alive=false;
         this.showPop(e.label+' 被烤熟！');
@@ -4969,7 +5033,7 @@ class GameScene extends Phaser.Scene {
           }
           this.enemies.forEach((e,i)=>{
             if(!e.alive||us.hitSet.has(i))return;
-            if(Math.hypot(this.p.x-e.x,this.p.y-e.y)<38){
+            if(Math.hypot(this.p.x-e.x,this.p.y-e.y)<42){ /* 命中距離要大於碰撞分離距離 38（2×CR），否則撞不到 */
               us.hitSet.add(i);
               const _bperpX=-us.dy,_bperpY=us.dx;
               const _bdot=(e.x-this.p.x)*_bperpX+(e.y-this.p.y)*_bperpY;
