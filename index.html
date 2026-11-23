@@ -1831,6 +1831,47 @@ class GameScene extends Phaser.Scene {
   }
 
 
+
+  // ── 頭頂狀態（熟度條 + A/S/D 冷卻）：視線不用離開角色 ─────────────
+  _ovTop(){ const sp=this.playerSprite; return sp?(sp.baseScale||0.26)*sp.height*0.46+6:42; }
+  _drawOverheadHUD(){
+    if(!this.playerSprite) return;
+    if(!this.ovLayer||!this.ovLayer.scene){
+      this.ovLayer=this.add.graphics().setDepth(21);
+      this.ovTxt=['A','S','D'].map(k=>this.add.text(0,0,k,{fontSize:'11px',color:'#1a0d05',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(22));
+    }
+    const g=this.ovLayer; g.clear();
+    const x=this.p.x, top=this.p.y-this._ovTop();
+    // 熟度條（中間金色帶 = 黃金熟度 50–80%）
+    const BW=58, BH=8, bx=x-BW/2, by=top-BH;
+    const h=Math.max(0,Math.min(100,this.heat));
+    const inG=h>=50&&h<=80, danger=h>80;
+    g.fillStyle(0x000000,0.72); g.fillRoundedRect(bx-2,by-2,BW+4,BH+4,3);
+    g.fillStyle(0xffcc00,0.28); g.fillRect(bx+BW*0.5,by,BW*0.3,BH);
+    const fillCol=inG?0xffcc00:danger?0xff2a00:0xff7a1a;
+    const pulse=danger?0.65+0.35*Math.abs(Math.sin(this.time.now*0.012)):1;
+    g.fillStyle(fillCol,pulse); g.fillRect(bx,by,BW*h/100,BH);
+    g.lineStyle(1,0xffffff,0.85); g.strokeRect(bx,by,BW,BH);
+    // 冷卻轉盤：滿了就亮起來
+    const R=8, cy=by-R-5;
+    const dials=[
+      {col:0x44aaff, prog:this.pushCD<=0?1:1-this.pushCD/1.2},
+      {col:0xffaa00, prog:this.abilityCD<=0?1:1-this.abilityCD/(this.abilityCDMax||1)},
+      {col:0xcc88ff, prog:Math.min(1,this.ultCharge/(this.ultMax||1))},
+    ];
+    dials.forEach((d,i)=>{
+      const cx=x+(i-1)*(R*2+5), ready=d.prog>=1;
+      g.fillStyle(0x000000,0.75); g.fillCircle(cx,cy,R+1.5);
+      if(ready){ g.fillStyle(d.col,1); g.fillCircle(cx,cy,R); g.lineStyle(1.5,0xffffff,0.95); g.strokeCircle(cx,cy,R); }
+      else if(d.prog>0){
+        g.fillStyle(d.col,0.55); g.beginPath(); g.moveTo(cx,cy);
+        g.arc(cx,cy,R,-Math.PI/2,-Math.PI/2+Math.PI*2*d.prog,false); g.closePath(); g.fillPath();
+      }
+      const t=this.ovTxt[i];
+      t.setPosition(cx,cy).setColor(ready?'#1a0d05':'#ffffff').setVisible(true);
+    });
+  }
+
   // ══ 操作說明 / 地圖標示 / 震動（game-ui-ux + game-feel）══════════════
   _setupHelpUI(){
     // 震動：所有 cameras.main.shake() 改走「創傷值」模型（輕擊幾乎不晃、重擊才大晃，
@@ -1991,7 +2032,11 @@ class GameScene extends Phaser.Scene {
     if(!t){
       if(!this._tipQ.length||!this.alive) return;
       const n=this._tipQ.shift();
-      const above=n.y>G.y+110;
+      // 預設放在目標上方；若會蓋到玩家頭頂狀態條，改放另一側
+      const ovY=this.p.y-this._ovTop()-20;
+      const hitsHud=(cy)=>Math.abs(cy-ovY)<60&&Math.abs(n.x-this.p.x)<170;
+      let above=n.y>G.y+110;
+      if(hitsHud(above?n.y-74:n.y+74)) above=!above;
       const by=above?n.y-74:n.y+74;
       const title=this.add.text(0,0,n.title,{fontSize:'17px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:4}).setOrigin(0.5).setDepth(61);
       const desc=this.add.text(0,0,n.desc,{fontSize:'14px',color:'#ffe9c4',fontFamily:'sans-serif',stroke:'#000000',strokeThickness:3}).setOrigin(0.5).setDepth(61);
@@ -2730,6 +2775,7 @@ class GameScene extends Phaser.Scene {
 
   endGame(win){
     if(!win) this._addTrauma(0.85); // 出局：大級震動
+    if(this.ovLayer&&this.ovLayer.scene){ this.ovLayer.clear(); (this.ovTxt||[]).forEach(t=>t.setVisible(false)); }
     this._clearTips();
     this.iceTrail=[]; this.saucePools=[]; this.lemonPuddles=[]; this.sauceSplash=[]; this.collisionOils=[]; this.pepperTrail=[]; this.pepperParticles=[];
     if(this.visionLayer) this.visionLayer.clear();
@@ -3866,6 +3912,7 @@ class GameScene extends Phaser.Scene {
     this.abilBarFg.setFillStyle(aReady?0xffaa00:0x664400);
     this.abilCdTxt.setText(aReady?'Ready!':this.abilityCD.toFixed(1)+'s');
     this.updateUltUI();
+    this._drawOverheadHUD();
 
     // ── 正向循環 UI ──────────────────────────────────────────────
     if(this.goldenTxt){
@@ -3898,7 +3945,7 @@ class GameScene extends Phaser.Scene {
       if(_ae.iceBoost>0)   _pi.push('❄');
       if(_ae.pepBoost>0)   _pi.push('🌶');
       if(_ae.sauceCharge>0)_pi.push('🍶');
-      this.playerIconTxt.setPosition(this.p.x,this.p.y-30).setText(_pi.join(' ')).setVisible(_pi.length>0);
+      this.playerIconTxt.setPosition(this.p.x,this.p.y-this._ovTop()-34).setText(_pi.join(' ')).setVisible(_pi.length>0);
     }
     // 推力加成（調味料）
     // （在 doPush() FORCE 計算中直接引用 seasoningCombo）
