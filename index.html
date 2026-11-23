@@ -390,9 +390,9 @@ const FX_LIST=[
   {k:'shrink',  n:'⚠ 外圈崩塌'},  {k:'tilt',    n:'↔ 廚師翻面'},  {k:'fork',   n:'🍴 廚師叉子'},
   // 規則（實驗）：預設開啟，可關掉跟舊規則比較
   {k:'heatXfer',    n:'🌡 撞人傳熱'}, {k:'passiveHeat', n:'⏱ 待著會熟'}, {k:'coolZone', n:'❄ 冷卻圈'},
-  {k:'heatKnock',   n:'💥 越熟飛越遠'},
+  {k:'heatKnock',   n:'💥 越熟飛越遠'}, {k:'heatPower', n:'🔥 越熟推越大力'},
 ];
-const FX_OFF_DEFAULT=['oilFire']; // 預設關閉：撞到出油（畫面容易亂，想要時再打開）
+const FX_OFF_DEFAULT=['oilFire','heatPower']; // 預設關閉：撞到出油（畫面容易亂）、越熟推越大力（跟傳熱規則互相打架）
 function bbqFx(){
   const d={}; FX_LIST.forEach(f=>d[f.k]=!FX_OFF_DEFAULT.includes(f.k));
   try{ return Object.assign(d, JSON.parse(localStorage.getItem('bbq_fx_v2')||'{}')); }catch(e){ return d; }
@@ -1651,8 +1651,8 @@ class GameScene extends Phaser.Scene {
                r:40, spd:2.2+Math.random()*1.8, ph:Math.random()*Math.PI*2 };
     });
     this.FIRE_R_BASE=46; this.FIRE_R_AMP=12;
-    this.shrinkPad=0; this.shrinkStep=55; this.shrinkMax=165;
-    this.shrinkTimer=30; this.shrinkWarning=false; this.shrinkWarnTimer=0;
+    this.shrinkPad=0; this.shrinkStep=18; this.shrinkMax=165; // 一次剝 18px（原本 55px），慢慢剝
+    this.shrinkTimer=12; this.shrinkWarning=false; this.shrinkWarnTimer=0; this._shrinkCount=0; // 12 秒後開始
     this.evtTimer=12+Math.random()*5; this.evtQueue=[];
     this.holes=[]; this.holeTimer=10+Math.random()*5;
 
@@ -1735,6 +1735,7 @@ class GameScene extends Phaser.Scene {
     this.pushBarBg=this.add.rectangle(74,58,120,12,0x112244).setOrigin(0,0.5);
     this.pushBarFg=this.add.rectangle(74,58,120,10,0x44aaff).setOrigin(0,0.5);
     this.pushCdTxt=this.add.text(204,50,'Ready!',ts(11,'#66ccff'));
+    this.pushPowTxt=this.add.text(262,50,'',ts(12,'#ffffff')).setDepth(2); // 推力倍率
     this.add.text(12,70,'[S] '+c.ability,ts(10,'#ffdd44'));
     this.abilBarBg=this.add.rectangle(86,80,120,10,0x332200).setOrigin(0,0.5);
     this.abilBarFg=this.add.rectangle(86,80,120,8,0xffaa00).setOrigin(0,0.5);
@@ -2023,7 +2024,7 @@ class GameScene extends Phaser.Scene {
   // ══ 中心熱區模式：越靠中間越燙，外圈涼但靠近邊緣（安全 vs 不被烤熟的取捨）══════
   // q = 位置在烤盤橢圓中的比例（0 = 正中央，1 = 邊緣）
   _ringQ(x,y){ const cx=G.x+G.w/2, cy=G.y+G.h/2; return Math.hypot((x-cx)/(G.w/2),(y-cy)/(G.h/2)); }
-  _ringBounds(){ const m=this._fireMul||1, inner=0.36*m; return {inner, mid:Math.max(0.68,inner+0.12)}; }
+  _ringBounds(){ const m=this._fireMul||1, inner=0.47*m; return {inner, mid:Math.max(0.8,inner+0.12)}; } // 內圈 0.36→0.47、中圈 0.68→0.80
   _ringHeat(x,y){ const q=this._ringQ(x,y), b=this._ringBounds(); return q<b.inner?11:(q<b.mid?3.5:0); } // 每秒熟度
   _drawRings(){
     if(this.heatMode!=='ring'){ if(this.ringLayer&&this.ringLayer.scene) this.ringLayer.clear(); return; }
@@ -2319,6 +2320,17 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+
+  // 推力倍率：角色重量 × 大蒜 × 大絕 ×（開啟時）熟度加成，1.0 = 標準
+  _pushPower(){
+    const ae=this.activeEffects, c=this.charData||{};
+    const boost=ae.garlic>0?1.70:1;
+    const myBst=(this.fx&&this.fx.heatPower)?Math.min(2.0,1+this.heat/100*1.0):1;
+    const wingBst=this.ultSpeedTimer>0&&c.key==='wing'?1.8:1.0;
+    const pMul=(this.ultState&&this.ultState.pushMul)?this.ultState.pushMul:1;
+    return (c.weight||1)*boost*myBst*wingBst*pMul;
+  }
+
   // ── 頭頂狀態（熟度條 + A/S/D 冷卻）：視線不用離開角色 ─────────────
   _ovTop(){ const sp=this.playerSprite; return sp?(sp.baseScale||0.26)*sp.height*0.46+6:42; }
   _drawOverheadHUD(){
@@ -2326,6 +2338,7 @@ class GameScene extends Phaser.Scene {
     if(!this.ovLayer||!this.ovLayer.scene){
       this.ovLayer=this.add.graphics().setDepth(21);
       this.ovTxt=['A','S','D'].map(k=>this.add.text(0,0,k,{fontSize:'11px',color:'#1a0d05',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(22));
+      this.ovPow=this.add.text(0,0,'',{fontSize:'12px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:3}).setOrigin(0,0.5).setDepth(22);
     }
     const g=this.ovLayer; g.clear();
     const x=this.p.x, top=this.p.y-this._ovTop();
@@ -2357,6 +2370,9 @@ class GameScene extends Phaser.Scene {
       const t=this.ovTxt[i];
       t.setPosition(cx,cy).setColor(ready?'#1a0d05':'#ffffff').setVisible(true);
     });
+    const pw=this._pushPower(), pcol=pw<0.85?'#bbbbbb':pw<1.25?'#ffffff':pw<1.8?'#ffd84a':'#ff6a3a';
+    this.ovPow.setText('💪'+pw.toFixed(1)).setColor(pcol).setPosition(x+R*3+12,cy).setVisible(true);
+    if(this.pushPowTxt) this.pushPowTxt.setText('推力 ×'+pw.toFixed(1)).setColor(pcol);
   }
 
   // ══ 操作說明 / 地圖標示 / 震動（game-ui-ux + game-feel）══════════════
@@ -3304,7 +3320,7 @@ class GameScene extends Phaser.Scene {
     if(this.dashState&&this.dashState.active) return;
     // 速度決定衝刺距離，體重決定推力
     const spd=c.speed/155, wgt=c.weight||1;
-    const myBst=Math.min(2.0,1+this.heat/100*1.0); // 越熟推力越強（越熟也越容易被打飛）
+    const myBst=(this.fx&&this.fx.heatPower)?Math.min(2.0,1+this.heat/100*1.0):1; // 越熟推越大力（開關，預設關）
     const wingBst=this.ultSpeedTimer>0&&this.charData.key==='wing'?1.8:1.0; // 疾風大絕期間推力+80%
     const _pMul=(this.ultState&&this.ultState.pushMul)?this.ultState.pushMul:1;
     const DIST=Math.round(115*spd)*boost*myBst*_pMul;  // 快→遠
@@ -3376,7 +3392,7 @@ class GameScene extends Phaser.Scene {
     (this.pours||[]).forEach(pp=>{ if(pp.icon&&pp.icon.scene) pp.icon.destroy(); }); this.pours=[]; this.drops=[];
     if(this._forkDim&&this._forkDim.scene) this._forkDim.setAlpha(0);
     if(this.pourLayer&&this.pourLayer.scene) this.pourLayer.clear();
-    if(this.ovLayer&&this.ovLayer.scene){ this.ovLayer.clear(); (this.ovTxt||[]).forEach(t=>t.setVisible(false)); }
+    if(this.ovLayer&&this.ovLayer.scene){ this.ovLayer.clear(); (this.ovTxt||[]).forEach(t=>t.setVisible(false)); if(this.ovPow) this.ovPow.setVisible(false); }
     this._clearTips();
     this.iceTrail=[]; this.saucePools=[]; this.lemonPuddles=[]; this.sauceSplash=[]; this.collisionOils=[]; this.pepperTrail=[]; this.pepperParticles=[];
     if(this.visionLayer) this.visionLayer.clear();
@@ -5019,19 +5035,17 @@ class GameScene extends Phaser.Scene {
     if(this.shrinkPad>=this.shrinkMax) return;
     this.shrinkTimer-=dt;
     if(this.shrinkTimer<=0&&!this.shrinkWarning){
-      this.shrinkWarning=true; this.shrinkWarnTimer=5.0;
-      this._evt('shrink',G.x+G.w/2,G.y+this.shrinkPad+24,'⚠ 外圈崩塌','最外圈幾秒後會消失，快往中間走');
-      this.showPop('⚠️ 外圈烤盤開始崩塌！快往中央移動！');
-      this.cameras.main.shake(400,0.012);
+      this.shrinkWarning=true; this.shrinkWarnTimer=2.5;
+      if(!this._shrinkCount) this._evt('shrink',G.x+G.w/2,G.y+this.shrinkPad+24,'⚠ 外圈開始剝落','邊緣每隔幾秒會掉一小圈，別貼著邊站');
     }
     if(this.shrinkWarning){
       this.shrinkWarnTimer-=dt;
       if(this.shrinkWarnTimer<=0){
         this.shrinkPad=Math.min(this.shrinkMax,this.shrinkPad+this.shrinkStep);
         this.shrinkWarning=false;
-        this.shrinkTimer=30;
-        this.cameras.main.shake(600,0.022);
-        this.showPop('💥 外圈崩塌！烤盤越來越小！');
+        this.shrinkTimer=7; this._shrinkCount=(this._shrinkCount||0)+1;
+        this._addTrauma(0.18,0.3);
+        this._notice('🧱 邊緣又剝落一圈','#ffb070');
         const pad=this.shrinkPad;
         if(this.p.x<G.x+pad+2||this.p.x>G.x+G.w-pad-2||
            this.p.y<G.y+pad+2||this.p.y>G.y+G.h-pad-2){
