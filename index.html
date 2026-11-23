@@ -210,7 +210,8 @@ const IMG = {
       <div><b>🎯 目標</b>撐到時間結束，或把其他食材全部推出烤盤</div>
       <div><b>💥 互推</b>按 <kbd>A</kbd> 衝撞，把對手撞出烤盤邊緣</div>
       <div><b>⛔ 出局</b>掉出烤盤（被推出去、踩進破洞）或熟度到 100%</div>
-      <div><b>🌡 熟度</b>站在火裡、待太久、被別人撞都會變熟；撞別人、推掉對手可以降溫</div>
+      <div><b>🌡 熟度</b>站在火裡、待太久、被別人撞都會變熟；撞別人、推掉對手、站進 ❄ 冷卻圈可以降溫</div>
+      <div><b>💥 推飛</b>越熟的人越容易被推飛——先把對手撞熱，再一口氣推出去</div>
       <div><b>🎁 變數</b>道具和場地事件會隨機出現，看到提示就閃或去搶</div>
       <div class="lobby-keys"><kbd>←↑↓→</kbd> 移動　<kbd>A</kbd> 推擠　<kbd>S</kbd> 技能　<kbd>D</kbd> 大絕　<kbd>H</kbd> 說明</div>
     </div>
@@ -388,7 +389,8 @@ const FX_LIST=[
   {k:'iceDrop', n:'🧊 冰塊空投'}, {k:'flare',   n:'💥 火柱爆發'}, {k:'holes',  n:'🕳 烤盤破洞'},
   {k:'shrink',  n:'⚠ 外圈崩塌'},  {k:'tilt',    n:'↔ 廚師翻面'},  {k:'fork',   n:'🍴 廚師叉子'},
   // 規則（實驗）：預設開啟，可關掉跟舊規則比較
-  {k:'heatXfer',    n:'🌡 撞人傳熱'}, {k:'passiveHeat', n:'⏱ 待著會熟'},
+  {k:'heatXfer',    n:'🌡 撞人傳熱'}, {k:'passiveHeat', n:'⏱ 待著會熟'}, {k:'coolZone', n:'❄ 冷卻圈'},
+  {k:'heatKnock',   n:'💥 越熟飛越遠'},
 ];
 const FX_OFF_DEFAULT=['oilFire']; // 預設關閉：撞到出油（畫面容易亂，想要時再打開）
 function bbqFx(){
@@ -754,10 +756,10 @@ class TeamScene extends Phaser.Scene {
     const objs=[]; const add=o=>{objs.push(o);return o;};
     const D=100, fx=bbqFx();
     add(this.add.rectangle(W/2,H/2,W,H,0x000000,0.78).setDepth(D).setInteractive());
-    const PW=600,PH=380,PX=W/2,PY=H/2;
+    const PW=600,PH=440,PX=W/2,PY=H/2;
     add(this.add.rectangle(PX,PY,PW,PH,0x1a0d05,0.98).setStrokeStyle(3,0xffaa44).setDepth(D));
     add(this.add.text(PX,PY-PH/2+28,'⚙ 場地效果開關',{fontSize:'22px',color:'#ffcc44',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+1));
-    add(this.add.text(PX,PY-PH/2+58,'勾掉的效果這局不會出現，設定會記住。最後一排是新規則，可關掉跟舊玩法比較。',{fontSize:'14px',color:'#d9c7b0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1));
+    add(this.add.text(PX,PY-PH/2+58,'勾掉的效果這局不會出現，設定會記住。最後兩排是玩法規則，可關掉跟舊玩法比較。',{fontSize:'14px',color:'#d9c7b0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1));
     const g=add(this.add.graphics().setDepth(D+1));
     const cols=3, colW=(PW-60)/cols, x0=PX-PW/2+40, y0=PY-PH/2+100, rowH=48;
     const boxes=[];
@@ -1562,6 +1564,7 @@ class GameScene extends Phaser.Scene {
     this.stats={pushes:0,hits:0,kos:0,pushed:0}; // 本局統計（結算顯示）
     this._resultShown=false; this._leaving=false; this._burn=0; this._bumpT=0;
     this.pours=[]; this.drops=[]; this.zones=[]; this._zoneMul=1; this._fireMul=1; // 醬油/檸檬、火力全開
+    this.cool=null; this._coolT=3; this._coolNext=null; this._inCoolPrev=false; // 冷卻圈：開局 3 秒後出現
     this.tweens.timeScale=1; this.time.paused=false; this._introOpen=false; this._hitStop=0; this.pAnim=this._mkAnim(); this.pv={x:0,y:0}; // 頓幀重置 + 玩家動態狀態
     this.forkTimer=4; this.fork=null;
     this.activeEffects={foil:0,garlic:0,slowpow:0,pepBoost:0,stun:0,toxic:0,oilSlick:0,slip:0,sauceCharge:0,pepperVision:0,soySlow:0,lemonFast:0,
@@ -1615,7 +1618,7 @@ class GameScene extends Phaser.Scene {
     this.otherLayer=this.add.graphics().setDepth(18);
     this.teamRingLayer=this.add.graphics().setDepth(22);
     if(this.multiplay) this._initMultiplayer();
-    this.forkInterval=()=>(5+Math.random()*4)/this.levelData.forkMod;
+    this.forkInterval=()=>(10+Math.random()*5)/this.levelData.forkMod; // 事件變大變長，間隔拉開
 
     // 火焰：動態出現/消失循環（cooldown→warning→active→dying→cooldown）
     const rndPos=()=>({ x:G.x+80+Math.random()*(G.w-160), y:G.y+80+Math.random()*(G.h-160) });
@@ -1953,6 +1956,52 @@ class GameScene extends Phaser.Scene {
   }
 
 
+
+
+  // ══ 冷卻圈（搶地盤）：唯一會降溫的地方，每 10 秒換位置 → 逼大家擠在一起 ══════
+  _pickCoolPos(){
+    const pad=(this.shrinkPad||0)+80;
+    for(let i=0;i<40;i++){
+      const x=G.x+pad+Math.random()*(G.w-pad*2), y=G.y+pad+Math.random()*(G.h-pad*2);
+      const nearFire=this.firePts.some(f=>(f.state==='active'||f.state==='warning')&&Math.hypot(x-(f.tx||f.x),y-(f.ty||f.y))<120);
+      const nearOld=this.cool&&Math.hypot(x-this.cool.x,y-this.cool.y)<170;
+      if(!nearFire&&!nearOld) return {x,y};
+    }
+    return {x:G.x+G.w/2,y:G.y+G.h/2};
+  }
+  _updateCool(dt){
+    if(!this.fx||!this.fx.coolZone||!this.zoneLayer) return;
+    const zg=this.zoneLayer;
+    this._coolT-=dt;
+    if(this._coolT<1.5&&this.cool&&!this._coolNext) this._coolNext=this._pickCoolPos(); // 預告下一個位置
+    if(this._coolT<=0){
+      this._coolT=10;
+      const pos=this._coolNext||this._pickCoolPos(); this._coolNext=null;
+      const first=!this.cool;
+      this.cool={x:pos.x,y:pos.y,r:64,age:0};
+      if(first) this._evt('cool',pos.x,pos.y,'❄ 冷卻圈出現了','站在圈裡會降溫，每 10 秒換位置——大家都會來搶！');
+      else this._notice('❄ 冷卻圈換位置了！','#8fe8ff');
+    }
+    const c=this.cool; if(!c) return;
+    c.age+=dt;
+    const inP=this.alive&&Math.hypot(this.p.x-c.x,this.p.y-c.y)<c.r;
+    if(inP){ this.heat=Math.max(0,this.heat-4*dt); if(!this._inCoolPrev) this._notice('❄ 在冷卻圈裡，降溫中','#8fe8ff'); }
+    this._inCoolPrev=inP;
+    this.enemies.forEach(e=>{ if(e.alive&&Math.hypot(e.x-c.x,e.y-c.y)<c.r) e.heat=Math.max(0,(e.heat||0)-4*dt); });
+    const t=this.time.now*0.001, ap=Math.min(1,c.age/0.4), pulse=0.85+0.15*Math.sin(t*4), R=c.r*ap;
+    zg.fillStyle(0x66ccff,0.24*ap); zg.fillCircle(c.x,c.y,R);
+    zg.fillStyle(0xbfefff,0.2*ap*pulse); zg.fillCircle(c.x,c.y,R*0.6);
+    zg.lineStyle(2,0xe8fbff,0.55*ap);
+    for(let i=0;i<6;i++){ const a=i*Math.PI/3+t*0.4; zg.lineBetween(c.x,c.y,c.x+Math.cos(a)*R*0.45,c.y+Math.sin(a)*R*0.45); }
+    zg.lineStyle(3,0x9fe6ff,0.95*ap); zg.strokeCircle(c.x,c.y,R);
+    // 白色倒數弧：轉完一圈就換位置
+    zg.lineStyle(4,0xffffff,0.9); zg.beginPath(); zg.arc(c.x,c.y,c.r+6,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.max(0,this._coolT/10),false); zg.strokePath();
+    if(this._coolNext){ // 下一個位置：虛線圈
+      const n=this._coolNext, blink=0.5+0.5*Math.sin(t*12);
+      zg.lineStyle(3,0x9fe6ff,0.5+0.4*blink);
+      for(let i=0;i<16;i++){ const a0=i/16*Math.PI*2; zg.beginPath(); zg.arc(n.x,n.y,c.r,a0,a0+0.22,false); zg.strokePath(); }
+    }
+  }
 
   // ══ 灑醬油（變慢）/ 灑檸檬汁（變快）：瓶子或檸檬飛過烤盤，液滴飛出、落地攤開 ══════
   _spawnPour(kind){
@@ -2328,7 +2377,7 @@ class GameScene extends Phaser.Scene {
       ['warn','預警圈（虛線、閃爍）','等一下這裡會出事，先離開'],
       ['item','道具（圓圈裡的圖示）','走過去就會撿起來'],
       ['hole','破洞／外圈崩塌','掉下去直接出局'],
-      ['oil','青色油火','互撞噴出的油會起火，一樣會燙'],
+      ['cool','❄ 冷卻圈','站進去會降溫，每 10 秒換位置'],
       ['gold','黃金熟度 50–80%','移動變快、大絕自動充能'],
     ];
     legend.forEach(([kind,name,desc],i)=>{
@@ -2356,6 +2405,8 @@ class GameScene extends Phaser.Scene {
     else if(kind==='warn'){ g.lineStyle(2,0xffaa33,1); for(let a=0;a<12;a++){ const a0=a/12*Math.PI*2; g.beginPath(); g.arc(x,y,14,a0,a0+0.3); g.strokePath(); } g.fillStyle(0xffaa33,0.15); g.fillCircle(x,y,14); }
     else if(kind==='item'){ g.fillStyle(0x00ccff,0.45); g.fillCircle(x,y,14); g.lineStyle(2,0x88ffff,1); g.strokeCircle(x,y,14); g.fillStyle(0xffffff,1); g.fillCircle(x,y,5); }
     else if(kind==='hole'){ g.fillStyle(0x000000,1); g.fillCircle(x,y,13); g.lineStyle(2,0xff5533,1); g.strokeCircle(x,y,14); }
+    else if(kind==='cool'){ g.fillStyle(0x66ccff,0.35); g.fillCircle(x,y,14); g.lineStyle(2,0x9fe6ff,1); g.strokeCircle(x,y,14);
+      g.lineStyle(1.5,0xffffff,0.9); for(let i=0;i<3;i++){ const a=i*Math.PI/3; g.lineBetween(x-Math.cos(a)*8,y-Math.sin(a)*8,x+Math.cos(a)*8,y+Math.sin(a)*8); } }
     else if(kind==='oil'){ g.fillStyle(0x00ccaa,0.25); g.fillCircle(x,y,14); g.fillStyle(0x00ccaa,1); g.fillTriangle(x-7,y+5,x+7,y+5,x,y-12); g.fillStyle(0x88ffee,1); g.fillTriangle(x-3,y+5,x+3,y+5,x,y-4); }
     else if(kind==='gold'){ g.fillStyle(0x441100,1); g.fillRect(x-15,y-5,30,10); g.fillStyle(0xffcc00,0.85); g.fillRect(x-4,y-5,10,10); g.lineStyle(1,0xffffff,0.6); g.strokeRect(x-15,y-5,30,10); }
   }
@@ -2594,17 +2645,99 @@ class GameScene extends Phaser.Scene {
   // ── 叉子（九宮格）────────────────────────────────────
   spawnFork(){
     this.playSound('fork');
-    const CELL=40, ZONE=3, half=CELL*ZONE/2;
-    const maxCol=Math.floor(G.w/CELL)-ZONE;
-    const maxRow=Math.floor(G.h/CELL)-ZONE;
-    const cx=G.x+(Math.floor(Math.random()*maxCol)+1.5)*CELL;
-    const cy=G.y+(Math.floor(Math.random()*maxRow)+1.5)*CELL;
-    this.fork={cx,cy,half,phase:'warn',timer:0};
-    this._evt('fork',cx,cy,'🍴 廚師叉子','標示的方格會被叉子刺下來，快離開');
-    if(this.chefSprite){
-      this.chefSprite.setPosition(cx,G.y-90).setAngle(90).setVisible(true).setAlpha(0);
-      this.tweens.add({targets:this.chefSprite,y:G.y-8,alpha:1,duration:600,ease:'Back.easeOut'});
+    const CELL=40, ZONE=5, half=CELL*ZONE/2; // 範圍 3×3 → 5×5
+    const maxCol=Math.floor(G.w/CELL)-ZONE, maxRow=Math.floor(G.h/CELL)-ZONE;
+    const cx=G.x+(Math.floor(Math.random()*(maxCol+1))+ZONE/2)*CELL;
+    const cy=G.y+(Math.floor(Math.random()*(maxRow+1))+ZONE/2)*CELL;
+    this.fork={cx,cy,half,cell:CELL,zone:ZONE,phase:'warn',timer:0,plan:null,next:0,marks:[],stab:null};
+    this._evt('fork',cx,cy,'🍴 廚師要刺下來了！','黃色區域會被瘋狂亂刺，最後全區重擊，快離開！');
+    this._bigChefIn(cx);
+  }
+  // 背景浮現巨大廚師
+  _bigChefIn(cx){
+    if(this.bigChef&&this.bigChef.scene) this.bigChef.destroy();
+    if(!this._forkDim||!this._forkDim.scene) this._forkDim=this.add.rectangle(W/2,H/2,W,H,0x000000,1).setDepth(3).setAlpha(0);
+    this.tweens.add({targets:this._forkDim,alpha:0.3,duration:400});
+    if(!this.textures.exists('chef')) return;
+    // 站在危險區旁邊（不蓋住黃色區域），叉子那隻手朝向區域
+    const onRight=cx<G.x+G.w/2;
+    const x=Phaser.Math.Clamp(cx+(onRight?250:-250),G.x+120,G.x+G.w-120);
+    const c=this.add.image(x,G.y-280,'chef').setDepth(4).setAlpha(0).setFlipX(!onRight);
+    const sc=480/c.height; c.setScale(sc*0.6);
+    this.bigChef=c; this._chefY=G.y+170;
+    this.tweens.add({targets:c,y:this._chefY,alpha:0.7,scaleX:sc,scaleY:sc,duration:650,ease:'Back.easeOut'});
+    this._addTrauma(0.4);
+    const ac=this.ac; if(ac){ try{ const t=ac.currentTime,o=ac.createOscillator(),g=ac.createGain(),l=ac.createOscillator(),lg=ac.createGain();
+      o.type='sawtooth'; o.frequency.setValueAtTime(95,t); o.frequency.linearRampToValueAtTime(70,t+0.6);
+      l.frequency.value=11; lg.gain.value=12; l.connect(lg); lg.connect(o.frequency);
+      g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.22,t+0.08); g.gain.exponentialRampToValueAtTime(0.001,t+0.7);
+      o.connect(g); g.connect(ac.destination); o.start(t); l.start(t); o.stop(t+0.72); l.stop(t+0.72); }catch(e){} } // 低吼
+  }
+  _updateFork(dt){
+    const f=this.fork; f.timer+=dt;
+    if(f.phase==='warn'){
+      if(this.bigChef&&this.bigChef.scene) this.bigChef.setAngle(Math.sin(f.timer*6)*3);
+      if(f.timer>=2.0){
+        f.phase='attack'; f.timer=0; f.next=0; f.plan=[];
+        for(let i=0;i<10;i++) f.plan.push({t:i*0.12,c:Math.floor(Math.random()*f.zone),r:Math.floor(Math.random()*f.zone)});
+        f.plan.push({t:1.4,all:true});
+      }
+    } else {
+      while(f.plan&&f.next<f.plan.length&&f.timer>=f.plan[f.next].t){ this._forkStab(f.plan[f.next]); f.next++; if(!this.fork) return; }
+      if(f.timer>=1.85){ this._forkEnd(); return; }
     }
+    this.drawFork();
+  }
+  _forkStab(s){
+    const f=this.fork, C=f.cell, x0=f.cx-f.half, y0=f.cy-f.half;
+    if(this.bigChef&&this.bigChef.scene){ this.tweens.killTweensOf(this.bigChef); this.bigChef.y=this._chefY+(s.all?26:12); this.bigChef.setAngle((Math.random()-0.5)*8);
+      this.tweens.add({targets:this.bigChef,y:this._chefY,duration:s.all?260:90,ease:'Quad.easeOut'}); }
+    if(s.all){
+      // 最後全區重擊：還在區域裡就出局
+      f.stab={x:f.cx,y:f.cy,t:f.timer,all:true};
+      for(let r=0;r<f.zone;r++) for(let c=0;c<f.zone;c++) f.marks.push({x:x0+(c+0.5)*C,y:y0+(r+0.5)*C});
+      this._addTrauma(0.9); this._playImpact(1.8);
+      const inZ=(x,y)=>Math.abs(x-f.cx)<f.half+4&&Math.abs(y-f.cy)<f.half+4;
+      this.enemies.forEach((e,i)=>{
+        if(!e.alive||!inZ(e.x,e.y)) return;
+        e.alive=false; if(this.enemySprites[i]) this.enemySprites[i].setVisible(false); if(this.enemyFx[i]) this.enemyFx[i].setVisible(false);
+        this.showPop(e.label+' 被叉子刺中！');
+      });
+      if(this.alive&&inZ(this.p.x,this.p.y)){ this.subTxt.setText('被廚師叉子刺中！'); this.endGame(false); return; }
+      if(this._checkWinCondition()) this.time.delayedCall(600,()=>this.endGame(true));
+      return;
+    }
+    // 亂刺：刺到的那一格 → 熟度 +20、短暫定身
+    const sx=x0+(s.c+0.5)*C, sy=y0+(s.r+0.5)*C;
+    f.stab={x:sx,y:sy,t:f.timer}; f.marks.push({x:sx,y:sy});
+    this._addTrauma(0.3); this._playImpact(0.7);
+    const hit=(x,y)=>Math.abs(x-sx)<C/2+8&&Math.abs(y-sy)<C/2+8;
+    if(this.alive&&hit(this.p.x,this.p.y)){
+      this.heat=Math.min(100,this.heat+20); this.activeEffects.stun=Math.max(this.activeEffects.stun,0.35);
+      this._hitFeel({x:sx,y:sy,power:1.2,anim:this.pAnim,freeze:60});
+      this._notice('🍴 被叉到了！熟度 +20%','#ff7a4a');
+    }
+    this.enemies.forEach(e=>{ if(e.alive&&hit(e.x,e.y)){ e.heat=Math.min(100,(e.heat||0)+20); e.stunTimer=Math.max(e.stunTimer||0,0.35); this._charImpact(e.anim,0,1,1); e.anim.flash=0.08; } });
+  }
+  _forkEnd(){
+    const c=this.bigChef;
+    if(c&&c.scene) this.tweens.add({targets:c,y:G.y-320,alpha:0,duration:500,ease:'Back.easeIn',onComplete:()=>{ if(c.scene) c.destroy(); }});
+    if(this._forkDim&&this._forkDim.scene) this.tweens.add({targets:this._forkDim,alpha:0,duration:400});
+    this.fork=null; this.forkLayer.clear(); if(this.forkFx&&this.forkFx.scene) this.forkFx.clear();
+  }
+  // 叉子（銀色、尖端朝下）
+  _drawForkShape(g,x,tipY,sc){
+    const pl=26*sc, gap=8*sc, hw=3.2*sc, bar=6*sc, hl=95*sc, o=2.2;
+    g.fillStyle(0x1a1410,0.9); // 深色外框，在任何背景上都看得清楚
+    [-gap,0,gap].forEach(q=>g.fillRect(x+q-hw/2-o,tipY-pl-o,hw+o*2,pl+o*2));
+    g.fillRect(x-gap-hw/2-o,tipY-pl-bar-o,gap*2+hw+o*2,bar+o*2);
+    g.fillRect(x-3*sc-o,tipY-pl-bar-hl-o,6*sc+o*2,hl+o*2);
+    g.fillStyle(0xd8dde3,1);
+    [-gap,0,gap].forEach(o=>g.fillRect(x+o-hw/2,tipY-pl,hw,pl));
+    g.fillRect(x-gap-hw/2,tipY-pl-bar,gap*2+hw,bar);
+    g.fillRect(x-3*sc,tipY-pl-bar-hl,6*sc,hl);
+    g.lineStyle(1.5,0x5d6670,1); g.strokeRect(x-3*sc,tipY-pl-bar-hl,6*sc,hl); g.strokeRect(x-gap-hw/2,tipY-pl-bar,gap*2+hw,bar);
+    g.fillStyle(0xffffff,0.85); g.fillRect(x-1.2*sc,tipY-pl-bar-hl+3,1.6*sc,hl-6);
   }
 
   checkForkHit(){
@@ -2624,32 +2757,39 @@ class GameScene extends Phaser.Scene {
   }
 
   drawFork(){
-    const g=this.forkLayer; g.clear();
-    if(!this.fork) return;
-    const {cx,cy,half,phase,timer}=this.fork;
-    const CELL=40, isWarn=phase==='warn';
-    if(isWarn){
-      const a=0.13+0.10*Math.sin(timer*7);
-      g.fillStyle(0xffee44,a); g.fillRect(cx-half,cy-half,half*2,half*2);
-      g.lineStyle(2,0xffcc00,a*3.5);
-      for(let i=0;i<=3;i++){
-        g.lineBetween(cx-half+i*CELL,cy-half,cx-half+i*CELL,cy+half);
-        g.lineBetween(cx-half,cy-half+i*CELL,cx+half,cy-half+i*CELL);
-      }
+    const g=this.forkLayer; g.clear(); g.setDepth(5);
+    if(!this.forkFx||!this.forkFx.scene) this.forkFx=this.add.graphics().setDepth(13); // 叉子本體畫在角色上面
+    const fx=this.forkFx; fx.clear();
+    const f=this.fork; if(!f) return;
+    const {cx,cy,half,cell:C,zone:Z,timer}=f, x0=cx-half, y0=cy-half;
+    if(f.phase==='warn'){
+      const urg=Math.min(1,timer/2.0);
+      const a=0.16+0.12*Math.sin(timer*(8+urg*16));
+      g.fillStyle(0xffd400,a); g.fillRect(x0,y0,half*2,half*2);
+      g.lineStyle(1,0xffcc00,0.4);
+      for(let i=1;i<Z;i++){ g.lineBetween(x0+i*C,y0,x0+i*C,y0+half*2); g.lineBetween(x0,y0+i*C,x0+half*2,y0+i*C); }
+      g.lineStyle(4,0xffaa00,0.6+0.4*Math.abs(Math.sin(timer*(6+urg*10)))); g.strokeRect(x0,y0,half*2,half*2);
+      // 叉子在上方蓄力晃動
+      this._drawForkShape(fx,cx+Math.sin(timer*30)*3*urg,y0-14-Math.sin(timer*4)*6,1.6);
     } else {
-      g.fillStyle(0xff2200,0.55); g.fillRect(cx-half,cy-half,half*2,half*2);
-      g.lineStyle(2,0xff6600,0.85);
-      for(let i=0;i<=3;i++){
-        g.lineBetween(cx-half+i*CELL,cy-half,cx-half+i*CELL,cy+half);
-        g.lineBetween(cx-half,cy-half+i*CELL,cx+half,cy-half+i*CELL);
-      }
-      for(let r=0;r<3;r++) for(let c=0;c<3;c++){
-        const fx=cx-half+(c+0.5)*CELL, fy=cy-half+(r+0.5)*CELL;
-        [-5,0,5].forEach(off=>{ g.lineStyle(3,0xffffff,0.75); g.lineBetween(fx+off,fy-14,fx+off,fy+14); });
+      g.fillStyle(0xff2200,0.2); g.fillRect(x0,y0,half*2,half*2);
+      g.lineStyle(3,0xff4400,0.85); g.strokeRect(x0,y0,half*2,half*2);
+      f.marks.forEach(m=>{ g.fillStyle(0x000000,0.5); [-8,0,8].forEach(o=>g.fillRect(m.x+o-2,m.y-6,4,12)); }); // 刺過留下的洞
+      const st=f.stab;
+      if(st){
+        const k=timer-st.t;
+        if(st.all){
+          if(k<0.5){ const d=Math.min(1,k/0.07); this._drawForkShape(fx,cx,cy+half*0.4-80*(1-d),3.2);
+            fx.fillStyle(0xffffff,Math.max(0,0.75-k*2.2)); fx.fillRect(x0,y0,half*2,half*2); }
+        } else if(k<0.2){
+          const d=Math.min(1,k/0.05);
+          g.fillStyle(0xff0000,Math.max(0,0.75-k*3.5)); g.fillRect(st.x-C/2,st.y-C/2,C,C); // 被刺的格子閃紅
+          this._drawForkShape(fx,st.x,st.y+10-60*(1-d),1.7);
+          fx.fillStyle(0xffffff,Math.max(0,0.85-k*5)); fx.fillCircle(st.x,st.y,16+k*70);
+        }
       }
     }
   }
-
 
   playSound(type){
     const ac=this.ac; if(!ac) return;
@@ -3142,6 +3282,7 @@ class GameScene extends Phaser.Scene {
   endGame(win){
     if(!win) this._addTrauma(0.85); // 出局：大級震動
     (this.pours||[]).forEach(pp=>{ if(pp.icon&&pp.icon.scene) pp.icon.destroy(); }); this.pours=[]; this.drops=[];
+    if(this._forkDim&&this._forkDim.scene) this._forkDim.setAlpha(0);
     if(this.pourLayer&&this.pourLayer.scene) this.pourLayer.clear();
     if(this.ovLayer&&this.ovLayer.scene){ this.ovLayer.clear(); (this.ovTxt||[]).forEach(t=>t.setVisible(false)); }
     this._clearTips();
@@ -3408,8 +3549,9 @@ class GameScene extends Phaser.Scene {
         if(!e.alive||dHit)return;
         if(Math.hypot(this.p.x-e.x,this.p.y-e.y)<42){ /* 命中距離要大於碰撞分離距離 38（2×CR），否則撞不到 */
           dHit=true;
-          const resist=(e.heat||0)<50?0.65:1.0;
-          const charBst=Math.min(2.2,1+(e.heat||0)/100*1.2); // 越熟越容易被打飛
+          const _hk=this.fx&&this.fx.heatKnock; // 越熟飛越遠：拿掉低熟度的減傷，熟度直接決定飛多遠（最多 3 倍）
+          const resist=_hk?1.0:((e.heat||0)<50?0.65:1.0);
+          const charBst=_hk?Math.min(3.0,1+(e.heat||0)/100*2.0):Math.min(2.2,1+(e.heat||0)/100*1.2); // 越熟越容易被打飛
           // foil 反彈：AI 有 foil → 任何推擊都反彈玩家，力道 ×0.8
           if(e.activeEffects&&e.activeEffects.foil>0){
             const rx=this.p.x-mx*this.dashState.force*resist*charBst*0.8, ry=this.p.y-my*this.dashState.force*resist*charBst*0.8;
@@ -3660,12 +3802,7 @@ class GameScene extends Phaser.Scene {
     // 叉子計時
     this.forkTimer-=dt;
     if(this.forkTimer<=0&&!this.fork&&this.fx.fork){ this.spawnFork(); this.forkTimer=this.forkInterval(); }
-    if(this.fork){
-      this.fork.timer+=dt;
-      if(this.fork.phase==='warn'&&this.fork.timer>=1.5){ this.fork.phase='attack'; this.fork.timer=0; this.checkForkHit(); }
-      else if(this.fork.phase==='attack'&&this.fork.timer>=0.55){ this.fork=null; this.forkLayer.clear(); }
-      if(this.fork) this.drawFork();
-    }
+    if(this.fork) this._updateFork(dt);
 
     // 翻面系統
     this.tiltTimer-=dt;
@@ -3846,6 +3983,10 @@ class GameScene extends Phaser.Scene {
       const _eSauceSlow=(e._sauceSlow&&e._sauceSlow<1)?e._sauceSlow:1.0;
       const _eLemonSlow=this.lemonPuddles.some(lp=>Math.hypot(e.x-lp.x,e.y-lp.y)<lp.r)?0.7:1.0;
       const _eIceTrailSlow=1.0; // 踩冰速度由慣性 vx/vy 直接控制，不另外限制 maxSpd
+      if(this.fx.coolZone&&this.cool&&(e.heat||0)>25){ // 變熱的 AI 會去搶冷卻圈 → 大家擠在一起
+        const _cdx=this.cool.x-e.x,_cdy=this.cool.y-e.y,_cd=Math.hypot(_cdx,_cdy)||1;
+        if(_cd>this.cool.r*0.45){ e.vx+=_cdx/_cd*0.12; e.vy+=_cdy/_cd*0.12; }
+      }
       const maxSpd=(e.charging?4.5:2.8)*sSlow*capSlow*(onOil?0.7:1)*_ePepSpd*_eIceSpd*_eSauceSlow*_eLemonSlow*_eIceTrailSlow*(e._zoneMul||1);
       if((e._zoneMul||1)>1){ e.vx*=1.03; e.vy*=1.03; } // 檸檬：AI 也真的加速
       e._sauceSlow=1.0;
@@ -3878,7 +4019,7 @@ class GameScene extends Phaser.Scene {
             } else {
             const _kRes=(this.ultState&&this.ultState.knockRes)?this.ultState.knockRes:1;
             const _juicyRes=this.activeEffects.juicy>0?0.5:1.0; // 多汁狀態：被推距離減半
-            const cBst=Math.min(1.5,1+this.heat/100*0.8);
+            const cBst=(this.fx&&this.fx.heatKnock)?Math.min(2.8,1+this.heat/100*1.8):Math.min(1.5,1+this.heat/100*0.8);
             // AI 有胡椒推玩家 → 散出胡椒（玩家視野受限）
             if(e.activeEffects&&e.activeEffects.pepBoost>0) this._scatterPepper(this.p.x,this.p.y,true);
             this.tweens.add({targets:this.p,
@@ -3896,7 +4037,7 @@ class GameScene extends Phaser.Scene {
             }
           } else {
             const eRef=pTgt.ref, eIdx=pTgt.idx;
-            const cBst=Math.min(1.5,1+(eRef.heat||0)/100*0.8);
+            const cBst=(this.fx&&this.fx.heatKnock)?Math.min(2.8,1+(eRef.heat||0)/100*1.8):Math.min(1.5,1+(eRef.heat||0)/100*0.8);
             // AI 互推：碰撞點也噴油
             this._spawnCollisionOil((e.x+eRef.x)/2,(e.y+eRef.y)/2);
             this._hitFeel({x:(e.x+eRef.x)/2,y:(e.y+eRef.y)/2,dx:pnx,dy:pny,power:0.5,anim:eRef.anim,freeze:0});
@@ -4035,6 +4176,7 @@ class GameScene extends Phaser.Scene {
     this.evtTimer-=dt;
     if(this.evtTimer<=0){this.spawnRandEvent();this.evtTimer=11+Math.random()*5;}
     this._updatePours(dt);
+    this._updateCool(dt);
     this.updateRandEvents(dt); if(!this.alive) return;
     this.updateShrink(dt);    if(!this.alive) return;
     this.updateHoles(dt);     if(!this.alive) return;
