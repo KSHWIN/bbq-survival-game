@@ -2017,10 +2017,10 @@ class GameScene extends Phaser.Scene {
   }
   _addZone(kind,x,y,owner){
     // 很近的同種液體就合併變大，避免一地碎點
-    const near=this.zones.find(z=>z.kind===kind&&z.owner===owner&&Math.hypot(z.x-x,z.y-y)<14);
-    if(near){ near.r=Math.min(40,near.r+2.5); near.life=Math.max(near.life,kind==='soy'?9:7); return; }
-    if(this.zones.length>=90) this.zones.shift();
-    this.zones.push({kind,x,y,r:15+Math.random()*9,life:kind==='soy'?9:7,age:0,owner:owner||null});
+    const near=this.zones.find(z=>z.kind===kind&&z.owner===owner&&Math.hypot(z.x-x,z.y-y)<18);
+    if(near){ near.r=Math.min(52,near.r+3); near.life=Math.max(near.life,kind==='soy'?9:7); return; }
+    if(this.zones.length>=130) this.zones.shift();
+    this.zones.push({kind,x,y,r:20+Math.random()*12,life:kind==='soy'?9:7,age:0,owner:owner||null}); // 半徑 15~24 → 20~32
   }
   _updatePours(dt){
     if(!this.zoneLayer||!this.zoneLayer.scene){
@@ -2031,7 +2031,7 @@ class GameScene extends Phaser.Scene {
     // 飛行的瓶子/檸檬
     this.pours=this.pours.filter(p=>{
       p.t+=dt; const k=Math.min(1,p.t/p.dur);
-      p.x=p.x0+(p.x1-p.x0)*k; p.y=p.y0+(p.y1-p.y0)*k+Math.sin(k*Math.PI*3)*38;
+      p.x=p.x0+(p.x1-p.x0)*k; p.y=p.y0+(p.y1-p.y0)*k+Math.sin(k*Math.PI*3)*60; // 擺幅 38→60
       const hy=p.y-34; // 飄在地面上方
       if(p.icon&&p.icon.scene){ p.icon.setPosition(p.x,hy); p.icon.setAngle(p.kind==='soy'?p.dir*(115+Math.sin(p.t*9)*12):p.t*420*p.dir); }
       pg.fillStyle(0x000000,0.28); pg.fillEllipse(p.x,p.y+8,34,10); // 地上影子
@@ -2039,8 +2039,8 @@ class GameScene extends Phaser.Scene {
       if(inside&&p.kind==='soy'){ pg.lineStyle(5,0x2b1206,0.9); pg.lineBetween(p.x+p.dir*14,hy+14,p.x,p.y); } // 醬油柱
       p.dropT-=dt;
       if(inside&&p.dropT<=0){
-        p.dropT=p.kind==='soy'?0.07:0.09; // 液滴密度：夠看得出來，又不會整片淹掉
-        const n=1, spread=p.kind==='soy'?34:130;
+        p.dropT=p.kind==='soy'?0.05:0.06; // 範圍變大，液滴也稍微密一點
+        const n=1, spread=p.kind==='soy'?100:210; // 灑出寬度：醬油 34→100、檸檬 130→210
         for(let i=0;i<n;i++){
           const lx=Phaser.Math.Clamp(p.x+(Math.random()-0.5)*spread,G.x+12,G.x+G.w-12);
           const ly=Phaser.Math.Clamp(p.y+(Math.random()-0.5)*spread,G.y+12,G.y+G.h-12);
@@ -3170,8 +3170,8 @@ class GameScene extends Phaser.Scene {
   _deploySaucePool(ownerId,px,py){
     if(ownerId!=='player') this._tip('saucePool',px,py,'🍶 醬油陷阱','別人放的黏人陷阱，踩到速度變很慢');
     // 醬油真的「灑」出去：液滴飛出、落地攤開成醬油灘（放的人自己不受影響）
-    for(let _si=0;_si<18;_si++){
-      const _ang=_si/18*Math.PI*2+Math.random()*0.3, _d=28+Math.random()*70;
+    for(let _si=0;_si<24;_si++){
+      const _ang=_si/24*Math.PI*2+Math.random()*0.3, _d=30+Math.random()*100; // 灑開半徑 98→130
       const _x=Phaser.Math.Clamp(px+Math.cos(_ang)*_d,G.x+12,G.x+G.w-12), _y=Phaser.Math.Clamp(py+Math.sin(_ang)*_d,G.y+12,G.y+G.h-12);
       this.drops.push({kind:'soy',x0:px,y0:py-18,x1:_x,y1:_y,t:0,dur:0.22+Math.random()*0.18,owner:ownerId});
     }
