@@ -13,6 +13,16 @@
 - 再次「單人遊玩」時，`showSingle()` 偵測到 `gameInstance === null` 才重建
 - BootScene 支援 `window._PENDING_GAME_START`，供多人模式 destroy/recreate 後直接跳 TeamScene
 
+## 連線模式（房主當裁判）
+- 房主跑完整遊戲；其他人只送按鍵（`input`），房主每秒送 15 次快照（`snap`，可丟棄）；結算走 `game_over` → `game_end`（一定送到）。
+- GameScene 的 `netRole`：`'host'` / `'client'` / `null`（單人）。遠端真人在房主那邊是 `enemies` 裡 `remote:true` 的角色，由 `_remoteControl()` 操控。
+- 客戶端 `_clientUpdate()` 只畫畫面，自己的角色本地先動再對齊房主位置。
+- 本機測試：`node server.js` 後開 `index.html?server=http://localhost:3000`。
+- 第一階段尚未支援：遠端玩家的 S 技能 / D 大絕、客戶端的打擊特效與音效、斷線由 AI 接手。
+
+## 語法檢查
+- `index.html` 有好幾個 `<script>` 區塊，改完要**每一塊**都檢查（只查最大那塊會漏掉遊戲邏輯）。
+
 ## 美術素材
 - 角色/道具/廚師圖已預先去背成透明 PNG 再嵌入 `IMG`（300px / 道具 80px）。**不要再加執行期「去白」**：它會把角色身上的白色（豆腐、眼睛反光）一起挖空。
 - 新圖流程：`python tools/cutout.py assets/原圖.png 輸出.png 300` → base64 換進 `IMG`。只去「跟邊框連通的白底」，角色內部白色保留。
