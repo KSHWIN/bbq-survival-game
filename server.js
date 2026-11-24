@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const PORT = process.env.PORT || 3000;
 const server = http.createServer((req, res) => {
   res.writeHead(200, {'Content-Type': 'text/plain'});
-  res.end('BBQ Survival Game Server');
+  res.end('BBQ Survival Game Server v2 (host-authoritative)');
 });
 
 const io = new Server(server, {
@@ -87,6 +87,24 @@ io.on('connection', (socket) => {
     socket.to(myRoom).emit('game_state', room.gameState);
   });
 
+  // ── 房主當裁判（v2）────────────────────────────────────────
+  // 客戶端按鍵 → 只送給房主
+  socket.on('input', (inp) => {
+    const room = rooms[myRoom]; if (!room || room.host === socket.id) return;
+    io.to(room.host).emit('input', { ...inp, id: socket.id });
+  });
+  // 房主的戰場快照 → 送給房間其他人（volatile：網路塞車時丟掉舊的，不要堆積）
+  socket.on('snap', (snap) => {
+    const room = rooms[myRoom]; if (!room || room.host !== socket.id) return;
+    socket.volatile.to(myRoom).emit('snap', snap);
+  });
+  // 一局結束：房間回到等待狀態，可以再開一局
+  socket.on('game_over', (data) => {
+    const room = rooms[myRoom]; if (!room || room.host !== socket.id) return;
+    room.state = 'waiting';
+    socket.to(myRoom).emit('game_end', data || {}); // 結算一定要送到（不走可丟棄的快照）
+  });
+
   socket.on('game_event', (evt) => {
     const room = rooms[myRoom]; if (!room) return;
     socket.to(myRoom).emit('game_event', { ...evt, from: socket.id });
@@ -98,6 +116,8 @@ io.on('connection', (socket) => {
     if (room.gameState) delete room.gameState[socket.id];
     io.to(myRoom).emit('player_disconnected', { id: socket.id });
     if (room.host === socket.id) {
+      if (room.state === 'playing') io.to(myRoom).emit('host_left'); // 遊戲中房主離開：這局無法繼續
+      room.state = 'waiting';
       const remaining = Object.keys(room.players);
       if (remaining.length > 0) {
         room.host = remaining[0];

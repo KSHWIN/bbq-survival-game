@@ -998,6 +998,7 @@ class TeamScene extends Phaser.Scene {
       multiplay:this.mpMode,
       gameMode:this.gameMode,
       teams:aiTeams,
+      humans:this.participants.filter(p=>p.isPlayer&&!p.isSelf).map(p=>({id:p.id,charKey:p.charKey,nick:(p.name||'').replace(' 👤',''),team:p.team||'none'})),
       playerTeam:myParticipant?myParticipant.team:'none',
     });
   }
@@ -1745,7 +1746,10 @@ class SelectScene extends Phaser.Scene {
 
 class GameScene extends Phaser.Scene {
   constructor(){ super('Game'); }
-  init(data){ this.charData=data.char||this.charData||CHARS[0]; this.levelData=data.level||this.levelData||LEVELS[0]; this.enemyCnt=data.enemyCnt||2; this.aiDiff=data.aiDiff??1; this.itemRate=data.itemRate??1; this.aiStyle=data.aiStyle||null; this.heatMode=data.heatMode||(()=>{ try{ return localStorage.getItem('bbq_heatmode')||'fire'; }catch(e){ return 'fire'; } })(); this.multiplay=data.multiplay||false; this.syncTimer=0; this.gameMode=data.gameMode||'individual'; this.playerTeam=data.playerTeam||'none'; this.aiTeams=(data.teams||[]).reduce((m,t)=>{m[t.id]=t.team||'none';return m;},{}); this._teamLabels=null; }
+  init(data){ this.charData=data.char||this.charData||CHARS[0]; this.levelData=data.level||this.levelData||LEVELS[0]; this.enemyCnt=data.enemyCnt||2; this.aiDiff=data.aiDiff??1; this.itemRate=data.itemRate??1; this.humans=data.humans||[];
+    this.netRole=(data.multiplay&&window.MP&&window.MP.enabled&&window.MP.socket)?(window.MP.isHost?'host':'client'):null; // 房主當裁判
+    if(this.netRole==='client') this.enemyCnt=0; // 客戶端不自己跑 AI，只顯示房主送來的戰場
+     this.aiStyle=data.aiStyle||null; this.heatMode=data.heatMode||(()=>{ try{ return localStorage.getItem('bbq_heatmode')||'fire'; }catch(e){ return 'fire'; } })(); this.multiplay=data.multiplay||false; this.syncTimer=0; this.gameMode=data.gameMode||'individual'; this.playerTeam=data.playerTeam||'none'; this.aiTeams=(data.teams||[]).reduce((m,t)=>{m[t.id]=t.team||'none';return m;},{}); this._teamLabels=null; }
 
   create(){
     bbqFitCam(this);
@@ -1817,7 +1821,7 @@ class GameScene extends Phaser.Scene {
     this.teamGlowLayer=this.add.graphics().setDepth(8);
     this.otherLayer=this.add.graphics().setDepth(18);
     this.teamRingLayer=this.add.graphics().setDepth(22);
-    if(this.multiplay) this._initMultiplayer();
+    if(this.netRole) this._netInit(); else if(this.multiplay) this._initMultiplayer();
     this.forkInterval=()=>(10+Math.random()*5)/this.levelData.forkMod; // 事件變大變長，間隔拉開
 
     // 火焰：動態出現/消失循環（cooldown→warning→active→dying→cooldown）
@@ -1879,16 +1883,19 @@ class GameScene extends Phaser.Scene {
     // 敵人（依對手數量）
     const EPOS=[{x:240,y:220,vx:2.1,vy:1.5},{x:510,y:340,vx:-1.8,vy:2.0},{x:390,y:430,vx:1.5,vy:-2.2},{x:255,y:345,vx:1.8,vy:-1.5},{x:545,y:170,vx:-1.5,vy:2.0},{x:680,y:410,vx:-2.0,vy:-1.5},{x:175,y:460,vx:2.2,vy:-1.8},{x:715,y:255,vx:-1.8,vy:1.6},{x:420,y:555,vx:1.5,vy:-2.1}];
     const aiChars=CHARS.filter(ch=>ch.key!==c.key).slice(0,this.enemyCnt);
-    this.enemies=aiChars.map((ch,i)=>({
+    const _remotes=this.netRole==='host'?this.humans.map(h=>({ch:CHARS.find(k=>k.key===h.charKey)||CHARS[0],pid:h.id,nick:h.nick,team:h.team})):[];
+    const _roster=[..._remotes,...aiChars.map((ch,ai)=>({ch,ai}))];
+    this.enemies=_roster.map((it,i)=>{ const ch=it.ch; return {
       x:EPOS[i].x, y:EPOS[i].y, r:18,
-      vx:EPOS[i].vx, vy:EPOS[i].vy,
-      heat:0, alive:true, label:ch.name, img:ch.img, weight:ch.weight||1.0,
+      vx:it.pid?0:EPOS[i].vx, vy:it.pid?0:EPOS[i].vy,
+      remote:!!it.pid, pid:it.pid||null, ck:ch.key,
+      heat:0, alive:true, label:it.pid?(it.nick||'玩家'):ch.name, img:ch.img, weight:ch.weight||1.0,
       chargeTimer:1.5+Math.random()*2, charging:false, chDx:1, chDy:0, chargeTime:0,
       pushTimer:3+Math.random()*3, abilTimer:5+Math.random()*4, abilActive:false,
-      team:this.aiTeams['ai'+i]||'none',
+      team:it.pid?(it.team||'none'):(this.aiTeams['ai'+it.ai]||'none'),
       activeEffects:{foil:0,garlic:0,sauceCharge:0,iceBoost:0,pepBoost:0,slip:0},
       slipLastVx:0, slipLastVy:0, iceLastX:0, iceLastY:0,
-    }));
+    }; });
     this.enemySprites=this.enemies.map(e=>
       this.textures.exists(e.img) ? this.add.image(e.x,e.y,e.img).setScale(ES*_wScale(e.weight)).setDepth(9) : null
     );
@@ -2472,6 +2479,7 @@ class GameScene extends Phaser.Scene {
   }
   // 右側擊殺訊息（排行榜下方，最多 4 則，每則 7 秒）
   _pushFeed(msg,col){
+    if(this.netRole==='host') (this._netEv=this._netEv||[]).push({k:'f',m:msg,c:col});
     this._feed=this._feed||[]; this._feed.unshift({msg,col,t:this.time.now}); this._feed=this._feed.slice(0,4);
     if(!this._feedTxt||!this._feedTxt[0]||!this._feedTxt[0].scene){
       const y0=134+(this.enemies.length+1)*21+14;
@@ -2552,8 +2560,9 @@ class GameScene extends Phaser.Scene {
       }
     }
     const st=this.stats||{hits:0,kos:0};
-    const board=[{name:(this.charData&&this.charData.name)||'你',score:this.score||0,hits:st.hits||0,kos:st.kos||0,deaths:this.deaths||0,alive:!!win,me:true}];
-    this.enemies.forEach(e=>board.push({name:e.label,score:e.score||0,hits:e.sHits||0,kos:e.sKos||0,deaths:e.deaths||0,alive:!!e.alive,me:false}));
+    const myName=this.netRole?(window.MP.myNickname||'房主'):((this.charData&&this.charData.name)||'你');
+    const board=[{id:'H',name:myName,score:this.score||0,hits:st.hits||0,kos:st.kos||0,deaths:this.deaths||0,alive:!!win,me:true}];
+    this.enemies.forEach((e,i)=>board.push({id:e.pid||('a'+i),name:e.label,score:e.score||0,hits:e.sHits||0,kos:e.sKos||0,deaths:e.deaths||0,alive:!!e.alive,me:false}));
     board.sort((a,b)=>(b.score-a.score)||((b.alive?1:0)-(a.alive?1:0))||((b.me?1:0)-(a.me?1:0)));
     return board;
   }
@@ -2674,6 +2683,7 @@ class GameScene extends Phaser.Scene {
   // 事件：每次發生都在畫面中間出現橫幅，第一次還會在地圖上標示位置
   _evt(key,x,y,title,desc){ this._banner(title,desc); this._tip(key,x,y,title,desc,true); } // 橫幅已寫說明，地圖上只畫圈標位置
   _banner(title,desc){
+    if(this.netRole==='host') (this._netEv=this._netEv||[]).push({k:'b',t:title,d:desc});
     try{
       if(this._bannerObjs) this._bannerObjs.forEach(o=>{ if(o&&o.scene) o.destroy(); });
       this._bannerUntil=this.time.now+2300; // 橫幅期間，上方說明框先讓位
@@ -2734,6 +2744,144 @@ class GameScene extends Phaser.Scene {
       knockPlayer(80*hkP,null); knockEnemy(80*((this.fx&&this.fx.heatKnock)?(0.55+(e.heat||0)/100*2.0):1));
       this._notice('⚔ 勢均力敵！兩邊都被彈開','#ffffff');
     }
+  }
+
+
+  // ══════════════════════════════════════════════════════════════
+  // ══ 連線模式（房主當裁判）══════════════════════════════════════
+  // 房主：跑完整遊戲，收其他人的按鍵，每秒送 15 次戰場快照
+  // 客戶端：送按鍵，畫房主的戰場；自己的角色先本地移動，再跟房主結果對齊
+  _netInit(){
+    const s=window.MP.socket;
+    s.off('input'); s.off('snap'); s.off('host_left'); s.off('game_end'); this._netEndSent=false;
+    this._netT=0; this._netZT=0; this._netEv=[]; this._netEnts={}; this._snap=null; this._netEnding=false;
+    if(this.netRole==='host'){
+      s.on('input',(inp)=>{ const e=this.enemies.find(x=>x.pid===inp.id); if(!e) return;
+        const prevPush=e.inp&&e.inp.push; e.inp=inp; if(prevPush) e.inp.push=true; }); // 按鍵事件不能丟
+    } else {
+      s.on('game_end',(d)=>{ if(this._netEnding||!this.sys||!this.sys.isActive()) return; this._netEnding=true; this._netBoard=d&&d.board||null; this.statusTxt.setText('時間到！'); this.endGame(true); });
+      s.on('snap',(sn)=>{ this._snap=sn; if(sn.ev) sn.ev.forEach(ev=>{ if(ev.k==='b') this._banner(ev.t,ev.d); else if(ev.k==='f') this._pushFeed(ev.m,ev.c); }); });
+      s.on('host_left',()=>{ this._banner('😢 房主離線了','這局無法繼續，2 秒後回到大廳');
+        this.time.delayedCall(2000,()=>{ const ov=document.getElementById('lobby-overlay'); if(ov){ ov.classList.remove('hidden'); if(typeof Lobby!=='undefined') Lobby.showLanding(); }
+          window.setTimeout(()=>{ if(gameInstance){ gameInstance.destroy(true); gameInstance=null; } },16); }); });
+      this._netPush=false; this._netSkill=false; this._netUlt=false;
+      this.input.keyboard.on('keydown-A',()=>{ this._netPush=true; this._localDash=0.22; });
+      this.input.keyboard.on('keydown-S',()=>{ this._netSkill=true; });
+      this.input.keyboard.on('keydown-D',()=>{ this._netUlt=true; });
+    }
+    this.events.once('shutdown',()=>{ try{ s.off('input'); s.off('snap'); s.off('host_left'); s.off('game_end'); }catch(e){} });
+  }
+  // ── 房主：遠端玩家的移動與衝撞 ──
+  _remoteControl(e,dt){
+    const inp=e.inp||{}, ch=CHARS.find(c=>c.key===e.ck)||{};
+    const sp=(ch.speed||110)/60*(e._zoneMul||1);
+    let dx=(inp.r?1:0)-(inp.l?1:0), dy=(inp.d?1:0)-(inp.u?1:0); if(dx&&dy){ dx*=0.707; dy*=0.707; }
+    if(dx||dy){ e._ldx=dx; e._ldy=dy; }
+    e.chargeTimer=99; e._pushCD=Math.max(0,(e._pushCD||0)-dt);
+    if(inp.push){ inp.push=false; if(e._pushCD<=0&&!(e._ghostT>0)){ e._pushCD=1.2; e._dashT=0.22; const l=Math.hypot(e._ldx||1,e._ldy||0)||1; e._ddx=(e._ldx||1)/l; e._ddy=(e._ldy||0)/l; e.pushTimer=0; } }
+    if(e._dashT>0){ e._dashT-=dt; e.charging=true; e.vx=e._ddx*9; e.vy=e._ddy*9; if(e._dashT<=0){ e.charging=false; e.vx*=0.3; e.vy*=0.3; } }
+    else { e.charging=false; e.pushTimer=Math.max(e.pushTimer,0.5); const k=1-Math.exp(-dt*22); e.vx+=(dx*sp-e.vx)*k; e.vy+=(dy*sp-e.vy)*k; }
+  }
+  // ── 房主：送快照 ──
+  _hostTick(dt){
+    this._netT-=dt; this._netZT-=dt;
+    if(this._netT>0) return; this._netT=1/15;
+    const R=v=>Math.round(v), st=this.stats||{};
+    const ents=[{id:'H',k:this.charData.key,n:window.MP.myNickname||'房主',x:R(this.p.x),y:R(this.p.y),h:R(this.heat),a:this.alive?1:0,g:this._ghostT>0?1:0,s:this.score||0,u:Math.floor(this.ultCharge||0)}];
+    this.enemies.forEach((e,i)=>ents.push({id:e.pid||('a'+i),k:e.ck,n:e.label,x:R(e.x),y:R(e.y),h:R(e.heat||0),a:e.alive?1:0,g:e._ghostT>0?1:0,s:e.score||0,u:e.remote?(e.ultCharge||0):0,pc:e.remote?+(e._pushCD||0).toFixed(2):0}));
+    const sn={tl:this.timeLeft,e:ents,hm:this.heatMode,fm:this._fireMul||1,sp:this.shrinkPad||0,sw:this.shrinkWarning?1:0,
+      f:this.firePts.filter(f=>f.state!=='cooldown').map(f=>({x:R(f.x),y:R(f.y),tx:R(f.tx||f.x),ty:R(f.ty||f.y),st:f.state,al:+(f.alpha||0).toFixed(2),c:f.collision?1:0,sd:f.spd||1,ph:+(f.ph||0).toFixed(2)})),
+      o:(this.ultOrbs||[]).map(o=>[R(o.x),R(o.y),o.preSpawn?1:0]),
+      it:(this.mapItems||[]).map(it=>[R(it.x),R(it.y),it.type,it.good?1:0]),
+      ho:(this.holes||[]).map(h=>[R(h.x),R(h.y),R(h.r||22),h.state==='warn'?1:0]),
+      pr:(this.pours||[]).map(p=>[R(p.x),R(p.y),p.kind==='soy'?0:1]),
+      fk:this.fork?{cx:this.fork.cx,cy:this.fork.cy,half:this.fork.half,cell:this.fork.cell,zone:this.fork.zone,phase:this.fork.phase,timer:+this.fork.timer.toFixed(2),marks:this.fork.marks,stab:this.fork.stab}:null,
+      cl:this.cool?[R(this.cool.x),R(this.cool.y),this.cool.r,+(this._coolT||0).toFixed(1)]:null,
+      ev:this._netEv.splice(0)};
+    if(this._netZT<=0){ this._netZT=0.5; sn.z=(this.zones||[]).map(z=>[R(z.x),R(z.y),R(z.r),z.kind==='soy'?0:1,+z.life.toFixed(1)]); }
+    window.MP.socket.emit('snap',sn);
+  }
+  _netSendEnd(win){
+    if(this._netEndSent) return; this._netEndSent=true;
+    const board=this._finalScores(win);
+    window.MP.socket.emit('game_over',{board:board.map(r=>({id:r.id,name:r.name,score:r.score,hits:r.hits,kos:r.kos,deaths:r.deaths,alive:r.alive}))});
+  }
+  // 連線中按 ESC：房主 → 直接結算給大家；客戶端 → 自己回等待室
+  _netLeave(){
+    if(this.netRole==='host') this._netSendEnd(false);
+    const ov=document.getElementById('lobby-overlay');
+    if(ov){ ov.classList.remove('hidden'); if(typeof Lobby!=='undefined'){ if(Lobby._roomCode) Lobby._showWaitingRoom(); else Lobby.showLanding(); } }
+    window.setTimeout(()=>{ if(gameInstance){ gameInstance.destroy(true); gameInstance=null; } },16);
+  }
+  // ── 客戶端：送按鍵 + 畫戰場 ──
+  _clientUpdate(dt){
+    const sn=this._snap, myId=window.MP.myId;
+    // 按鍵：每秒送 20 次（A/S/D 的「按一下」記住到送出為止，不會漏）
+    const L=this.keys.left.isDown||GKEYS['ArrowLeft'], Rt=this.keys.right.isDown||GKEYS['ArrowRight'], U=this.keys.up.isDown||GKEYS['ArrowUp'], Dn=this.keys.down.isDown||GKEYS['ArrowDown'];
+    this._inT=(this._inT||0)-dt;
+    if(this._inT<=0){ this._inT=0.05; window.MP.socket.emit('input',{l:!!L,r:!!Rt,u:!!U,d:!!Dn,push:this._netPush,skill:this._netSkill,ult:this._netUlt}); this._netPush=false; this._netSkill=false; this._netUlt=false; }
+    if(!sn) return;
+    if(this._netEnding) return;
+    this.firePhase=(this.firePhase||0)+dt;
+    // 場地
+    this.heatMode=sn.hm; this._fireMul=sn.fm;
+    this.firePts=(sn.f||[]).map(f=>({x:f.x,y:f.y,tx:f.tx,ty:f.ty,state:f.st,alpha:f.al,collision:!!f.c,spd:f.sd,ph:f.ph,r:46}));
+    this.drawFires(this.firePhase); this._drawRings();
+    if(sn.z) this.zones=sn.z.map(z=>({x:z[0],y:z[1],r:z[2],kind:z[3]?'lemon':'soy',life:z[4],age:9,owner:null}));
+    this.pours=[]; this.drops=[]; this._updatePours(dt); // 只畫液體，並算出自己踩到時的速度（給本地預測用）
+    const g=this._netLayer&&this._netLayer.scene?this._netLayer:(this._netLayer=this.add.graphics().setDepth(16));
+    g.clear();
+    if(sn.cl){ const [cx,cy,r,ct]=sn.cl; this.zoneLayer.fillStyle(0x66ccff,0.24); this.zoneLayer.fillCircle(cx,cy,r); this.zoneLayer.lineStyle(3,0x9fe6ff,0.95); this.zoneLayer.strokeCircle(cx,cy,r);
+      this.zoneLayer.lineStyle(4,0xffffff,0.9); this.zoneLayer.beginPath(); this.zoneLayer.arc(cx,cy,r+6,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.max(0,ct/10),false); this.zoneLayer.strokePath(); }
+    (sn.ho||[]).forEach(([x,y,r,w])=>{ if(w){ g.lineStyle(3,0xff5533,0.5+0.5*Math.sin(this.firePhase*14)); g.strokeCircle(x,y,r); } else { g.fillStyle(0x000000,1); g.fillCircle(x,y,r); g.lineStyle(2,0xff5533,0.8); g.strokeCircle(x,y,r); } });
+    (sn.o||[]).forEach(([x,y,pre])=>{ const gl=0.5+0.5*Math.sin(this.firePhase*5); g.fillStyle(0xdd88ff,pre?0.25*gl:0.3+gl*0.2); g.fillCircle(x,y,pre?24:20); if(!pre){ g.fillStyle(0xffffff,0.95); g.fillCircle(x,y,6); g.lineStyle(2,0xff88ff,0.9); g.strokeCircle(x,y,13); } });
+    (sn.it||[]).forEach(([x,y,type,good])=>{ g.fillStyle(good?0x00ccff:0xff3300,0.45); g.fillCircle(x,y,20); g.lineStyle(2,good?0x88ffff:0xff8800,0.9); g.strokeCircle(x,y,20); });
+    this._netIcons=this._netIcons&&this._netIcons[0]&&this._netIcons[0].scene?this._netIcons:Array.from({length:8},()=>this.add.text(0,0,'',{fontSize:'22px'}).setOrigin(0.5).setDepth(21));
+    const icons=[...(sn.it||[]).map(([x,y,type])=>[x,y,{ice:'🧊',foil:'🪙',garlic:'🧄',sauce:'🍶',pepper:'🌶'}[type]||'🎁']),...(sn.pr||[]).map(([x,y,k])=>[x,y-34,k?'🍋':'🍶'])];
+    this._netIcons.forEach((t,i)=>{ const ic=icons[i]; if(ic) t.setText(ic[2]).setPosition(ic[0],ic[1]).setVisible(true); else t.setVisible(false); });
+    this.fork=sn.fk; if(this.fork) this.drawFork(); else { this.forkLayer.clear(); if(this.forkFx&&this.forkFx.scene) this.forkFx.clear(); }
+    this.shrinkPad=sn.sp; this.shrinkWarning=!!sn.sw; this.drawShrinkRing();
+    // 角色
+    if(this.shadowLayer&&this.shadowLayer.scene) this.shadowLayer.clear();
+    const seen={};
+    (sn.e||[]).forEach(en=>{
+      seen[en.id]=1;
+      if(en.id===myId){ this._netSelf(en,dt); return; }
+      let rec=this._netEnts[en.id];
+      if(!rec||!rec.sp.scene){ const ch=CHARS.find(c=>c.key===en.k)||CHARS[0], sp=this.add.image(en.x,en.y,ch.img).setDepth(9);
+        const bs=0.23*(0.6+(ch.weight||1)*0.4); sp.setScale(bs); sp.baseScale=bs;
+        rec=this._netEnts[en.id]={sp,anim:this._mkAnim(),x:en.x,y:en.y,tag:this.add.text(0,0,(en.id==='H'?'👑 ':(en.id[0]==='a'?'':'👤 '))+en.n,{fontSize:'12px',color:en.id[0]==='a'?'#dddddd':'#9fe0ff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:3}).setOrigin(0.5).setDepth(23)}; }
+      const big=Math.hypot(en.x-rec.x,en.y-rec.y)>120; rec.x=big?en.x:rec.x+(en.x-rec.x)*Math.min(1,dt*14); rec.y=big?en.y:rec.y+(en.y-rec.y)*Math.min(1,dt*14);
+      rec.sp.setVisible(!!en.a); rec.tag.setVisible(!!en.a);
+      if(en.a){ this._animChar(rec.sp,rec.anim,rec.x,rec.y,dt,{base:rec.sp.baseScale,heat:en.h,shadow:this.shadowLayer});
+        const t=en.h/100; rec.sp.setTint(Phaser.Display.Color.GetColor(255,Math.round(255-t*70),Math.round(255-t*110))); rec.sp.setAlpha(en.g?0.35+0.35*Math.sin(this.time.now*0.03):1);
+        rec.tag.setPosition(rec.x,rec.y-54); }
+    });
+    Object.keys(this._netEnts).forEach(id=>{ if(!seen[id]){ const r=this._netEnts[id]; r.sp.destroy(); r.tag.destroy(); delete this._netEnts[id]; } });
+    // 介面
+    this.timerTxt.setText(sn.tl+'s');
+    const list=(sn.e||[]).map(en=>({name:en.id===myId?'你':en.n,score:en.s,alive:!!en.a,me:en.id===myId})).sort((a,b)=>b.score-a.score);
+    if(!this._sbTxt||!this._sbTxt[0]||!this._sbTxt[0].scene){ this._sbTxt=[]; this.add.text(W-10,112,'排行',{fontSize:'13px',color:'#ffcc66',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:3}).setOrigin(1,0.5).setDepth(30);
+      for(let i=0;i<9;i++) this._sbTxt.push(this.add.text(W-10,134+i*21,'',{fontSize:'13px',color:'#ffffff',fontFamily:'sans-serif',stroke:'#000',strokeThickness:3}).setOrigin(1,0.5).setDepth(30)); }
+    this._sbTxt.forEach((t,i)=>{ const r=list[i]; t.setText(r?(i+1)+'. '+r.name+(r.alive?'':'✖')+'  '+r.score:'').setColor(r&&r.me?'#ffe066':(r&&r.alive?'#ffffff':'#888888')); });
+    this._refreshFeed();
+  }
+  // 自己的角色：本地先動（不會覺得延遲），再慢慢對齊房主的位置；被推飛就直接跳過去
+  _netSelf(en,dt){
+    const L=this.keys.left.isDown||GKEYS['ArrowLeft'], Rt=this.keys.right.isDown||GKEYS['ArrowRight'], U=this.keys.up.isDown||GKEYS['ArrowUp'], Dn=this.keys.down.isDown||GKEYS['ArrowDown'];
+    let dx=(Rt?1:0)-(L?1:0), dy=(Dn?1:0)-(U?1:0); if(dx&&dy){ dx*=0.707; dy*=0.707; }
+    if(dx||dy) this.lastDir={x:dx,y:dy};
+    const sp=(this.charData.speed||110)*(this._zoneMul||1);
+    if((this._localDash||0)>0){ this._localDash-=dt; this.p.x+=this.lastDir.x*540*dt; this.p.y+=this.lastDir.y*540*dt; }
+    else { this.p.x+=dx*sp*dt; this.p.y+=dy*sp*dt; }
+    this.p.x=Phaser.Math.Clamp(this.p.x,G.x+4,G.x+G.w-4); this.p.y=Phaser.Math.Clamp(this.p.y,G.y+4,G.y+G.h-4);
+    const d=Math.hypot(en.x-this.p.x,en.y-this.p.y);
+    if(d>70||!en.a){ this.p.x=en.x; this.p.y=en.y; } else { const k=Math.min(1,dt*6); this.p.x+=(en.x-this.p.x)*k; this.p.y+=(en.y-this.p.y)*k; }
+    this.heat=en.h; this.ultCharge=en.u; this.score=en.s; this.pushCD=en.pc||0;
+    if(this.playerSprite){ this.playerSprite.setVisible(!!en.a); if(en.a){ this._animChar(this.playerSprite,this.pAnim,this.p.x,this.p.y,dt,{base:this.playerSprite.baseScale||0.26,heat:en.h,faceX:this.lastDir.x,moving:!!(dx||dy),shadow:this.shadowLayer}); this.updateHeatFx(this.playerSprite,en.h,this.sweatTxt); this.playerSprite.setAlpha(en.g?0.35+0.35*Math.sin(this.time.now*0.03):1); } }
+    this.heatBarFg.width=Math.min(220,en.h*2.2); this.heatTxt.setText(Math.floor(en.h)+'%');
+    if(this.scoreTxt) this.scoreTxt.setText('🏆 '+en.s+' 分');
+    this.updateUltUI(); if(en.a) this._drawOverheadHUD();
   }
 
   // 推力倍率：角色重量 × 大蒜 × 大絕 ×（開啟時）熟度加成，1.0 = 標準
@@ -3811,6 +3959,7 @@ class GameScene extends Phaser.Scene {
   }
 
   endGame(win){
+    if(this.netRole==='client'&&!this._netEnding) return; // 客戶端的勝負由房主決定
     if(!win&&this.alive) this._announcePlayerOut(); // 告訴玩家為什麼出局
     if(!win&&this.fx&&this.fx.respawn&&this.timeLeft>0&&this.alive){ this._respawnPlayer(); return; } // 復活模式：不結束
     if(!win) this._addTrauma(0.85); // 出局：大級震動
@@ -3848,15 +3997,17 @@ class GameScene extends Phaser.Scene {
     if(this.timerTxt&&this.timeLeft<=0) this.timerTxt.setText('0s');
     if(this.burnLayer&&this.burnLayer.scene) this.burnLayer.clear();
     if(this.vignette&&this.vignette.scene) this.vignette.clear();
-    this.time.delayedCall(550,()=>this._showResult(win));
+    if(this.netRole==='host') this._netSendEnd(win);
+    this.time.delayedCall(550,()=>this._showResult(win,this._netBoard||null));
   }
 
   // 結算面板：標題、原因、本局統計、三個大按鈕（滑鼠或鍵盤都可以）
-  _showResult(win){
+  _showResult(win,boardIn){
     if(this._resultShown) return; this._resultShown=true;
     const title=this.statusTxt.text, reason=this.subTxt.text;
     this.statusTxt.setText(''); this.subTxt.setText('');
-    const board=this._finalScores(win), me=board.find(r=>r.me), rank=board.indexOf(me)+1;
+    let board=boardIn?boardIn.map(r=>({...r,me:this.netRole==='client'?r.id===window.MP.myId:r.id==='H'})):this._finalScores(win);
+    const me=board.find(r=>r.me)||board[0], rank=board.indexOf(me)+1;
     const D=80, PX=W/2, PY=H/2, PW=600, PH=470;
     this.add.rectangle(W/2,H/2,W,H,0x000000,0.6).setDepth(D);
     this.add.rectangle(PX,PY,PW,PH,0x1a0d05,0.97).setStrokeStyle(3,rank===1?0xffd84a:(win?0x44ff88:0xff5533)).setDepth(D);
@@ -3881,12 +4032,12 @@ class GameScene extends Phaser.Scene {
       if(this._leaving) return; this._leaving=true;
       if(what==='again') this.scene.restart();
       else if(what==='select') window.setTimeout(()=>{ createGame(); },16);
-      else { const ov=document.getElementById('lobby-overlay'); if(ov){ ov.classList.remove('hidden'); if(typeof Lobby!=='undefined') Lobby.showLanding(); }
+      else { const ov=document.getElementById('lobby-overlay'); if(ov){ ov.classList.remove('hidden'); if(typeof Lobby!=='undefined'){ if(this.multiplay&&Lobby._roomCode) Lobby._showWaitingRoom(); else Lobby.showLanding(); } }
              window.setTimeout(()=>{ if(gameInstance){ gameInstance.destroy(true); gameInstance=null; } },16); }
     };
-    const btns=[['▶ 再玩一次','Enter','again',0xff6600],['選角色','ESC','select',0x553322],['回主頁','M','home',0x333333]];
+    const btns=this.multiplay?[['回等待室','M','home',0xff6600]]:[['▶ 再玩一次','Enter','again',0xff6600],['選角色','ESC','select',0x553322],['回主頁','M','home',0x333333]];
     btns.forEach(([label,key,what,col],i)=>{
-      const bx=PX+(i-1)*172, by=PY+PH/2-64;
+      const bx=PX+(btns.length===1?0:(i-1)*172), by=PY+PH/2-64;
       const b=this.add.rectangle(bx,by,160,52,col,1).setStrokeStyle(2,0xffcc77).setDepth(D+1).setInteractive({useHandCursor:true});
       this.add.text(bx,by-8,label,{fontSize:'19px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+2);
       this.add.text(bx,by+14,'（'+key+'）',{fontSize:'12px',color:'#ffdcb0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+2);
@@ -3896,6 +4047,7 @@ class GameScene extends Phaser.Scene {
     // 用鍵盤事件（快速點按也收得到）
     this.input.keyboard.on('keydown',(ev)=>{
       const c=ev.code;
+      if(this.multiplay){ if(c==='KeyM'||c==='Enter'||c==='Escape') go('home'); return; }
       if(c==='Enter'||c==='Space'||c==='KeyR') go('again');
       else if(c==='Escape') go('select');
       else if(c==='KeyM') go('home');
@@ -3904,12 +4056,15 @@ class GameScene extends Phaser.Scene {
 
   update(_,delta){
     const dt=delta/1000;
-    if(Phaser.Input.Keyboard.JustDown(this.keys.restart)){this.scene.restart();return;}
+    if(Phaser.Input.Keyboard.JustDown(this.keys.restart)&&!this.multiplay){this.scene.restart();return;}
     if(Phaser.Input.Keyboard.JustDown(this.keys.back)){
+      if(this.netRole){ this._netLeave(); return; }
       window.setTimeout(()=>{createGame();},16);
       return;
     }
     this._updateShake(delta);   // 震動用真實時間衰減（頓幀、結算時也照跑）
+    if(this.netRole==='client'){ try{ this._clientUpdate(dt); }catch(e){ console.error('[net client]',e); } return; }
+    if(this.netRole==='host'){ try{ this._hostTick(delta/1000); }catch(e){ console.error('[net host]',e); } }
     if(this._introOpen) return; // 說明卡開著：整個遊戲暫停
     if(this._ultFreeze>0){ this._ultFreeze-=delta/1000; this._freezeFrame(); return; } // 大絕特寫：全場暫停
     if(this._helpReq){ this._helpReq=false; if(!this.multiplay){ this._showIntro(false); return; } }
@@ -3932,7 +4087,7 @@ class GameScene extends Phaser.Scene {
     const isTeamMode=this.gameMode==='team'||(window.MP?.settings?.gameMode==='team');
     const myTeam=this.playerTeam||(window.MP?.myTeam)||'none';
     // 多人同步（20Hz）
-    if(this.multiplay&&window.MP&&window.MP.socket){
+    if(this.multiplay&&window.MP&&window.MP.socket&&!this.netRole){
       this.syncTimer=(this.syncTimer||0)+dt;
       if(this.syncTimer>=0.05){
         this.syncTimer=0;
@@ -4546,7 +4701,7 @@ class GameScene extends Phaser.Scene {
         e.chargeTime-=dt;
         e.vx=e.chDx*4.5; e.vy=e.chDy*4.5;
         if(e.chargeTime<=0){e.charging=false; e.vx*=0.25; e.vy*=0.25;}
-      } else if(edist>52&&!onOil){
+      } else if(edist>52&&!onOil&&!e.remote){
         let gx=tgt.x, gy=tgt.y;
         if(tac==='pack'&&edist>90){ // 圍剿：從「中心那一側」分散包抄，推的方向是往外
           const base=Math.atan2(tgt.y-(G.y+G.h/2),tgt.x-(G.x+G.w/2))+Math.PI, a=base+((e._packSlot||0)-1)*0.9;
@@ -4557,7 +4712,7 @@ class GameScene extends Phaser.Scene {
         e.vx+=(gdx/gd)*K;
         e.vy+=(gdy/gd)*K;
       }
-      if(!e.charging&&!onOil) this._aiBrain(e,diff,dt);
+      if(!e.charging&&!onOil&&!e.remote) this._aiBrain(e,diff,dt);
       const espd=Math.hypot(e.vx,e.vy)||1;
       const capSlow=(e.capsaicinTimer||0)>0?0.25:1.0;
       const _eAE=e.activeEffects||{};
@@ -4574,17 +4729,18 @@ class GameScene extends Phaser.Scene {
       if((e._zoneMul||1)>1){ e.vx*=1.03; e.vy*=1.03; } // 檸檬：AI 也真的加速
       e._sauceSlow=1.0;
       if(espd>maxSpd){e.vx=(e.vx/espd)*maxSpd;e.vy=(e.vy/espd)*maxSpd;}
+      if(e.remote) this._remoteControl(e,dt); // 遠端真人：用他的按鍵覆蓋 AI 的移動
       }
       // 推人：找最近對象（玩家或其他 AI 都算）
       const pushCd=[6.0,4.5,3.0][diff]*({aggro:0.6,pack:0.9,camper:1.2}[tac]||1);
-      if(e.pushTimer<=0&&!e.charging){
+      if(e.pushTimer<=0&&(!e.charging||e.remote)){
         const pTgt=allLive.reduce((a,b)=>Math.hypot(a.x-e.x,a.y-e.y)<=Math.hypot(b.x-e.x,b.y-e.y)?a:b);
         const pd=Math.hypot(pTgt.x-e.x,pTgt.y-e.y);
         if(pd<44&&!(pTgt.isPlayer&&this._ghostT>0)&&!(pTgt.ref&&pTgt.ref._ghostT>0)&&!(e._ghostT>0)){ // 復活無敵中不推/不被推
           e.pushTimer=pushCd+Math.random()*2;
           const pnx=(pTgt.x-e.x)/pd, pny=(pTgt.y-e.y)/pd;
           const _eGarlicBst=(e.activeEffects&&e.activeEffects.garlic>0)?1.7:1.0;
-          const pForce=95*((this.fx&&this.fx.heatPower)?Math.min(2.0,1+e.heat/100*1.5):1)*_eGarlicBst; // 越熟推越大力（開關，跟玩家一致）、大蒜加成
+          const pForce=(e.remote?140*(e.weight||1):95)*((this.fx&&this.fx.heatPower)?Math.min(2.0,1+e.heat/100*1.5):1)*_eGarlicBst; // 真人推力跟玩家一樣看重量 // 越熟推越大力（開關，跟玩家一致）、大蒜加成
           if(pTgt.isPlayer){
               // foil 反彈：玩家有 foil → 任何 AI 推擊都反彈，AI 被彈回
               if(this.activeEffects.foil>0){
@@ -4722,6 +4878,8 @@ class GameScene extends Phaser.Scene {
       const sp=this.enemySprites[i];
       if(!e.alive||!sp||!sp.visible) return;
       this._animChar(sp,e.anim,e.x,e.y,dt,{base:sp.baseScale||0.23,heat:e.heat,shadow:this.shadowLayer});
+      if(e.remote){ if(!e._tag||!e._tag.scene) e._tag=this.add.text(0,0,'👤 '+e.label,{fontSize:'12px',color:'#9fe0ff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:3}).setOrigin(0.5).setDepth(23);
+        e._tag.setPosition(e.x,e.y-54).setVisible(true); }
       this._applyFlash(sp,e.anim,dt);
     });
     // 道具效果倒計時
@@ -6472,7 +6630,7 @@ class GameScene extends Phaser.Scene {
       if(orb.life<=0){orb.gfx.destroy(); if(orb.icon) orb.icon.destroy(); return false;}
       // AI 搶到：能量球被拿走
       const _thief=this.enemies.find(e=>e.alive&&Math.hypot(e.x-orb.x,e.y-orb.y)<26);
-      if(_thief&&this.fx.ultOrb){ this._notice('⚡ '+_thief.label+' 搶走了能量球！','#d9a0ff'); orb.gfx.destroy(); if(orb.icon) orb.icon.destroy(); return false; }
+      if(_thief&&this.fx.ultOrb){ if(_thief.remote) _thief.ultCharge=Math.min(3,(_thief.ultCharge||0)+1); this._notice('⚡ '+_thief.label+' 搶走了能量球！','#d9a0ff'); orb.gfx.destroy(); if(orb.icon) orb.icon.destroy(); return false; }
       orb.ph+=dt*3;
       orb.particleAngle+=dt*2;
       const glow=0.5+0.5*Math.sin(orb.ph);
@@ -6792,7 +6950,7 @@ function createGame(){
 </script>
 <script>
 // ── Lobby ──────────────────────────────────────────
-const SERVER_URL = 'https://bbq-survival-game.onrender.com'; // Render.com URL (update after deploy)
+const SERVER_URL = new URLSearchParams(location.search).get('server') || 'https://bbq-survival-game.onrender.com'; // ?server= 可改連本機測試伺服器
 
 window.MP = {
   enabled: false,
