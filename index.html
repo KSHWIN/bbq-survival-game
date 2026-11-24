@@ -782,19 +782,21 @@ class TeamScene extends Phaser.Scene {
     const objs=[]; const add=o=>{objs.push(o);return o;};
     const D=100, fx=bbqFx();
     add(this.add.rectangle(W/2,H/2,W,H,0x000000,0.78).setDepth(D).setInteractive());
-    const PW=620,PH=560,PX=W/2,PY=H/2;
+    const PW=620,PH=620,PX=W/2,PY=H/2;
     add(this.add.rectangle(PX,PY,PW,PH,0x1a0d05,0.98).setStrokeStyle(3,0xffaa44).setDepth(D));
     add(this.add.text(PX,PY-PH/2+28,'⚙ 場地效果開關',{fontSize:'22px',color:'#ffcc44',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+1));
     add(this.add.text(PX,PY-PH/2+58,'勾掉的效果這局不會出現，設定會記住。最後兩排是玩法規則，可關掉跟舊玩法比較。',{fontSize:'14px',color:'#d9c7b0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1));
     const g=add(this.add.graphics().setDepth(D+1));
     const cols=3, colW=(PW-60)/cols, x0=PX-PW/2+36, y0=PY-PH/2+104, rowH=56;
     const boxes=[];
-    // 底部說明框：滑過（或點）某個效果時顯示詳細說明
-    const infoY=y0+5*rowH+70;
-    add(this.add.rectangle(PX,infoY,PW-40,54,0x000000,0.45).setStrokeStyle(1,0x7a5a30).setDepth(D+1));
-    const infoTitle=add(this.add.text(PX-PW/2+34,infoY-13,'💡 效果說明',{fontSize:'15px',color:'#ffcc66',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(D+2));
-    const infoTxt=add(this.add.text(PX-PW/2+34,infoY+11,'把滑鼠移到效果上（或點一下），這裡會顯示它在做什麼。',{fontSize:'13px',color:'#ffe9c4',fontFamily:'sans-serif',wordWrap:{width:PW-80}}).setOrigin(0,0.5).setDepth(D+2));
-    const showInfo=(f)=>{ infoTitle.setText('💡 '+f.n+(fx[f.k]?'（開啟中）':'（已關閉）')); infoTxt.setText(f.t||f.d||''); };
+    // 底部說明框：左邊小動畫示範，右邊文字說明（滑過或點某個效果時切換）
+    const infoY=y0+5*rowH+92, PVW=160, PVH=96, pvx=PX-PW/2+30+PVW/2;
+    add(this.add.rectangle(PX,infoY,PW-40,112,0x000000,0.45).setStrokeStyle(1,0x7a5a30).setDepth(D+1));
+    const tx0=pvx+PVW/2+16, txW=PX+PW/2-30-tx0;
+    const infoTitle=add(this.add.text(tx0,infoY-34,'💡 效果說明',{fontSize:'16px',color:'#ffcc66',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(D+2));
+    const infoTxt=add(this.add.text(tx0,infoY-18,'把滑鼠移到效果上（或點一下），左邊會播放示範動畫，這裡會寫它在做什麼。',{fontSize:'13px',color:'#ffe9c4',fontFamily:'sans-serif',wordWrap:{width:txW},lineSpacing:3}).setOrigin(0,0).setDepth(D+2));
+    const pv=this._fxPreview(add,D,pvx,infoY,PVW,PVH);
+    const showInfo=(f)=>{ infoTitle.setText('💡 '+f.n+(fx[f.k]?'（開啟中）':'（已關閉）')); infoTxt.setText(f.t||f.d||''); pv.set(f.k); };
     const draw=()=>{
       g.clear();
       boxes.forEach(b=>{
@@ -825,7 +827,120 @@ class TeamScene extends Phaser.Scene {
     };
     btn(PX-150,'全部開啟',()=>{ FX_LIST.forEach(f=>fx[f.k]=true); draw(); },0x335533);
     btn(PX,'全部關閉',()=>{ FX_LIST.forEach(f=>fx[f.k]=false); draw(); },0x553333);
-    btn(PX+150,'✓ 完成',()=>{ objs.forEach(o=>{ try{o.destroy();}catch(e){} }); this._fxOpen=false; this._refreshFxBtn(); },0xff6600);
+    btn(PX+150,'✓ 完成',()=>{ pv.stop(); objs.forEach(o=>{ try{o.destroy();}catch(e){} }); this._fxOpen=false; this._refreshFxBtn(); },0xff6600);
+  }
+
+
+  // ══ 場地效果小動畫：用遊戲裡的角色（玉米 = 你、培根 = 對手）約 3 秒循環示範 ══
+  _fxPreview(add,D,cx,cy,PW,PH){
+    const g=add(this.add.graphics().setDepth(D+2));
+    const mk=(key)=>{ const im=add(this.add.image(0,0,this.textures.exists(key)?key:'__DEFAULT').setDepth(D+3).setVisible(false)); im.setDisplaySize(30,30); im._bs=im.scaleX; return im; };
+    const A=mk('char_corn'), B=mk('char_bacon'), C=mk('char_bacon');
+    const ic=add(this.add.text(0,0,'',{fontSize:'22px'}).setOrigin(0.5).setDepth(D+4));
+    const lb=[0,1].map(()=>add(this.add.text(0,0,'',{fontSize:'12px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:3}).setOrigin(0.5).setDepth(D+5)));
+    let key=null, t0=performance.now();
+    const X=u=>cx+u*PW/2, Y=v=>cy+v*PH/2, cl=(v,a,b)=>Math.max(a,Math.min(b,v)), ease=k=>1-Math.pow(1-cl(k,0,1),3);
+    const put=(im,u,v,o)=>{ o=o||{}; im.setVisible(true).setPosition(X(u),Y(v)).setAlpha(o.a===undefined?1:o.a).setScale(im._bs*(o.s||1)).setAngle(o.r||0); if(o.tint) im.setTint(o.tint); else im.clearTint(); };
+    const bar=(u,v,f,col)=>{ g.fillStyle(0x000000,0.8); g.fillRect(X(u)-15,Y(v)-24,30,5); g.fillStyle(col||(f>0.8?0xff2a00:f>0.5?0xffcc00:0xff7a1a),1); g.fillRect(X(u)-15,Y(v)-24,30*cl(f,0,1),5); };
+    const label=(i,u,v,str,col)=>{ const L=lb[i].setText(str).setColor(col||'#ffffff').setVisible(true), hw=L.width/2+3;
+      L.setPosition(cl(X(u),cx-PW/2+hw,cx+PW/2-hw),Y(v)); }; // 夾在小畫面內
+    const flames=(u,v,k)=>{ const tt=performance.now()/90; for(let i=0;i<4;i++){ const fx=X(u)+(i-1.5)*6, fy=Y(v)+10, h=(6+10*k)*(0.6+0.4*Math.sin(tt+i*2)); g.fillStyle(0xff5500,0.9*k); g.fillTriangle(fx-4,fy,fx+4,fy,fx,fy-h); } };
+    const draw=()=>{
+      if(!g.scene) return;
+      const t=((performance.now()-t0)/1000)%3;
+      g.clear(); [A,B,C].forEach(im=>im.setVisible(false)); ic.setText('').setAngle(0); lb.forEach(l=>l.setVisible(false));
+      // 小烤盤
+      g.fillStyle(0x2a1a10,1); g.fillRoundedRect(cx-PW/2,cy-PH/2,PW,PH,6);
+      g.fillStyle(0x3a2a1c,1); for(let i=0;i<6;i++) g.fillRect(cx-PW/2+4,cy-PH/2+6+i*15,PW-8,6);
+      g.lineStyle(2,0xff7a1a,0.8); g.strokeRoundedRect(cx-PW/2,cy-PH/2,PW,PH,6);
+      if(!key){ label(0,0,0,'← 選一個效果看示範','#ffcc88'); return; }
+      const k=t/3;
+      switch(key){
+        case 'fire': {
+          g.fillStyle(0xff4400,0.25); g.fillCircle(X(0.25),Y(0.1),24); g.lineStyle(2,0xff9900,0.8); g.strokeCircle(X(0.25),Y(0.1),24);
+          g.fillStyle(0xff5500,0.9); g.fillTriangle(X(0.25)-10,Y(0.1)+6,X(0.25)+10,Y(0.1)+6,X(0.25),Y(0.1)-18);
+          const u=-0.7+0.95*ease(t/1.2); put(A,u,0.1); const inF=t>1.0, h=inF?cl((t-1)/1.6,0,1):0;
+          bar(u,0.1,0.1+h*0.85); if(inF) flames(u,0.1,h); if(inF) label(0,u,-0.75,'熟度 +26%/秒','#ff8a4a'); break; }
+        case 'oilFire': {
+          const bump=t>0.9, ua=bump?-0.25-0.1*ease((t-0.9)/0.3):-0.8+0.55*ease(t/0.9), ub=bump?0.25+0.1*ease((t-0.9)/0.3):0.8-0.55*ease(t/0.9);
+          put(A,ua,0.15); put(B,ub,0.15,{});
+          if(bump){ g.fillStyle(0xffe066,0.9); for(let i=0;i<5;i++) g.fillCircle(X((i-2)*0.12),Y(0.55+Math.sin(i)*0.1),4); }
+          if(t>1.8){ g.fillStyle(0x00ccaa,0.9); g.fillTriangle(X(0)-10,Y(0.6),X(0)+10,Y(0.6),X(0),Y(0.6)-22); label(0,0,-0.7,'油漬變成青色火','#7fffe0'); }
+          else if(bump) label(0,0,-0.7,'互撞噴油！','#ffe066'); break; }
+        case 'items': {
+          const got=t>1.3;
+          if(!got){ g.fillStyle(0x00ccff,0.45); g.fillCircle(X(0.45),Y(0.1),15); g.lineStyle(2,0x88ffff,1); g.strokeCircle(X(0.45),Y(0.1),15); ic.setText('🧊').setPosition(X(0.45),Y(0.1)); }
+          else { g.lineStyle(3,0x66e0ff,1-cl((t-1.3)/0.5,0,1)); g.strokeCircle(X(0.45),Y(0.1),15+(t-1.3)*40); label(0,0.45,-0.7,'撿到！降溫 -42%','#8fe8ff'); }
+          put(A,-0.7+1.15*ease(t/1.3),0.1); break; }
+        case 'soy': case 'lemon': {
+          const soy=key==='soy', pu=-1.1+2.2*cl(t/1.4,0,1);
+          for(let u=-0.82;u<Math.min(pu,0.84);u+=0.18){ g.fillStyle(soy?0x3a1a0a:0xfff07a,soy?0.95:0.7); g.fillCircle(X(u),Y(0.25+Math.sin(u*5)*0.12),11); }
+          if(t<1.5&&Math.abs(pu)<0.92) ic.setText(soy?'🍶':'🍋').setPosition(X(pu),Y(-0.45)).setAngle(soy?120:t*400);
+          if(t>1.4){ const tt=t-1.4, sp=soy?0.35:1.6, u=-0.95+cl(tt*sp*0.9,0,1.85); put(A,u,0.25); label(0,u,-0.6,soy?'🐢 變慢 ×0.45':'⚡ 變快 ×1.5',soy?'#e0a868':'#fff06a'); }
+          break; }
+        case 'skewer': {
+          if(t<1){ const a=0.4+0.4*Math.sin(t*20); g.lineStyle(2,0xff3333,a); g.strokeCircle(X(0),Y(0.15),16); }
+          put(A,0,0.15,{tint:t>1?0xaaaaff:0});
+          if(t>=1){ g.fillStyle(0xd8b070,1); g.fillRect(X(0)-2,Y(0.15)-40,4,46); g.fillStyle(0xffffff,1); g.fillTriangle(X(0)-4,Y(0.15)+6,X(0)+4,Y(0.15)+6,X(0),Y(0.15)+14); label(0,0,-0.75,'💫 2 秒不能動','#ffe066'); }
+          break; }
+        case 'iceDrop': {
+          if(t<1){ g.fillStyle(0x000000,0.3+0.3*t); g.fillEllipse(X(0),Y(0.25),18+16*t,6+5*t); ic.setText('🧊').setPosition(X(0),Y(-1.2+1.35*ease(t))); }
+          put(A,0,0.2); const ex=t>1?ease((t-1)/0.4):0; put(B,0.35+0.5*ex,0.2,{r:ex*90});
+          if(t>1){ g.lineStyle(3,0x9fe6ff,1-cl((t-1)/0.6,0,1)); g.strokeCircle(X(0),Y(0.2),10+(t-1)*70); label(0,0,-0.7,'搶到降溫，旁邊被彈飛','#8fe8ff'); }
+          break; }
+        case 'flare': {
+          put(B,0.05,0.25,{a:t>1.5?0:1}); put(A,-0.6,0.25);
+          if(t<1.3){ const a=0.3+0.5*Math.abs(Math.sin(t*12)); g.lineStyle(3,0xff3300,a); g.strokeCircle(X(0.05),Y(0.25),22); }
+          else if(t<2.1){ g.fillStyle(0xff5500,0.85); g.fillRect(X(0.05)-14,Y(-1),28,Y(0.25)-Y(-1)+10); g.fillStyle(0xffcc33,0.9); g.fillRect(X(0.05)-6,Y(-1),12,Y(0.25)-Y(-1)+10); label(0,0.05,-0.7,'火柱炸飛！','#ff8a4a'); }
+          break; }
+        case 'holes': {
+          const hole=t>1; if(!hole){ g.lineStyle(2,0xff5533,0.5+0.5*Math.sin(t*15)); g.strokeCircle(X(0.2),Y(0.15),18); }
+          else { g.fillStyle(0x000000,1); g.fillCircle(X(0.2),Y(0.15),18); }
+          const u=-0.75+0.95*ease(t/1.7), fall=t>1.7?cl((t-1.7)/0.4,0,1):0; put(A,u,0.15,{s:1-fall*0.9,a:1-fall});
+          if(fall>0) label(0,0.2,-0.7,'掉進洞裡，出局','#ff8a8a'); break; }
+        case 'shrink': {
+          const pad=Math.floor(cl(t/2.4,0,1)*4)*7;
+          g.fillStyle(0x000000,1); g.fillRect(cx-PW/2,cy-PH/2,PW,pad); g.fillRect(cx-PW/2,cy+PH/2-pad,PW,pad); g.fillRect(cx-PW/2,cy-PH/2,pad,PH); g.fillRect(cx+PW/2-pad,cy-PH/2,pad,PH);
+          g.lineStyle(2,0xffffff,0.9); g.strokeRect(cx-PW/2+pad,cy-PH/2+pad,PW-pad*2,PH-pad*2);
+          put(A,0,0.1); const edge=t>1.6; put(B,0.86,0.1,{a:edge?0:1}); label(0,0,-0.7,edge?'貼邊的掉下去了':'邊緣一圈圈剝落',edge?'#ff8a8a':'#ffb070'); break; }
+        case 'tilt': {
+          const k2=ease(t/2.2); put(A,-0.5+0.9*k2,0.1,{r:8}); put(B,-0.1+0.9*k2,-0.3,{r:8,a:k2>0.95?0:1});
+          g.lineStyle(4,0xffe066,0.9); g.lineBetween(X(-0.4),Y(0.7),X(0.4),Y(0.7)); g.fillStyle(0xffe066,1); g.fillTriangle(X(0.4),Y(0.7)-7,X(0.4),Y(0.7)+7,X(0.52),Y(0.7));
+          label(0,0,-0.75,'傾斜！全部往一邊滑','#ffe066'); break; }
+        case 'fork': {
+          const zx=X(0.15), zy=Y(0.05), cs=11;
+          g.fillStyle(t<1.1?0xffd400:0xff2200,t<1.1?0.25:0.3); g.fillRect(zx-cs*2.5,zy-cs*2.5,cs*5,cs*5);
+          g.lineStyle(1,0xffcc00,0.5); for(let i=0;i<=5;i++){ g.lineBetween(zx-cs*2.5+i*cs,zy-cs*2.5,zx-cs*2.5+i*cs,zy+cs*2.5); g.lineBetween(zx-cs*2.5,zy-cs*2.5+i*cs,zx+cs*2.5,zy-cs*2.5+i*cs); }
+          put(A,-0.7,0.1); const slam=t>2.2; put(B,0.15,0.05,{a:slam?0:1});
+          if(t>1.1&&t<2.2){ const n=Math.floor((t-1.1)/0.12), cxs=(n*7)%5, cys=(n*3)%5; ic.setText('🍴').setPosition(zx-cs*2+cxs*cs,zy-cs*2+cys*cs-6); label(0,0,-0.75,'瘋狂亂刺！','#ffcc66'); }
+          if(slam){ g.fillStyle(0xffffff,0.7*(1-cl((t-2.2)/0.4,0,1))); g.fillRect(zx-cs*2.5,zy-cs*2.5,cs*5,cs*5); label(0,0,-0.75,'最後重擊，區域內出局','#ff8a8a'); }
+          break; }
+        case 'heatXfer': {
+          const hit=t>0.8, ua=hit?-0.25:-0.8+0.55*ease(t/0.8);
+          put(A,ua,0.15); put(B,hit?0.2+0.15*ease((t-0.8)/0.3):0.2,0.15);
+          bar(ua,0.15,hit?0.25:0.4); bar(hit?0.35:0.2,0.15,hit?0.55:0.4);
+          if(hit){ label(0,-0.3,-0.65,'你 -15% 🧊','#8fe8ff'); label(1,0.4,-0.65,'對手 +15% 🔥','#ff7a4a'); } break; }
+        case 'passiveHeat': {
+          put(A,0,0.15); bar(0,0.15,0.1+0.8*k); label(0,0,-0.75,'站著不動也每秒 +1%','#ffcc66'); break; }
+        case 'coolZone': {
+          const pulse=0.85+0.15*Math.sin(t*5);
+          g.fillStyle(0x66ccff,0.3); g.fillCircle(X(0.1),Y(0.15),26*pulse); g.lineStyle(2,0x9fe6ff,0.95); g.strokeCircle(X(0.1),Y(0.15),26);
+          const ua=-0.7+0.75*ease(t/1), ub=0.75-0.55*ease(t/1.1); put(A,ua,0.15); put(B,ub,0.25);
+          const inZ=t>1; bar(ua,0.15,inZ?0.7-0.5*cl((t-1)/1.8,0,1):0.7,inZ?0x66ccff:0);
+          label(0,0,-0.75,inZ?'圈裡每秒 -4%，大家搶':'冷卻圈出現了','#8fe8ff'); break; }
+        case 'heatKnock': case 'heatPower': {
+          const hot=key==='heatKnock', hit=t>0.7, f=hit?ease((t-0.7)/0.6):0;
+          // 上排：冷的被推一點點；下排：熱的被推很遠
+          put(A,hit?-0.45:-0.85+0.4*ease(t/0.7),-0.4,{s:0.85}); put(B,-0.25+0.25*f,-0.4,{s:0.85});
+          bar(-0.25+0.25*f,-0.4,hot?0.1:0.3);
+          put(C,-0.25+1.05*f,0.45,{s:0.85}); bar(-0.25+1.05*f,0.45,hot?0.95:0.3);
+          label(0,0.6,-0.75,hot?'冷的：飛一點':'自己冷：推一點','#cccccc'); label(1,0.6,0.85,hot?'熱的：飛超遠！':'自己熟：推超遠！','#ff8a4a');
+          break; }
+      }
+    };
+    const tick=()=>draw();
+    this.events.on('update',tick); draw();
+    return { set:(k)=>{ if(k!==key){ key=k; t0=performance.now(); } }, stop:()=>this.events.off('update',tick) };
   }
 
   _launchFromTeamData(teamsData){
