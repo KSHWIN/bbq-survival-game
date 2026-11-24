@@ -384,13 +384,24 @@ function inGrill(x,y,m=0){ return x>=G.x+m&&x<=G.x+G.w-m&&y>=G.y+m&&y<=G.y+G.h-m
 
 // ── 場地效果開關（開戰前設定畫面可勾選；存在瀏覽器裡，下次還在）─────
 const FX_LIST=[
-  {k:'fire',    n:'🔥 火焰圈'},   {k:'oilFire', n:'💧 撞到出油'}, {k:'items',  n:'🎁 道具'},
-  {k:'soy',     n:'🍶 灑醬油'},   {k:'lemon',   n:'🍋 灑檸檬汁'}, {k:'skewer', n:'🍢 竹簽串'},
-  {k:'iceDrop', n:'🧊 冰塊空投'}, {k:'flare',   n:'💥 火柱爆發'}, {k:'holes',  n:'🕳 烤盤破洞'},
-  {k:'shrink',  n:'⚠ 外圈崩塌'},  {k:'tilt',    n:'↔ 廚師翻面'},  {k:'fork',   n:'🍴 廚師叉子'},
-  // 規則（實驗）：預設開啟，可關掉跟舊規則比較
-  {k:'heatXfer',    n:'🌡 撞人傳熱'}, {k:'passiveHeat', n:'⏱ 待著會熟'}, {k:'coolZone', n:'❄ 冷卻圈'},
-  {k:'heatKnock',   n:'💥 越熟飛越遠'}, {k:'heatPower', n:'🔥 越熟推越大力'},
+  {k:'fire',    n:'🔥 火焰圈',   d:'站在火裡會變熟',     t:'地上隨機冒出火圈，站在圈裡熟度每秒 +26%；最後 20 秒火會變大。（選「中心熱區」模式時不會出現）'},
+  {k:'oilFire', n:'💧 撞到出油', d:'互撞噴油、會起火',   t:'角色互撞會噴出油漬，踩到會滑；約 1.5 秒後點燃成青色油火。'},
+  {k:'items',   n:'🎁 道具',     d:'走過去就能撿',       t:'場上出現道具，走過去就撿：冰塊降溫、鋁箔反彈、大蒜推力、醬油陷阱、胡椒噴辣。'},
+  {k:'soy',     n:'🍶 灑醬油',   d:'踩到會變慢',         t:'醬油瓶飛過烤盤，沿路灑下一片醬油，踩到速度 ×0.45。'},
+  {k:'lemon',   n:'🍋 灑檸檬汁', d:'踩到會變快',         t:'檸檬飛過烤盤噴汁，踩到後 1.5 秒內速度 ×1.5。'},
+  {k:'skewer',  n:'🍢 竹簽串',   d:'被插到不能動',       t:'紅圈預警後插下竹簽，被插到 2 秒不能動。'},
+  {k:'iceDrop', n:'🧊 冰塊空投', d:'搶到大降溫、會爆開', t:'大冰塊從天而降，先踩到的人大幅降溫，但冰塊會爆開把旁邊的人彈飛。'},
+  {k:'flare',   n:'💥 火柱爆發', d:'紅圈噴火柱炸飛人',   t:'紅圈預警 3 秒後噴出火柱，把圈裡的人炸飛。'},
+  {k:'holes',   n:'🕳 烤盤破洞', d:'踩進去直接出局',     t:'烤盤隨機出現預警圈，之後破成洞，踩進去直接掉下去出局。'},
+  {k:'shrink',  n:'⚠ 外圈崩塌',  d:'邊緣一圈圈剝落',     t:'開局 12 秒後開始，邊緣每約 10 秒剝落一圈，貼著邊站會掉下去。'},
+  {k:'tilt',    n:'↔ 廚師翻面',  d:'烤盤傾斜、往一邊滑', t:'廚師把烤盤往一邊翻，所有人都會往箭頭方向滑，站在低的那邊很危險。'},
+  {k:'fork',    n:'🍴 廚師叉子', d:'黃色區域會被亂刺',   t:'巨大廚師出現，黃色 5×5 區域被瘋狂亂刺（被刺到 +20% 熟度），最後全區重擊直接出局。'},
+  // 規則（實驗）：可關掉跟舊規則比較
+  {k:'heatXfer',    n:'🌡 撞人傳熱',   d:'你 -15%、對手 +15%', t:'撞中對手時把熱傳給他：你熟度 -15%，對手 +15%。先把對手撞熱，比較好推飛。'},
+  {k:'passiveHeat', n:'⏱ 待著會熟',   d:'每秒自然 +1%',      t:'不管站在哪裡，熟度每秒自然 +1%。一直躲也會慢慢熟，逼大家行動。'},
+  {k:'coolZone',    n:'❄ 冷卻圈',     d:'唯一降溫點，會移動', t:'烤盤上唯一會降溫的圈（每秒 -4%），每 10 秒換位置，換之前會用虛線圈預告。大家都會去搶。'},
+  {k:'heatKnock',   n:'💥 越熟飛越遠', d:'越熟被推得越遠',     t:'被推飛的距離看自己的熟度：0% 只飛 0.55 倍，100% 飛 2.55 倍。'},
+  {k:'heatPower',   n:'🔥 越熟推越大力', d:'自己越熟推力越大', t:'自己熟度越高，推別人的力量越大（最多 2 倍）。跟「撞人傳熱」會互相抵銷，預設關閉。'},
 ];
 const FX_OFF_DEFAULT=['oilFire','heatPower']; // 預設關閉：撞到出油（畫面容易亂）、越熟推越大力（跟傳熱規則互相打架）
 function bbqFx(){
@@ -771,13 +782,19 @@ class TeamScene extends Phaser.Scene {
     const objs=[]; const add=o=>{objs.push(o);return o;};
     const D=100, fx=bbqFx();
     add(this.add.rectangle(W/2,H/2,W,H,0x000000,0.78).setDepth(D).setInteractive());
-    const PW=600,PH=440,PX=W/2,PY=H/2;
+    const PW=620,PH=560,PX=W/2,PY=H/2;
     add(this.add.rectangle(PX,PY,PW,PH,0x1a0d05,0.98).setStrokeStyle(3,0xffaa44).setDepth(D));
     add(this.add.text(PX,PY-PH/2+28,'⚙ 場地效果開關',{fontSize:'22px',color:'#ffcc44',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+1));
     add(this.add.text(PX,PY-PH/2+58,'勾掉的效果這局不會出現，設定會記住。最後兩排是玩法規則，可關掉跟舊玩法比較。',{fontSize:'14px',color:'#d9c7b0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1));
     const g=add(this.add.graphics().setDepth(D+1));
-    const cols=3, colW=(PW-60)/cols, x0=PX-PW/2+40, y0=PY-PH/2+100, rowH=48;
+    const cols=3, colW=(PW-60)/cols, x0=PX-PW/2+36, y0=PY-PH/2+104, rowH=56;
     const boxes=[];
+    // 底部說明框：滑過（或點）某個效果時顯示詳細說明
+    const infoY=y0+5*rowH+70;
+    add(this.add.rectangle(PX,infoY,PW-40,54,0x000000,0.45).setStrokeStyle(1,0x7a5a30).setDepth(D+1));
+    const infoTitle=add(this.add.text(PX-PW/2+34,infoY-13,'💡 效果說明',{fontSize:'15px',color:'#ffcc66',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(D+2));
+    const infoTxt=add(this.add.text(PX-PW/2+34,infoY+11,'把滑鼠移到效果上（或點一下），這裡會顯示它在做什麼。',{fontSize:'13px',color:'#ffe9c4',fontFamily:'sans-serif',wordWrap:{width:PW-80}}).setOrigin(0,0.5).setDepth(D+2));
+    const showInfo=(f)=>{ infoTitle.setText('💡 '+f.n+(fx[f.k]?'（開啟中）':'（已關閉）')); infoTxt.setText(f.t||f.d||''); };
     const draw=()=>{
       g.clear();
       boxes.forEach(b=>{
@@ -785,16 +802,20 @@ class TeamScene extends Phaser.Scene {
         g.fillStyle(on?0xffaa33:0x2a2a2a,1); g.fillRoundedRect(b.x,b.y-12,24,24,5);
         g.lineStyle(2,on?0xffe2a8:0x777777,1); g.strokeRoundedRect(b.x,b.y-12,24,24,5);
         if(on){ g.lineStyle(3,0x1a0d05,1); g.beginPath(); g.moveTo(b.x+5,b.y); g.lineTo(b.x+10,b.y+6); g.lineTo(b.x+19,b.y-6); g.strokePath(); }
-        b.t.setColor(on?'#ffffff':'#777777');
+        // 第 5 排開始是「玩法規則」：上方畫一條分隔線
+        if(b.i===12){ g.lineStyle(1,0x7a5a30,0.8); g.lineBetween(PX-PW/2+24,b.y-30,PX+PW/2-24,b.y-30); }
+        b.t.setColor(on?'#ffffff':'#777777'); b.d.setColor(on?'#d4bf9a':'#5f5f5f');
       });
       bbqFxSave(fx);
     };
     FX_LIST.forEach((f,i)=>{
       const x=x0+(i%cols)*colW, y=y0+Math.floor(i/cols)*rowH;
-      const t=add(this.add.text(x+34,y,f.n,{fontSize:'17px',color:'#ffffff',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1));
-      const hit=add(this.add.rectangle(x+colW/2-10,y,colW-10,rowH-8,0xffffff,0.001).setDepth(D+2).setInteractive({useHandCursor:true}));
-      hit.on('pointerdown',()=>{ fx[f.k]=!fx[f.k]; draw(); });
-      boxes.push({k:f.k,x,y,t});
+      const t=add(this.add.text(x+34,y-9,f.n,{fontSize:'17px',color:'#ffffff',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1));
+      const d=add(this.add.text(x+34,y+12,f.d||'',{fontSize:'12px',color:'#d4bf9a',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1));
+      const hit=add(this.add.rectangle(x+colW/2-10,y,colW-10,rowH-6,0xffffff,0.001).setDepth(D+2).setInteractive({useHandCursor:true}));
+      hit.on('pointerdown',()=>{ fx[f.k]=!fx[f.k]; draw(); showInfo(f); });
+      hit.on('pointerover',()=>showInfo(f));
+      boxes.push({k:f.k,x,y,t,d,i});
     });
     draw();
     const btn=(x,label,cb,col)=>{
