@@ -405,7 +405,7 @@ const FX_LIST=[
   {k:'heatPower',   n:'🔥 越熟推越大力', d:'自己越熟推力越大', t:'自己熟度越高，推別人的力量越大（最多 2 倍）。跟「撞人傳熱」會互相抵銷，預設關閉。'},
   {k:'clash',       n:'⚔ 對撞比推力', d:'正面互撞：推力大的贏', t:'你衝刺撞上正在衝過來的對手時比推力（💪 數字）：大的把對方撞飛，小的被彈開，差不多就兩邊一起彈開。'},
   {k:'respawn',     n:'🔄 出局復活', d:'出局 -2 分、3 秒後回來', t:'被推出局或烤熟不會結束：-2 分後回到場上（2 秒無敵），推你的人 +3。時間到依分數排名，一定打滿整局。'},
-  {k:'ultOrb',      n:'⚡ 大絕能量球', d:'吃 3 顆才能放大絕', t:'開局大絕是空的。場上會冒出能量球，吃 1 顆 +1 格，集滿 3 格才能按 D 發動。AI 也會來搶。'},
+  {k:'ultOrb',      n:'⚡ 大絕能量球', d:'吃 3 顆才能放大絕', t:'開局大絕是空的。場上每 7 秒冒出一顆能量球，吃 1 顆 +1 格，集滿 3 格才能按 D 發動。AI 也會來搶。'},
 ];
 const FX_OFF_DEFAULT=['oilFire','heatPower']; // 出局復活改為預設開（模擬：一定打滿 60 秒、領先換手變 2 倍） // 預設關閉：撞到出油（畫面容易亂）、越熟推越大力（跟傳熱規則互相打架）
 function bbqFx(){
@@ -1759,6 +1759,7 @@ class GameScene extends Phaser.Scene {
     this.cool=null; this._coolT=3; this._coolNext=null; this._inCoolPrev=false; // 冷卻圈：開局 3 秒後出現
     if(this.fx&&this.fx.ultOrb){ this.ultCharge=0; this.ultOrbTimer=3; } // 能量球模式：大絕從 0 開始
     this._ultFreeze=0;
+    this._eAlive=null; this._feed=[]; this._feedTxt=null; this._lastHeatSrc=null;
     this.score=0; this._scoreFinal=false; this._sbT=0; this._sbTxt=null; this._pHitBy=null; // 計分（重開時清掉上一局的排行榜物件）
     // 重開（R / 再玩一次）時，上一局留下的 UI 參照都清掉，避免去操作已銷毀的物件
     this._tipCur=null; this._bannerObjs=null; this._bannerUntil=0; this._noticeTxt=null; this._noticeTw=null;
@@ -2151,7 +2152,7 @@ class GameScene extends Phaser.Scene {
     const A=10; // 模擬結果：15% 太快把人烤熟，回合不到 20 秒就結束
     if(from===null){ const d=Math.min(A,this.heat); this.heat-=d; if(d>0.5) this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'-'+Math.round(d)+'% 🧊','#8fe8ff'); }
     else from.heat=Math.max(0,(from.heat||0)-A);
-    if(to===null){ this.heat=Math.min(100,this.heat+A); this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'+'+A+'% 🔥','#ff7a4a'); }
+    if(to===null){ this.heat=Math.min(100,this.heat+A); this._lastHeatSrc=from?'被 '+from.label+' 撞到傳熱':'被撞傳熱'; this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'+'+A+'% 🔥','#ff7a4a'); }
     else { to.heat=Math.min(100,(to.heat||0)+A); if(from===null) this._floatTxt(to.x,to.y-46,'+'+A+'% 🔥','#ff7a4a'); }
   }
   _floatTxt(x,y,str,col,big){
@@ -2418,6 +2419,73 @@ class GameScene extends Phaser.Scene {
 
 
 
+
+  // ══ 出局原因 ════════════════════════════════════════════════
+  _playerOutReason(){
+    let r=this.subTxt.text||'';
+    const pb=this._pHitBy&&this.time.now-(this._pHitT||0)<1500?this._pHitBy:null;
+    if(!r||r==='掉落烤盤！'){
+      if(pb) r='被 '+pb.label+' 推出烤盤！';
+      else if(this.tilt&&this.tilt.state==='active') r='烤盤傾斜，滑出去了！';
+      else r='走到烤盤外面，掉下去了！';
+    } else if(r==='被烤熟了！') r='熟度到 100%，被烤熟了！'+(this._lastHeatSrc?'（最後是'+this._lastHeatSrc+'）':'');
+    else if(r==='掉進火坑了！') r='外圈剝落，腳下的地方掉下去了！';
+    else if(r==='反彈落下！') r='撞到有鋁箔的人，被反彈出去了！';
+    return r;
+  }
+  _announcePlayerOut(){
+    const r=this._playerOutReason(); this.subTxt.setText(r);
+    const respawn=this.fx&&this.fx.respawn&&this.timeLeft>0;
+    this._banner('💥 你出局了！',r+(respawn?'　（-2 分）':''));
+    this._outMarker(this.p.x,this.p.y,'✖ 你',r.replace(/！.*$/,''));
+    // 擊殺訊息用短版（右側空間窄）
+    const short=/被 (.+?) 推/.test(r)?'被 '+r.match(/被 (.+?) 推/)[1]+' 推落':/烤熟/.test(r)?'烤熟了':/叉子/.test(r)?'被叉子刺中':/洞/.test(r)?'掉進洞裡':/剝落/.test(r)?'外圈剝落':/傾斜/.test(r)?'滑出烤盤':/反彈/.test(r)?'被反彈出去':'掉出烤盤';
+    this._pushFeed('💥 你　'+short,'#ff8a8a');
+  }
+  _watchAiOuts(){
+    if(!this._eAlive) this._eAlive=this.enemies.map(e=>e.alive);
+    this.enemies.forEach((e,i)=>{
+      const was=this._eAlive[i];
+      if(was&&!e.alive){
+        let why, col='#ffffff', icon='💥';
+        if((e.heat||0)>=100){ why='烤熟了'; icon='🔥'; col='#ffb070'; }
+        else if(this.fork&&this.fork.phase==='attack'){ why='被廚師叉子刺中'; icon='🍴'; }
+        else if((this.holes||[]).some(h=>h.state!=='warn'&&Math.hypot(e.x-h.x,e.y-h.y)<(h.r||22)+10)){ why='掉進洞裡'; icon='🕳'; }
+        else if(e._lastHitBy&&this.time.now-(e._lastHitT||0)<3000){ const me=e._lastHitBy==='player'; why=me?'被你推落':'被 '+e._lastHitBy+' 推落'; if(me) col='#ffe066'; }
+        else if(this.tilt&&this.tilt.state==='active') why='烤盤傾斜滑落';
+        else if((this.shrinkPad||0)>0&&Math.min(e.x-G.x,G.x+G.w-e.x,e.y-G.y,G.y+G.h-e.y)<(this.shrinkPad||0)+4) why='外圈剝落掉下去';
+        else why='掉出烤盤';
+        this._outMarker(e.x,e.y,'✖ '+e.label,why,col);
+        this._pushFeed(icon+' '+e.label+'　'+why,col);
+      }
+      this._eAlive[i]=e.alive;
+    });
+  }
+  // 出局地點：紅色 ✖ + 名字 + 原因，1.6 秒淡出（位置夾在烤盤內，看得到）
+  _outMarker(x,y,name,why,col){
+    try{
+      const cx=Phaser.Math.Clamp(x,G.x+70,G.x+G.w-70), cy=Phaser.Math.Clamp(y,G.y+40,G.y+G.h-30);
+      const t=this.add.text(cx,cy,name+'\n'+why,{fontSize:'15px',color:col||'#ff8a8a',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:5,align:'center'}).setOrigin(0.5).setDepth(64);
+      t.setScale(0.7); this.tweens.add({targets:t,scaleX:1,scaleY:1,duration:150,ease:'Back.easeOut'});
+      this.tweens.add({targets:t,alpha:0,y:cy-26,delay:1300,duration:500,onComplete:()=>{ if(t.scene) t.destroy(); }});
+    }catch(err){}
+  }
+  // 右側擊殺訊息（排行榜下方，最多 4 則，每則 7 秒）
+  _pushFeed(msg,col){
+    this._feed=this._feed||[]; this._feed.unshift({msg,col,t:this.time.now}); this._feed=this._feed.slice(0,4);
+    if(!this._feedTxt||!this._feedTxt[0]||!this._feedTxt[0].scene){
+      const y0=134+(this.enemies.length+1)*21+14;
+      this._feedTxt=[0,1,2,3].map(k=>this.add.text(W-10,y0+k*19,'',{fontSize:'12px',color:'#ffffff',fontFamily:'sans-serif',stroke:'#000000',strokeThickness:3}).setOrigin(1,0.5).setDepth(30));
+    }
+    this._refreshFeed();
+  }
+  _refreshFeed(){
+    if(!this._feedTxt) return;
+    const now=this.time.now;
+    this._feedTxt.forEach((t,k)=>{ const f=(this._feed||[])[k]; if(!t.scene) return;
+      if(f&&now-f.t<7000) t.setText(f.msg).setColor(f.col).setAlpha(k===0?1:0.75); else t.setText(''); });
+  }
+
   // ══ 出局復活（計分賽）══════════════════════════════════════════
   _pickSafeSpot(){
     const pad=(this.shrinkPad||0)+90;
@@ -2443,7 +2511,7 @@ class GameScene extends Phaser.Scene {
     this.heat=30; this.dashState=null; this._burn=0;
     const ae=this.activeEffects; ['stun','slowpow','toxic','oilSlick','slip','soySlow','pepperVision'].forEach(k=>{ if(ae[k]!==undefined) ae[k]=0; });
     this._ghostT=2.0;
-    this._notice('💥 '+reason+'　-2 分，2 秒無敵後繼續','#ff8a8a');
+    this._notice('-2 分，2 秒無敵後繼續','#ff8a8a');
     try{ const g=this.add.graphics().setDepth(27).setPosition(pos.x,pos.y); g.lineStyle(4,0xffffff,1); g.strokeCircle(0,0,40);
       this.tweens.add({targets:g,scaleX:0.2,scaleY:0.2,alpha:0,duration:400,onComplete:()=>{ if(g.scene) g.destroy(); }}); }catch(err){}
   }
@@ -2491,7 +2559,7 @@ class GameScene extends Phaser.Scene {
   }
   // 右側即時排行榜（烤盤外的右邊空白）
   _drawScoreboard(dt){
-    this._sbT=(this._sbT||0)-dt; if(this._sbT>0) return; this._sbT=0.25;
+    this._sbT=(this._sbT||0)-dt; if(this._sbT>0) return; this._sbT=0.25; this._refreshFeed();
     if(!this._sbTxt||!this._sbTxt[0]||!this._sbTxt[0].scene){ // 上一局的物件已被銷毀 → 重建
       this._sbTxt=[];
       this._sbTitle=this.add.text(W-10,112,'排行',{fontSize:'13px',color:'#ffcc66',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:3}).setOrigin(1,0.5).setDepth(30);
@@ -3170,7 +3238,7 @@ class GameScene extends Phaser.Scene {
     this._addTrauma(0.24,0.34); this._playImpact(0.7); // 亂刺：每下輕輕一震，最多約 2px
     const hit=(x,y)=>Math.abs(x-sx)<C/2+8&&Math.abs(y-sy)<C/2+8;
     if(this.alive&&hit(this.p.x,this.p.y)){
-      this.heat=Math.min(100,this.heat+20); this.activeEffects.stun=Math.max(this.activeEffects.stun,0.35);
+      this.heat=Math.min(100,this.heat+20); this.activeEffects.stun=Math.max(this.activeEffects.stun,0.35); this._lastHeatSrc='被廚師叉子刺到';
       this._hitFeel({x:sx,y:sy,power:1.2,anim:this.pAnim,freeze:60});
       this._notice('🍴 被叉到了！熟度 +20%','#ff7a4a');
     }
@@ -3743,6 +3811,7 @@ class GameScene extends Phaser.Scene {
   }
 
   endGame(win){
+    if(!win&&this.alive) this._announcePlayerOut(); // 告訴玩家為什麼出局
     if(!win&&this.fx&&this.fx.respawn&&this.timeLeft>0&&this.alive){ this._respawnPlayer(); return; } // 復活模式：不結束
     if(!win) this._addTrauma(0.85); // 出局：大級震動
     (this.pours||[]).forEach(pp=>{ if(pp.icon&&pp.icon.scene) pp.icon.destroy(); }); this.pours=[]; this.drops=[];
@@ -4166,11 +4235,11 @@ class GameScene extends Phaser.Scene {
     const fireImmune=ae.foil>0||glideOn||(this.ultState&&this.ultState.type==='tofu');
     const heatCap=(this.ultState&&this.ultState.heatMax)?this.ultState.heatMax:(shieldOn?130:100);
     if(this.onFire(this.p.x,this.p.y)){
-      if(!fireImmune) this.heat=Math.min(heatCap,this.heat+26*mult*(this.charData.fireMult||1.0)*dt); // 火更燙：15→26
+      if(!fireImmune){ this.heat=Math.min(heatCap,this.heat+26*mult*(this.charData.fireMult||1.0)*dt); this._lastHeatSrc='站在火焰圈裡'; } // 火更燙：15→26
       this.sizzleTimer-=dt;
       if(this.sizzleTimer<=0&&!fireImmune){this.playSound('sizzle');this.sizzleTimer=0.6;}
     } else this.heat=Math.min(heatCap,this.heat+(this.fx.passiveHeat?0.7:0.2)*dt); // 待著會熟：一局 60 秒約 +42%
-    if(this.heatMode==='ring'&&!fireImmune){ const _rh=this._ringHeat(this.p.x,this.p.y); if(_rh>0) this.heat=Math.min(heatCap,this.heat+_rh*mult*dt); }
+    if(this.heatMode==='ring'&&!fireImmune){ const _rh=this._ringHeat(this.p.x,this.p.y); if(_rh>=6) this._lastHeatSrc='待在中心高溫區'; if(_rh>0) this.heat=Math.min(heatCap,this.heat+_rh*mult*dt); }
     if(ae.toxic>0) this.heat=Math.min(heatCap,this.heat+18*dt);
     if(shieldOn){
       this.enemies.forEach(e=>{
@@ -4258,6 +4327,7 @@ class GameScene extends Phaser.Scene {
     this._updateBurn(dt);
     this._statusNotices();
     this._updateGhosts(dt);
+    this._watchAiOuts();
     this._drawScoreboard(dt);
 
     // 火焰狀態機：cooldown → warning → active → dying → cooldown
@@ -4665,7 +4735,7 @@ class GameScene extends Phaser.Scene {
     if(this.enemyCC.slow>0)this.enemyCC.slow=Math.max(0,this.enemyCC.slow-dt);
     this.ultOrbTimer-=dt;
     const _orbCap=this.fx.ultOrb?2:99, _orbLive=this.ultOrbs.length;
-    if(this.ultOrbTimer<=0&&this.ultCharge<this.ultMax&&_orbLive<_orbCap){this.spawnUltOrb();this.ultOrbTimer=this.fx.ultOrb?3+Math.random()*2:5+Math.random()*3;}
+    if(this.ultOrbTimer<=0&&this.ultCharge<this.ultMax&&_orbLive<_orbCap){this.spawnUltOrb();this.ultOrbTimer=this.fx.ultOrb?7:5+Math.random()*3;} // 能量球：每 7 秒一顆（放慢節奏）
     this.updateUltOrbs(dt);
     if(!this.centerOrb&&!this.fx.ultOrb){this.centerOrbTimer-=dt;if(this.centerOrbTimer<=0){this.spawnCenterOrb();this.centerOrbTimer=45;}}
     this.updateCenterOrb(dt);
