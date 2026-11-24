@@ -207,7 +207,7 @@ const IMG = {
     <div class="lobby-tagline">你是烤盤上的食材——把別人推下去，別讓自己被烤熟！</div>
     <div class="lobby-chips"><span>💥 互推大亂鬥</span><span>🔥 求生</span><span>👥 1–8 人</span><span>⏱ 一局約 1 分鐘</span></div>
     <div class="lobby-rules">
-      <div><b>🎯 目標</b>撐到時間結束，或把其他食材全部推出烤盤</div>
+      <div><b>🎯 目標</b>拿最高分！撞中 +1、把人推出局 +3、活到時間結束 +3</div>
       <div><b>💥 互推</b>按 <kbd>A</kbd> 衝撞，把對手撞出烤盤邊緣</div>
       <div><b>⛔ 出局</b>掉出烤盤（被推出去、踩進破洞）或熟度到 100%</div>
       <div><b>🌡 熟度</b>站在火裡、待太久、被別人撞都會變熟；撞別人、推掉對手、站進 ❄ 冷卻圈可以降溫</div>
@@ -1581,6 +1581,11 @@ class GameScene extends Phaser.Scene {
     this._resultShown=false; this._leaving=false; this._burn=0; this._bumpT=0;
     this.pours=[]; this.drops=[]; this.zones=[]; this._zoneMul=1; this._fireMul=1; // 醬油/檸檬、火力全開
     this.cool=null; this._coolT=3; this._coolNext=null; this._inCoolPrev=false; // 冷卻圈：開局 3 秒後出現
+    this.score=0; this._scoreFinal=false; this._sbT=0; this._sbTxt=null; this._pHitBy=null; // 計分（重開時清掉上一局的排行榜物件）
+    // 重開（R / 再玩一次）時，上一局留下的 UI 參照都清掉，避免去操作已銷毀的物件
+    this._tipCur=null; this._bannerObjs=null; this._bannerUntil=0; this._noticeTxt=null; this._noticeTw=null;
+    this.fork=null; this.bigChef=null; this._forkDim=null; this.forkFx=null; this.ovLayer=null; this.ovPow=null;
+    this.burnLayer=null; this.vignette=null; this.zoneLayer=null; this.pourLayer=null; this.ringLayer=null; this.ringLbl=null; this._aePrev=null;
     this.tweens.timeScale=1; this.time.paused=false; this._introOpen=false; this._hitStop=0; this.pAnim=this._mkAnim(); this.pv={x:0,y:0}; // 頓幀重置 + 玩家動態狀態
     this.forkTimer=4; this.fork=null;
     this.activeEffects={foil:0,garlic:0,slowpow:0,pepBoost:0,stun:0,toxic:0,oilSlick:0,slip:0,sauceCharge:0,pepperVision:0,soySlow:0,lemonFast:0,
@@ -1725,6 +1730,7 @@ class GameScene extends Phaser.Scene {
     const ts=(s,col='#ffcc66')=>({fontSize:s+'px',color:col,fontFamily:'sans-serif'});
     this.add.rectangle(0,0,320,100,0x000000,0.65).setOrigin(0,0);
     this.add.text(12,8,c.name,ts(14,'#ffaa44'));
+    this.scoreTxt=this.add.text(200,6,'🏆 0 分',ts(16,'#ffd84a')).setDepth(2);
     this.add.text(12,28,'熟度',ts(13));
     this.heatBarBg=this.add.rectangle(62,36,220,16,0x441100).setOrigin(0,0.5);
     // 黃金熟度區（50-80%）標記，畫在熱度條底下
@@ -2187,6 +2193,47 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+
+  // ══ 計分 ══════════════════════════════════════════════════
+  // who = null 代表玩家，否則是 AI 物件；ko = 是否為擊落
+  _addScore(who,n,x,y,ko){
+    if(who===null){
+      this.score=(this.score||0)+n;
+      if(this.scoreTxt&&this.scoreTxt.scene){ this.scoreTxt.setText('🏆 '+this.score+' 分'); this.tweens.add({targets:this.scoreTxt,scaleX:1.3,scaleY:1.3,duration:90,yoyo:true}); }
+      if(x!==undefined&&x!==null) this._floatTxt(x+22,y-62,'+'+n+' 分','#ffe066');
+    } else {
+      who.score=(who.score||0)+n;
+      if(ko) who.sKos=(who.sKos||0)+1; else who.sHits=(who.sHits||0)+1;
+    }
+  }
+  // 結算分數（只算一次）：活到最後的人 +3
+  _finalScores(win){
+    if(!this._scoreFinal){
+      this._scoreFinal=true;
+      if(win) this.score=(this.score||0)+3;
+      this.enemies.forEach(e=>{ if(e.alive) e.score=(e.score||0)+3; });
+    }
+    const st=this.stats||{hits:0,kos:0};
+    const board=[{name:(this.charData&&this.charData.name)||'你',score:this.score||0,hits:st.hits||0,kos:st.kos||0,alive:!!win,me:true}];
+    this.enemies.forEach(e=>board.push({name:e.label,score:e.score||0,hits:e.sHits||0,kos:e.sKos||0,alive:!!e.alive,me:false}));
+    board.sort((a,b)=>(b.score-a.score)||((b.alive?1:0)-(a.alive?1:0))||((b.me?1:0)-(a.me?1:0)));
+    return board;
+  }
+  // 右側即時排行榜（烤盤外的右邊空白）
+  _drawScoreboard(dt){
+    this._sbT=(this._sbT||0)-dt; if(this._sbT>0) return; this._sbT=0.25;
+    if(!this._sbTxt||!this._sbTxt[0]||!this._sbTxt[0].scene){ // 上一局的物件已被銷毀 → 重建
+      this._sbTxt=[];
+      this._sbTitle=this.add.text(W-10,112,'排行',{fontSize:'13px',color:'#ffcc66',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:3}).setOrigin(1,0.5).setDepth(30);
+      for(let i=0;i<=this.enemies.length;i++) this._sbTxt.push(this.add.text(W-10,134+i*21,'',{fontSize:'13px',color:'#ffffff',fontFamily:'sans-serif',stroke:'#000',strokeThickness:3}).setOrigin(1,0.5).setDepth(30));
+    }
+    const list=[{name:'你',score:this.score||0,alive:this.alive,me:true}];
+    this.enemies.forEach(e=>list.push({name:e.label,score:e.score||0,alive:e.alive,me:false}));
+    list.sort((a,b)=>(b.score-a.score)||((b.alive?1:0)-(a.alive?1:0)));
+    list.forEach((r,i)=>{ const t=this._sbTxt[i]; if(!t) return;
+      t.setText((i+1)+'. '+r.name+(r.alive?'':'✖')+'  '+r.score).setColor(r.me?'#ffe066':(r.alive?'#ffffff':'#888888')).setFontStyle(r.me?'bold':'normal'); });
+  }
+
   // ══ 手感 2：碰撞、燃燒、事件橫幅、狀態提示 ═══════════════════════
   // 身體互撞：有接近速度才觸發（避免貼著不動一直震），冷卻 0.35 秒
   _bodyBump(e,nx,ny){
@@ -2459,7 +2506,7 @@ class GameScene extends Phaser.Scene {
     // 每條規則各佔一行，避免句子在奇怪的地方斷行
     const _r3=[this.fx&&this.fx.heatXfer?'撞到人會把熱傳給他（你 -15%、他 +15%）':'',
                this.fx&&this.fx.passiveHeat?'待著不動也會慢慢熟！':''].filter(Boolean).join('；');
-    const _rules='目標：撐到時間結束，或把其他食材全部推出烤盤。\n掉出烤盤、或熟度到 100% 就出局。'+(_r3?'\n'+_r3:'');
+    const _rules='目標：拿最高分！撞中 +1、把人推出局 +3、活到最後 +3。\n掉出烤盤、或熟度到 100% 就出局。'+(_r3?'\n'+_r3:'');
     const _gt=T(PX,y-10,_rules,16,'#ffffff',{align:'center',lineSpacing:6}).setOrigin(0.5,0);
     // 按鍵
     y+=_gt.height+16;
@@ -3339,12 +3386,14 @@ class GameScene extends Phaser.Scene {
       const _byAI=e._lastHitBy&&e._lastHitBy!=='player'&&this.time.now-(e._lastHitT||0)<3000;
       if(_byAI){
         this.showPop(e.label+' 被 '+e._lastHitBy+' 推下去了！');
+        { const _k=this.enemies.find(x=>x.label===e._lastHitBy); if(_k) this._addScore(_k,3,null,null,true); }
         if(this._checkWinCondition()) this.time.delayedCall(600,()=>this.endGame(true));
         return;
       }
       this.showPop(e.label+' 掉落！');
       if(this.stats) this.stats.kos++;
-      this._notice('🏆 擊落！熟度 -25% 🧊','#8fe8ff');
+      this._addScore(null,3,null,null,true);
+      this._notice('🏆 擊落！+3 分　熟度 -25% 🧊','#8fe8ff');
       this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'-25%','#8fe8ff');
 
       // ── 正向循環：擊殺 → 多汁排熱 ─────────────────────────
@@ -3431,14 +3480,27 @@ class GameScene extends Phaser.Scene {
     if(this._resultShown) return; this._resultShown=true;
     const title=this.statusTxt.text, reason=this.subTxt.text;
     this.statusTxt.setText(''); this.subTxt.setText('');
-    const D=80, PX=W/2, PY=H/2, PW=560, PH=300;
-    this.add.rectangle(W/2,H/2,W,H,0x000000,0.55).setDepth(D);
-    this.add.rectangle(PX,PY,PW,PH,0x1a0d05,0.97).setStrokeStyle(3,win?0x44ff88:0xff5533).setDepth(D);
-    this.add.text(PX,PY-PH/2+46,title,{fontSize:'40px',color:win?'#44ff88':'#ff5544',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:6}).setOrigin(0.5).setDepth(D+1);
-    if(reason) this.add.text(PX,PY-PH/2+90,reason,{fontSize:'18px',color:'#ffcfb0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1);
+    const board=this._finalScores(win), me=board.find(r=>r.me), rank=board.indexOf(me)+1;
+    const D=80, PX=W/2, PY=H/2, PW=600, PH=470;
+    this.add.rectangle(W/2,H/2,W,H,0x000000,0.6).setDepth(D);
+    this.add.rectangle(PX,PY,PW,PH,0x1a0d05,0.97).setStrokeStyle(3,rank===1?0xffd84a:(win?0x44ff88:0xff5533)).setDepth(D);
+    const rankTxt=rank===1?'🏆 第 1 名！':'第 '+rank+' 名';
+    this.add.text(PX,PY-PH/2+44,rankTxt,{fontSize:'40px',color:rank===1?'#ffd84a':'#ffffff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:6}).setOrigin(0.5).setDepth(D+1);
+    this.add.text(PX,PY-PH/2+88,(title||'')+(reason?'　'+reason:''),{fontSize:'18px',color:win?'#88ffaa':'#ffb0a0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1);
+    // 排行榜（前 5 名；你不在前 5 就多列一行）
+    const rows=board.slice(0,5); if(rank>5) rows.push(me);
+    rows.forEach((r,i)=>{
+      const y=PY-PH/2+130+i*30, pos=board.indexOf(r)+1;
+      const col=r.me?'#ffe066':(r.alive?'#ffffff':'#999999');
+      if(r.me){ const hl=this.add.rectangle(PX,y,PW-50,28,0xffcc44,0.15).setDepth(D); }
+      this.add.text(PX-PW/2+40,y,pos+'.',{fontSize:'18px',color:col,fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(D+1);
+      this.add.text(PX-PW/2+74,y,r.name+(r.me?'（你）':'')+(r.alive?'':' ✖'),{fontSize:'18px',color:col,fontFamily:'sans-serif',fontStyle:r.me?'bold':'normal'}).setOrigin(0,0.5).setDepth(D+1);
+      this.add.text(PX+40,y,'撞中 '+r.hits+'・擊落 '+r.kos+(r.alive?'・存活 +3':''),{fontSize:'14px',color:'#c9b8a0',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1);
+      this.add.text(PX+PW/2-40,y,r.score+' 分',{fontSize:'19px',color:col,fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(1,0.5).setDepth(D+1);
+    });
     const st=this.stats||{pushes:0,hits:0,kos:0,pushed:0};
-    this.add.text(PX,PY-12,'推擊 '+st.pushes+' 次（撞中 '+st.hits+'）　擊落 '+st.kos+'　被推 '+st.pushed+' 次',
-      {fontSize:'19px',color:'#ffe9c4',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+1);
+    this.add.text(PX,PY+PH/2-112,'你：推擊 '+st.pushes+' 次（撞中 '+st.hits+'）　擊落 '+st.kos+'　被推 '+st.pushed+' 次',
+      {fontSize:'15px',color:'#ffe9c4',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1);
     const go=(what)=>{
       if(this._leaving) return; this._leaving=true;
       if(what==='again') this.scene.restart();
@@ -3672,6 +3734,7 @@ class GameScene extends Phaser.Scene {
           } else {
           this._hitFeel({x:(this.p.x+e.x)/2,y:(this.p.y+e.y)/2,dx:mx,dy:my,power:charBst*resist,anim:e.anim});
           this._xferHeat(null,e); e._lastHitBy='player'; e._lastHitT=this.time.now; if(this.stats) this.stats.hits++;
+          this._addScore(null,1,e.x,e.y);
           this._charImpact(this.pAnim,mx,my,0.45); this.pAnim.flash=0; // 攻擊方也小震一下（不閃白）
           if(charBst>1.8)this.showPop('🔥 脆了！飛出去！');
           else if(resist<1)this.showPop('💪 撐住了！');
@@ -3882,6 +3945,7 @@ class GameScene extends Phaser.Scene {
     this._applyFlash(this.playerSprite,this.pAnim,dt);
     this._updateBurn(dt);
     this._statusNotices();
+    this._drawScoreboard(dt);
 
     // 火焰狀態機：cooldown → warning → active → dying → cooldown
     this.firePts.forEach(f=>{
@@ -4137,11 +4201,12 @@ class GameScene extends Phaser.Scene {
             this.tweens.add({targets:this.p,
               x:this.p.x+pnx*pForce*cBst*_kRes*_juicyRes,y:this.p.y+pny*pForce*cBst*_kRes*_juicyRes,
               duration:240,ease:'Cubic.easeOut',
-              onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this.subTxt.setText('被推落！');this.endGame(false);}else{this._spawnCollisionOil(this.p.x,this.p.y);
+              onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this._addScore(e,3,null,null,true);this.subTxt.setText('被 '+e.label+' 推落！');this.endGame(false);}else{this._spawnCollisionOil(this.p.x,this.p.y);
                 if(this.onFire(this.p.x,this.p.y)){ this.heat=Math.min(100,this.heat+15); this._notice('🔥 被推進火裡！熟度 +15%','#ff6a3a'); this._addTrauma(0.4); }}}});
             this.cameras.main.shake(120,0.004+cBst*_juicyRes*0.005);
             this._hitFeel({x:(this.p.x+e.x)/2,y:(this.p.y+e.y)/2,dx:pnx,dy:pny,power:cBst*_juicyRes,anim:this.pAnim});
             this._xferHeat(e,null); if(this.stats) this.stats.pushed++;
+            this._addScore(e,1); this._pHitBy=e; this._pHitT=this.time.now;
             this._charImpact(e.anim,pnx,pny,0.4); e.anim.flash=0;
             if(this.activeEffects.juicy>0) this.showPop('💧 多汁彈開！');
             else if(cBst>1.8) this.showPop('🔥 脆了！被 '+e.label+' 推飛！');
@@ -4153,7 +4218,7 @@ class GameScene extends Phaser.Scene {
             // AI 互推：碰撞點也噴油
             this._spawnCollisionOil((e.x+eRef.x)/2,(e.y+eRef.y)/2);
             this._hitFeel({x:(e.x+eRef.x)/2,y:(e.y+eRef.y)/2,dx:pnx,dy:pny,power:0.5,anim:eRef.anim,freeze:0});
-            this._xferHeat(e,eRef); eRef._lastHitBy=e.label; eRef._lastHitT=this.time.now;
+            this._xferHeat(e,eRef); eRef._lastHitBy=e.label; eRef._lastHitT=this.time.now; this._addScore(e,1);
             this.tweens.add({targets:eRef,
               x:eRef.x+pnx*pForce*cBst,y:eRef.y+pny*pForce*cBst,
               duration:240,ease:'Cubic.easeOut',
