@@ -404,7 +404,7 @@ const FX_LIST=[
   {k:'heatKnock',   n:'💥 越熟飛越遠', d:'越熟被推得越遠',     t:'被推飛的距離看自己的熟度：0% 只飛 0.55 倍，100% 飛 2.55 倍。'},
   {k:'heatPower',   n:'🔥 越熟推越大力', d:'自己越熟推力越大', t:'自己熟度越高，推別人的力量越大（最多 2 倍）。跟「撞人傳熱」會互相抵銷，預設關閉。'},
   {k:'clash',       n:'⚔ 對撞比推力', d:'正面互撞：推力大的贏', t:'你衝刺撞上正在衝過來的對手時比推力（💪 數字）：大的把對方撞飛，小的被彈開，差不多就兩邊一起彈開。'},
-  {k:'respawn',     n:'❤ 三條命計分賽', d:'每人 3 條命、比分數', t:'出局掉 1 條命，3 秒後回場（2 秒無敵）。命用完變鬼魂：沿著烤盤外圈走、按 A 丟炭火彈；炸下去一個人就復活一次。撞到人 +1、撞出去 +3（🎯 快熟的人再 +2）、活到最後 +3，分數最高的人贏。'},
+  {k:'respawn',     n:'❤ 三條命計分賽', d:'每人 3 條命、比分數', t:'出局掉 1 條命，3 秒後回場（2 秒無敵）。命用完變鬼魂：沿著烤盤外圈走、按 A 丟炭火彈；炸下去一個人就復活一次。撞到人 +0.5、撞出去 +3（🎯 快熟的人再 +2）、活到最後 +3，分數最高的人贏。'},
   {k:'stillBurn',   n:'🥩 站著不動會焦', d:'停著不動越烤越快', t:'肉貼在烤盤上不動就會一直被烤：停下超過 1.5 秒，熟度上升明顯變快（不在火裡時約 3 倍）、頭上冒煙。動一動就恢復。'},
   {k:'ultOrb',      n:'⚡ 大絕能量球', d:'吃 3 顆才能放大絕', t:'開局大絕是空的。場上每 7 秒冒出一顆能量球，吃 1 顆 +1 格，集滿 3 格才能按 D 發動。AI 也會來搶。'},
 ];
@@ -2397,8 +2397,8 @@ class GameScene extends Phaser.Scene {
       return true;
     });
     // 地上的醬油 / 檸檬汁：畫出來 + 判斷有沒有踩到
-    let pSoy=false, pLemon=false;
-    this.enemies.forEach(e=>{ e._inSoy=false; });
+    let pSoy=false, pLemon=false, pHot=false;
+    this.enemies.forEach(e=>{ e._inSoy=false; e._inHot=false; });
     const t=this.time.now*0.001;
     this.zones=this.zones.filter(z=>{
       z.life-=dt; z.age+=dt;
@@ -2416,20 +2416,23 @@ class GameScene extends Phaser.Scene {
         zg.fillStyle(0xffffff,0.7*fade*tw); zg.fillCircle(z.x-r*0.35,z.y-r*0.3,2.2);
       }
       if(z.age<0.32){ const a=1-z.age/0.32; zg.lineStyle(2,z.kind==='soy'?0x6a3a18:0xfff3a0,a); zg.strokeCircle(z.x,z.y,z.r*(1+z.age*3)); } // 落地濺開
-      if(z.owner!=='player'&&Math.hypot(this.p.x-z.x,this.p.y-z.y)<r+6){ if(z.kind==='soy') pSoy=true; else pLemon=true; }
+      if(z.owner!=='player'&&Math.hypot(this.p.x-z.x,this.p.y-z.y)<r+6){ if(z.kind==='soy'){ pSoy=true; if(z.owner) pHot=true; } else pLemon=true; }
       this.enemies.forEach(e=>{
         if(!e.alive||z.owner===e.label) return;
-        if(Math.hypot(e.x-z.x,e.y-z.y)<r+6){ if(z.kind==='soy') e._inSoy=true; else e._lemonT=1.5; }
+        if(Math.hypot(e.x-z.x,e.y-z.y)<r+6){ if(z.kind==='soy'){ e._inSoy=true; if(z.owner) e._inHot=true; } else e._lemonT=1.5; }
       });
       return true;
     });
     const ae=this.activeEffects;
     if(pSoy) ae.soySlow=Math.max(ae.soySlow||0,0.3);   // 醬油：在裡面（＋離開後 0.3 秒）變慢
+    // 道具醬油（有人放的）：滾燙 → 更黏、每秒 +8% 熟度
+    if(pHot&&this.alive&&!this._pOut&&!(ae.foil>0)){ this.heat=Math.min(100,this.heat+8*dt); this._lastHeatSrc='踩到滾燙醬油'; }
+    this.enemies.forEach(e=>{ if(e._inHot&&e.alive&&!(e.activeEffects&&e.activeEffects.foil>0)) e.heat=Math.min(100,(e.heat||0)+8*dt); });
     if(pLemon) ae.lemonFast=Math.max(ae.lemonFast||0,1.5); // 檸檬：踩到後 1.5 秒變快
-    this._zoneMul=(ae.soySlow>0?0.45:1)*(ae.lemonFast>0?1.5:1);
+    this._zoneMul=(ae.soySlow>0?(pHot?0.3:0.45):1)*(ae.lemonFast>0?1.5:1);
     this.enemies.forEach(e=>{
       e._lemonT=Math.max(0,(e._lemonT||0)-dt);
-      e._zoneMul=(e._inSoy?0.45:1)*(e._lemonT>0?1.5:1);
+      e._zoneMul=(e._inSoy?(e._inHot?0.3:0.45):1)*(e._lemonT>0?1.5:1);
     });
   }
 
@@ -2735,6 +2738,7 @@ class GameScene extends Phaser.Scene {
   // who = null 代表玩家，否則是 AI 物件；ko = 是否為擊落
   _addScore(who,n,x,y,ko,vh){
     if(who===null&&this._pOut) return; if(who&&who.isGhost) return; // 鬼魂不能得分
+    if(!ko&&n===1&&this.fx&&this.fx.respawn) n=0.5; // 三條命：撞到人 +0.5（亂撞不會比挑時機好）
     if(ko&&this.fx&&this.fx.respawn){ // 擊落獎勵：🎯 快熟的人 +2、自己熟度 -30%、大絕 +1
       const tgtBonus=(vh||0)>=70; if(tgtBonus) n+=2;
       if(who===null){
@@ -3235,7 +3239,7 @@ class GameScene extends Phaser.Scene {
     // 每條規則各佔一行，避免句子在奇怪的地方斷行
     const _r3=[this.fx&&this.fx.respawn?'每人 3 條命；命用完變鬼魂丟炭火彈（炸下去一個人可復活一次）':'',this.fx&&this.fx.heatXfer?'撞到人會把熱傳給他（你 -5%、他 +10%）':'',this.fx&&this.fx.stillBurn?'站著不動會越烤越快':'',
                this.fx&&this.fx.passiveHeat?'待著不動也會慢慢熟！':''].filter(Boolean).join('；');
-    const _rules='目標：拿最高分！撞中 +1、把人推出局 +3（🎯 快熟的人再 +2）、活到最後 +3。\n掉出烤盤、或熟度到 100% 就出局。'+(_r3?'\n'+_r3:'');
+    const _rules='目標：拿最高分！撞中 +'+(this.fx&&this.fx.respawn?'0.5':'1')+'、把人推出局 +3（🎯 快熟的人再 +2）、活到最後 +3。\n掉出烤盤、或熟度到 100% 就出局。'+(_r3?'\n'+_r3:'');
     const _gt=T(PX,y-10,_rules,16,'#ffffff',{align:'center',lineSpacing:6}).setOrigin(0.5,0);
     // 按鍵
     y+=_gt.height+16;
@@ -4003,8 +4007,8 @@ class GameScene extends Phaser.Scene {
       : this.add.text(x,y,tp.label,{fontSize:'12px',color:tp.good?'#88ffcc':'#ff8888',backgroundColor:tp.good?'#0a3322':'#440000',padding:{x:3,y:2}}).setOrigin(0.5).setDepth(16);
     this.mapItems.push({x,y,type:tp.type,good:tp.good,dur:tp.dur,img,gfx,life:12});
     const _IT={ice:['❄️ 冰塊','走過去撿：熟度 -42%，加速 5 秒'],foil:['◎ 鋁箔紙','走過去撿：10 秒內被推會反彈回去'],
-      garlic:['★ 大蒜','走過去撿：推力 ×1.7，最後 1 秒爆開'],sauce:['🍶 醬油','走過去撿：按 A 在地上放黏人陷阱'],
-      pepper:['🌶 胡椒粉','走過去撿：撞到人會噴辣粉讓他變慢']};
+      garlic:['★ 大蒜','走過去撿：推力 ×1.7、身體變大，最後 1 秒爆開'],sauce:['🍶 滾燙醬油','走過去撿：按 A 灑一大攤，踩到的人又慢又燙（每秒 +8%）'],
+      pepper:['🌶 胡椒粉','走過去撿：15 秒內撞到人 → 他打噴嚏定住 1 秒、+8% 熟度']};
     if(_IT[tp.type]) this._tip('item_'+tp.type,x,y,_IT[tp.type][0],_IT[tp.type][1]);
   }
 
@@ -4013,8 +4017,8 @@ class GameScene extends Phaser.Scene {
     if(item.type==='ice')   {this.heat=Math.max(0,this.heat-42); ae.iceBoost=5; this.showPop('❄️ 冰塊！冷卻 -42%＋加速 5秒！'); this.playSound('good');}
     if(item.type==='foil')  {ae.foil=item.dur+6;  this.showPop('◎ 鋁箔紙！10 秒盔甲！推不動！'); this.playSound('good');}
     if(item.type==='garlic'){ae.garlic=item.dur+2; this._garlicAoeDone=false; this.showPop('★ 大蒜！推力 ×1.7！最後 1 秒會爆發！'); this.playSound('good');}
-    if(item.type==='sauce') {ae.sauceCharge=5.0; this.showPop('🍶 醬油！按 A 佈陣！5 秒後自動！'); this.playSound('good');}
-    if(item.type==='pepper'){ae.pepBoost=15.0; this.showPop('🌶 胡椒粉！撞到人會散出辣粉！15 秒！'); this.playSound('good');}
+    if(item.type==='sauce') {ae.sauceCharge=5.0; this.showPop('🍶 滾燙醬油！按 A 灑出去（5 秒後自動）：踩到又慢又燙！'); this.playSound('good');}
+    if(item.type==='pepper'){ae.pepBoost=15.0; this.showPop('🌶 胡椒粉！15 秒內撞到人 → 他打噴嚏定住 1 秒！'); this.playSound('good');}
   }
 
   applyItemToEnemy(e, item){
@@ -4027,6 +4031,10 @@ class GameScene extends Phaser.Scene {
   }
 
   _scatterPepper(cx,cy,fromAI){
+    // 噴嚏：附近的人定住 1 秒、熟度 +8%（胡椒不再只是減速）
+    if(fromAI){ if(this.alive&&!this._pOut&&Math.hypot(this.p.x-cx,this.p.y-cy)<100){ this.activeEffects.stun=Math.max(this.activeEffects.stun||0,1.0); this.heat=Math.min(100,this.heat+8); this._floatTxt(this.p.x,this.p.y-60,'🤧 哈啾！定住 1 秒','#ffd080'); } }
+    else this.enemies.forEach(e=>{ if(!e.alive||e._ghostT>0||Math.hypot(e.x-cx,e.y-cy)>=100) return;
+      e.stunTimer=Math.max(e.stunTimer||0,1.0); e.heat=Math.min(100,(e.heat||0)+8); this._floatTxt(e.x,e.y-50,'🤧 哈啾！','#ffd080'); });
     for(let i=0;i<22;i++){
       const ang=Math.random()*Math.PI*2;
       const spd=110+Math.random()*160;
@@ -4064,7 +4072,7 @@ class GameScene extends Phaser.Scene {
   }
 
   _deploySaucePool(ownerId,px,py){
-    if(ownerId!=='player') this._tip('saucePool',px,py,'🍶 醬油陷阱','別人放的黏人陷阱，踩到速度變很慢');
+    if(ownerId!=='player') this._tip('saucePool',px,py,'🍶 醬油陷阱','別人灑的滾燙醬油：踩到又慢又燙（每秒 +8%）');
     // 醬油真的「灑」出去：液滴飛出、落地攤開成醬油灘（放的人自己不受影響）
     for(let _si=0;_si<24;_si++){
       const _ang=_si/24*Math.PI*2+Math.random()*0.3, _d=30+Math.random()*100; // 灑開半徑 98→130
