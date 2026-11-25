@@ -2416,16 +2416,19 @@ class GameScene extends Phaser.Scene {
         zg.fillStyle(0xffffff,0.7*fade*tw); zg.fillCircle(z.x-r*0.35,z.y-r*0.3,2.2);
       }
       if(z.age<0.32){ const a=1-z.age/0.32; zg.lineStyle(2,z.kind==='soy'?0x6a3a18:0xfff3a0,a); zg.strokeCircle(z.x,z.y,z.r*(1+z.age*3)); } // 落地濺開
-      if(z.owner!=='player'&&Math.hypot(this.p.x-z.x,this.p.y-z.y)<r+6){ if(z.kind==='soy'){ pSoy=true; if(z.owner) pHot=true; } else pLemon=true; }
+      if(z.owner!=='player'&&Math.hypot(this.p.x-z.x,this.p.y-z.y)<r+6){ if(z.kind==='soy'){ pSoy=true; if(z.owner){ pHot=true; this._soyBy=z.owner; this._soyT=this.time.now; } } else pLemon=true; }
       this.enemies.forEach(e=>{
         if(!e.alive||z.owner===e.label) return;
-        if(Math.hypot(e.x-z.x,e.y-z.y)<r+6){ if(z.kind==='soy'){ e._inSoy=true; if(z.owner) e._inHot=true; } else e._lemonT=1.5; }
+        if(Math.hypot(e.x-z.x,e.y-z.y)<r+6){ if(z.kind==='soy'){ e._inSoy=true; if(z.owner){ e._inHot=true; e._soyBy=z.owner; e._soyT=this.time.now; } } else e._lemonT=1.5; }
       });
       return true;
     });
     const ae=this.activeEffects;
     if(pSoy) ae.soySlow=Math.max(ae.soySlow||0,0.3);   // 醬油：在裡面（＋離開後 0.3 秒）變慢
     // 道具醬油（有人放的）：滾燙 → 更黏、每秒 +8% 熟度
+    this._inHotSoy=pHot&&this.alive&&!this._pOut;
+    if(this._inHotSoy&&this.dashState&&this.dashState.active) this.dashState.active=false; // 黏住：衝刺停下來
+    this.enemies.forEach(e=>{ if(e._inHot&&e.charging&&!e.remote){ e.charging=false; e.vx*=0.3; e.vy*=0.3; } });
     if(pHot&&this.alive&&!this._pOut&&!(ae.foil>0)){ this.heat=Math.min(100,this.heat+8*dt); this._lastHeatSrc='踩到滾燙醬油'; }
     this.enemies.forEach(e=>{ if(e._inHot&&e.alive&&!(e.activeEffects&&e.activeEffects.foil>0)) e.heat=Math.min(100,(e.heat||0)+8*dt); });
     if(pLemon) ae.lemonFast=Math.max(ae.lemonFast||0,1.5); // 檸檬：踩到後 1.5 秒變快
@@ -2547,6 +2550,18 @@ class GameScene extends Phaser.Scene {
         onComplete:()=>{ if(bg.scene) bg.destroy(); if(tx.scene) tx.destroy(); }});
     }catch(err){}
   }
+
+  // 醬油功勞：踩過 X 的醬油、4 秒內出局 → 沒人推＝X 拿擊落（+3，🎯 再 +2）；被別人推＝推的人拿擊落、X 拿助攻 +1
+  _soyCredit(owner,t,pusher,vh,victimName){
+    if(!owner||!(this.fx&&this.fx.respawn)||this.time.now-(t||0)>4000) return;
+    const who=owner==='player'?null:this.enemies.find(e=>e.label===owner);
+    if(who===undefined) return;
+    const name=owner==='player'?'你':owner;
+    if(pusher===owner) return; // 自己丟醬油又自己推：已經拿過擊落
+    if(pusher){ this._addScore(who,1,null,null,false,0,true); this._pushFeed('🍶 '+name+' 的醬油助攻 +1（'+victimName+'）',owner==='player'?'#ffe066':'#e0a868');
+      if(who===null) this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'🍶 助攻 +1','#e0a868'); }
+    else { this._addScore(who,3,null,null,true,vh); if(who===null&&this.stats) this.stats.kos++; this._pushFeed('🍶 '+name+' 的醬油擊落 '+victimName+((vh||0)>=70?' +5':' +3'),owner==='player'?'#ffe066':'#e0a868'); }
+  }
   // ══ 三條命 + 鬼魂炭火彈 ══════════════════════════════════════
   _refreshScoreTxt(){
     if(!this.scoreTxt||!this.scoreTxt.scene) return;
@@ -2622,6 +2637,7 @@ class GameScene extends Phaser.Scene {
   _onEnemyOut(e,i){
     e.deaths=(e.deaths||0)+1; e.lives=Math.max(0,(e.lives??3)-1);
     this._bombCredit(e._bombBy,e._bombT); e._bombBy=null;
+    { const pushed=e._koByT&&this.time.now-e._koByT<300; this._soyCredit(e._soyBy,e._soyT,pushed?(e._lastHitBy==='player'?'player':e._lastHitBy):null,e.heat,e.label); e._soyBy=null; e._koByT=0; }
     if(e.lives>0){ e._respawnAt=this.time.now+3000; return; }
     e.isGhost=true; e._gp=this._rimProject(e.x,e.y); e._gcd=2; e._respawnAt=0;
     this._pushFeed('👻 '+e.label+'　命用完，變成鬼魂','#aac8ff');
@@ -2705,12 +2721,13 @@ class GameScene extends Phaser.Scene {
     const on=!!(this.fx&&this.fx.respawn);
     const g=this._lfLayer&&this._lfLayer.scene?this._lfLayer:(this._lfLayer=this.add.graphics().setDepth(8));
     g.clear();
-    const ents=[{x:this.p.x,y:this.p.y,h:this.heat,ok:this.alive&&!this._pOut,lv:this.lives,st:this._stillT||0,gh:this._pOut,n:'你'},
-      ...this.enemies.map(e=>({x:e.x,y:e.y,h:e.heat||0,ok:e.alive,lv:e.lives,st:e._stillT||0,gh:e.isGhost,n:e.label}))];
+    const ents=[{x:this.p.x,y:this.p.y,h:this.heat,ok:this.alive&&!this._pOut,lv:this.lives,st:this._stillT||0,gh:this._pOut,n:'你',sk:this._inHotSoy},
+      ...this.enemies.map(e=>({x:e.x,y:e.y,h:e.heat||0,ok:e.alive,lv:e.lives,st:e._stillT||0,gh:e.isGhost,n:e.label,sk:e._inHot}))];
     if(!this._lfTxt||!this._lfTxt[0]||!this._lfTxt[0].tg.scene){
       this._lfTxt=ents.map(()=>({tg:this.add.text(0,0,'🎯',{fontSize:'18px'}).setOrigin(0.5).setDepth(31),
         hp:this.add.text(0,0,'',{fontSize:'11px',color:'#ff5a6a',stroke:'#000000',strokeThickness:3}).setOrigin(0.5).setDepth(31),
-        sm:this.add.text(0,0,'💨滋滋…',{fontSize:'12px',color:'#dddddd',fontFamily:'sans-serif',stroke:'#000000',strokeThickness:3}).setOrigin(0.5).setDepth(31)}));
+        sm:this.add.text(0,0,'💨滋滋…',{fontSize:'12px',color:'#dddddd',fontFamily:'sans-serif',stroke:'#000000',strokeThickness:3}).setOrigin(0.5).setDepth(31),
+        sk:this.add.text(0,0,'🍶 黏住了！+8%/秒',{fontSize:'12px',color:'#f0c080',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#3a1a0a',strokeThickness:4}).setOrigin(0.5).setDepth(31)}));
     }
     const pulse=0.5+0.5*Math.sin(this.time.now*0.012);
     ents.forEach((en,k)=>{ const T=this._lfTxt[k]; if(!T) return;
@@ -2719,7 +2736,8 @@ class GameScene extends Phaser.Scene {
       T.tg.setVisible(hot).setPosition(en.x+28,en.y-30).setAlpha(0.55+0.45*pulse);
       if(en.gh) T.hp.setVisible(true).setText('👻 '+en.n).setColor('#bcd8ff').setFontSize(13).setPosition(en.x,en.y-38);
       else T.hp.setVisible(on&&en.ok).setText('❤'.repeat(Math.max(0,en.lv||0))).setColor('#ff5a6a').setFontSize(11).setPosition(en.x,en.y+32);
-      T.sm.setVisible(!!(en.ok&&this.fx.stillBurn&&en.st>1.5)).setPosition(en.x-40,en.y-14).setAlpha(0.6+0.4*pulse);
+      T.sm.setVisible(!!(en.ok&&this.fx.stillBurn&&en.st>1.5&&!en.sk)).setPosition(en.x-40,en.y-14).setAlpha(0.6+0.4*pulse);
+      if(T.sk) T.sk.setVisible(!!(en.ok&&en.sk)).setPosition(en.x,en.y+48);
     });
     // 🌶 胡椒上身：紅色光環 + 繞圈的胡椒粒 + 頭上 🌶
     const pepEnts=[...(this.alive&&!this._pOut&&this.activeEffects.pepBoost>0?[{x:this.p.x,y:this.p.y,t:this.activeEffects.pepBoost,k:0}]:[]),
@@ -2761,6 +2779,7 @@ class GameScene extends Phaser.Scene {
     this.tweens.killTweensOf(this.p);
     this.deaths=(this.deaths||0)+1; this.lives=Math.max(0,(this.lives??3)-1);
     this._bombCredit(this._pBombBy,this._pBombT); this._pBombBy=null;
+    this._soyCredit(this._soyBy,this._soyT,this._koT===this.time.now?(this._pHitBy&&this._pHitBy.label):null,this.heat,'你'); this._soyBy=null;
     if(this.lives<=0){ this._becomeGhostPlayer(); return; }
     this._addTrauma(0.6);
     const _ox=this.p.x, _oy=this.p.y;
@@ -2776,7 +2795,7 @@ class GameScene extends Phaser.Scene {
     const pos=this._pickSafeSpot();
     this.tweens.killTweensOf(e);
     e.x=pos.x; e.y=pos.y; e.vx=0; e.vy=0; e.heat=30; e.alive=true; e._respawnAt=0; e._ghostT=2.0;
-    e.stunTimer=0; e.charging=false; e._lastHitBy=null; e._burn=0;
+    e.stunTimer=0; e.charging=false; e._lastHitBy=null; e._burn=0; e._soyBy=null; e._inHot=false;
     if(e.activeEffects) Object.keys(e.activeEffects).forEach(k=>e.activeEffects[k]=0);
     const sp=this.enemySprites[i]; if(sp){ sp.setVisible(true).setPosition(e.x,e.y); }
     if(this.enemyFx[i]) this.enemyFx[i].setVisible(false);
@@ -2789,9 +2808,10 @@ class GameScene extends Phaser.Scene {
 
   // ══ 計分 ══════════════════════════════════════════════════
   // who = null 代表玩家，否則是 AI 物件；ko = 是否為擊落
-  _addScore(who,n,x,y,ko,vh){
+  _addScore(who,n,x,y,ko,vh,raw){
+    if(ko) this._koT=this.time.now;
     if(who===null&&this._pOut) return; if(who&&who.isGhost) return; // 鬼魂不能得分
-    if(!ko&&n===1&&this.fx&&this.fx.respawn) n=0.5; // 三條命：撞到人 +0.5（亂撞不會比挑時機好）
+    if(!ko&&!raw&&n===1&&this.fx&&this.fx.respawn) n=0.5; // 三條命：撞到人 +0.5（亂撞不會比挑時機好）
     if(ko&&this.fx&&this.fx.respawn){ // 擊落獎勵：🎯 快熟的人 +2、自己熟度 -30%、大絕 +1
       const tgtBonus=(vh||0)>=70; if(tgtBonus) n+=2;
       if(who===null){
@@ -3042,7 +3062,7 @@ class GameScene extends Phaser.Scene {
     let dx=(inp.r?1:0)-(inp.l?1:0), dy=(inp.d?1:0)-(inp.u?1:0); if(dx&&dy){ dx*=0.707; dy*=0.707; }
     if(dx||dy){ e._ldx=dx; e._ldy=dy; }
     e.chargeTimer=99; e._pushCD=Math.max(0,(e._pushCD||0)-dt);
-    if(inp.push){ inp.push=false; if(e._pushCD<=0&&!(e._ghostT>0)){ e._pushCD=1.2; e._dashT=0.22; const l=Math.hypot(e._ldx||1,e._ldy||0)||1; e._ddx=(e._ldx||1)/l; e._ddy=(e._ldy||0)/l; e.pushTimer=0; } }
+    if(inp.push){ inp.push=false; if(e._pushCD<=0&&!(e._ghostT>0)&&!e._inHot){ e._pushCD=1.2; e._dashT=0.22; const l=Math.hypot(e._ldx||1,e._ldy||0)||1; e._ddx=(e._ldx||1)/l; e._ddy=(e._ldy||0)/l; e.pushTimer=0; } }
     if(e._dashT>0){ e._dashT-=dt; e.charging=true; e.vx=e._ddx*9; e.vy=e._ddy*9; if(e._dashT<=0){ e.charging=false; e.vx*=0.3; e.vy*=0.3; } }
     else { e.charging=false; e.pushTimer=Math.max(e.pushTimer,0.5); const k=1-Math.exp(-dt*22); e.vx+=(dx*sp-e.vx)*k; e.vy+=(dy*sp-e.vy)*k; }
   }
@@ -3051,8 +3071,8 @@ class GameScene extends Phaser.Scene {
     this._netT-=dt; this._netZT-=dt;
     if(this._netT>0) return; this._netT=1/15;
     const R=v=>Math.round(v), st=this.stats||{};
-    const ents=[{id:'H',k:this.charData.key,n:window.MP.myNickname||'房主',x:R(this.p.x),y:R(this.p.y),h:R(this.heat),a:this.alive?1:0,g:(this._ghostT>0&&!this._pOut)?1:0,gh:this._pOut?1:0,lv:this.lives,pp:this.activeEffects.pepBoost>0?1:0,s:this.score||0,u:Math.floor(this.ultCharge||0)}];
-    this.enemies.forEach((e,i)=>ents.push({id:e.pid||('a'+i),k:e.ck,n:e.label,x:R(e.x),y:R(e.y),h:R(e.heat||0),a:(e.alive||e.isGhost)?1:0,g:e._ghostT>0?1:0,gh:e.isGhost?1:0,lv:e.lives??0,pp:(e.activeEffects&&e.activeEffects.pepBoost>0)?1:0,s:e.score||0,u:e.remote?(e.ultCharge||0):0,pc:e.remote?+(e._pushCD||0).toFixed(2):0}));
+    const ents=[{id:'H',k:this.charData.key,n:window.MP.myNickname||'房主',x:R(this.p.x),y:R(this.p.y),h:R(this.heat),a:this.alive?1:0,g:(this._ghostT>0&&!this._pOut)?1:0,gh:this._pOut?1:0,lv:this.lives,pp:this.activeEffects.pepBoost>0?1:0,sk:this._inHotSoy?1:0,s:this.score||0,u:Math.floor(this.ultCharge||0)}];
+    this.enemies.forEach((e,i)=>ents.push({id:e.pid||('a'+i),k:e.ck,n:e.label,x:R(e.x),y:R(e.y),h:R(e.heat||0),a:(e.alive||e.isGhost)?1:0,g:e._ghostT>0?1:0,gh:e.isGhost?1:0,lv:e.lives??0,pp:(e.activeEffects&&e.activeEffects.pepBoost>0)?1:0,sk:e._inHot?1:0,s:e.score||0,u:e.remote?(e.ultCharge||0):0,pc:e.remote?+(e._pushCD||0).toFixed(2):0}));
     const sn={tl:this.timeLeft,e:ents,lm:this.fx.respawn?1:0,bm:(this.bombs||[]).map(b=>[R(b.x),R(b.y),+b.t.toFixed(2)]),hm:this.heatMode,fm:this._fireMul||1,sp:this.shrinkPad||0,sw:this.shrinkWarning?1:0,
       f:this.firePts.filter(f=>f.state!=='cooldown').map(f=>({x:R(f.x),y:R(f.y),tx:R(f.tx||f.x),ty:R(f.ty||f.y),st:f.state,al:+(f.alpha||0).toFixed(2),c:f.collision?1:0,sd:f.spd||1,ph:+(f.ph||0).toFixed(2)})),
       o:(this.ultOrbs||[]).map(o=>[R(o.x),R(o.y),o.preSpawn?1:0]),
@@ -3121,7 +3141,7 @@ class GameScene extends Phaser.Scene {
       if(en.a){ this._animChar(rec.sp,rec.anim,rec.x,rec.y,dt,{base:rec.sp.baseScale,heat:en.h,shadow:this.shadowLayer});
         const t=en.h/100; if(en.gh) rec.sp.setTint(0xaaccff); else rec.sp.setTint(Phaser.Display.Color.GetColor(255,Math.round(255-t*70),Math.round(255-t*110)));
         rec.sp.setAlpha(en.gh?0.5:(en.g?0.35+0.35*Math.sin(this.time.now*0.03):1));
-        rec.tag.setText((en.id==='H'?'👑 ':(en.id[0]==='a'?'':'👤 '))+en.n+(sn.lm?' '+(en.gh?'👻':'❤'.repeat(Math.max(0,en.lv||0))):'')+(!en.gh&&en.h>=70?' 🎯':''));
+        rec.tag.setText((en.id==='H'?'👑 ':(en.id[0]==='a'?'':'👤 '))+en.n+(sn.lm?' '+(en.gh?'👻':'❤'.repeat(Math.max(0,en.lv||0))):'')+(!en.gh&&en.h>=70?' 🎯':'')+(en.sk?' 🍶黏住':''));
         rec.tag.setPosition(rec.x,rec.y-54); if(en.pp) this._drawPepAura(g,rec.x,rec.y); }
     });
     Object.keys(this._netEnts).forEach(id=>{ if(!seen[id]){ const r=this._netEnts[id]; r.sp.destroy(); r.tag.destroy(); delete this._netEnts[id]; } });
@@ -3147,6 +3167,7 @@ class GameScene extends Phaser.Scene {
     if(en.a&&!en.gh&&!this._netWasA&&this._netLastX!==undefined) this._respawnBeacon(this._netLastX,this._netLastY,en.x,en.y); // 自己復活：顯示在哪裡
     if(en.a&&!en.gh){ this._netLastX=en.x; this._netLastY=en.y; } this._netWasA=!!(en.a&&!en.gh);
     if(en.pp&&en.a&&this._netLayer&&this._netLayer.scene) this._drawPepAura(this._netLayer,this.p.x,this.p.y);
+    if(en.sk&&this.time.now-(this._stuckMsgT||0)>1500){ this._stuckMsgT=this.time.now; this._notice('🍶 腳被醬油黏住了，不能衝刺！','#e0a868'); }
     if(en.gh&&this._netLayer&&this._netLayer.scene){ const gg=this._netLayer, a=this._rimAim(this._rimProject(this.p.x,this.p.y)); gg.lineStyle(2,0xff7744,0.85); gg.strokeCircle(a.x,a.y,70); gg.lineStyle(2,0xffffff,0.25); gg.lineBetween(this.p.x,this.p.y,a.x,a.y); } // 鬼魂瞄準圈
     else if(d>70||!en.a){ this.p.x=en.x; this.p.y=en.y; } else { const k=Math.min(1,dt*6); this.p.x+=(en.x-this.p.x)*k; this.p.y+=(en.y-this.p.y)*k; }
     this.heat=en.h; this.ultCharge=en.u; this.score=en.s; this.pushCD=en.pc||0;
@@ -4063,7 +4084,7 @@ class GameScene extends Phaser.Scene {
       : this.add.text(x,y,tp.label,{fontSize:'12px',color:tp.good?'#88ffcc':'#ff8888',backgroundColor:tp.good?'#0a3322':'#440000',padding:{x:3,y:2}}).setOrigin(0.5).setDepth(16);
     this.mapItems.push({x,y,type:tp.type,good:tp.good,dur:tp.dur,img,gfx,life:12});
     const _IT={ice:['❄️ 冰塊','走過去撿：熟度 -42%，加速 5 秒'],foil:['◎ 鋁箔紙','走過去撿：10 秒內被推會反彈回去'],
-      garlic:['★ 大蒜','走過去撿：推力 ×1.7、身體變大，最後 1 秒爆開'],sauce:['🍶 滾燙醬油','走過去撿：按 A 往前丟一大攤，踩到的人又慢又燙（每秒 +8%）'],
+      garlic:['★ 大蒜','走過去撿：推力 ×1.7、身體變大，最後 1 秒爆開'],sauce:['🍶 滾燙醬油','走過去撿：按 A 往前丟。踩到的人黏住（慢、不能衝刺）又燙；4 秒內出局算你的'],
       pepper:['🌶 胡椒粉','走過去撿：15 秒內撞到人 → 他打噴嚏定住 1 秒、+8% 熟度']};
     if(_IT[tp.type]) this._tip('item_'+tp.type,x,y,_IT[tp.type][0],_IT[tp.type][1]);
   }
@@ -4073,7 +4094,7 @@ class GameScene extends Phaser.Scene {
     if(item.type==='ice')   {this.heat=Math.max(0,this.heat-42); ae.iceBoost=5; this.showPop('❄️ 冰塊！冷卻 -42%＋加速 5秒！'); this.playSound('good');}
     if(item.type==='foil')  {ae.foil=item.dur+6;  this.showPop('◎ 鋁箔紙！10 秒盔甲！推不動！'); this.playSound('good');}
     if(item.type==='garlic'){ae.garlic=item.dur+2; this._garlicAoeDone=false; this.showPop('★ 大蒜！推力 ×1.7！最後 1 秒會爆發！'); this.playSound('good');}
-    if(item.type==='sauce') {ae.sauceCharge=5.0; this.showPop('🍶 滾燙醬油！按 A 往前丟（5 秒後自動）：踩到又慢又燙！'); this.playSound('good');}
+    if(item.type==='sauce') {ae.sauceCharge=5.0; this.showPop('🍶 滾燙醬油！按 A 往前丟：踩到的人黏住不能衝刺、又燙，出局算你的！'); this.playSound('good');}
     if(item.type==='pepper'){ae.pepBoost=15.0; this.showPop('🌶 胡椒粉！15 秒內撞到人 → 他打噴嚏定住 1 秒！'); this.playSound('good');}
   }
 
@@ -4197,7 +4218,7 @@ class GameScene extends Phaser.Scene {
       const _byAI=e._lastHitBy&&e._lastHitBy!=='player'&&this.time.now-(e._lastHitT||0)<3000;
       if(_byAI){
         this.showPop(e.label+' 被 '+e._lastHitBy+' 推下去了！');
-        { const _k=this.enemies.find(x=>x.label===e._lastHitBy); if(_k) this._addScore(_k,3,null,null,true,e.heat); }
+        { const _k=this.enemies.find(x=>x.label===e._lastHitBy); if(_k){ this._addScore(_k,3,null,null,true,e.heat); e._koByT=this.time.now; } }
         if(this._checkWinCondition()) this.time.delayedCall(600,()=>this.endGame(true));
         return;
       }
@@ -4208,7 +4229,7 @@ class GameScene extends Phaser.Scene {
       }
       this.showPop(e.label+' 掉落！');
       if(this.stats) this.stats.kos++;
-      this._addScore(null,3,null,null,true,e.heat);
+      this._addScore(null,3,null,null,true,e.heat); e._koByT=this.time.now; e._lastHitBy='player';
       const _lv=this.fx&&this.fx.respawn;
       this._notice(_lv?'🏆 擊落！+3 分'+((e.heat||0)>=70?'（🎯 +2）':'')+'　熟度 -30%　⚡ 大絕 +1':'🏆 擊落！+3 分　熟度 -25% 🧊','#8fe8ff');
       if(!_lv) this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'-25%','#8fe8ff');
@@ -4663,6 +4684,7 @@ class GameScene extends Phaser.Scene {
     const _pushNow=this.keys.push.isDown||this._bufPush; this._bufPush=false;
     if(_pushNow&&!this.pushWas){
       if(this.activeEffects.sauceCharge>0){ this._deploySaucePool('player',this.p.x,this.p.y); }
+      else if(this._inHotSoy){ if(this.time.now-(this._stuckMsgT||0)>800){ this._stuckMsgT=this.time.now; this._notice('🍶 腳被醬油黏住了，不能衝刺！','#e0a868'); } }
       else if(this.pushCD<=0){ this.doPush(); }
     }
     this.pushWas=this.keys.push.isDown;
@@ -5002,7 +5024,7 @@ class GameScene extends Phaser.Scene {
       const _chRange=tac==='aggro'?230:tac==='pack'?150:tac==='camper'?(e._opp?180:0):(diff===1?165:200);
       if(!onIceTrail){
       const _nearEdge=Math.min(e.x-G.x,G.x+G.w-e.x,e.y-G.y,G.y+G.h-e.y)<(this.shrinkPad||0)+95;
-      if(e.chargeTimer<=0&&edist<_chRange&&!onOil&&!(diff>0&&_nearEdge)){ // 中/強：靠邊時不亂衝刺
+      if(e.chargeTimer<=0&&edist<_chRange&&!onOil&&!e._inHot&&!(diff>0&&_nearEdge)){ // 中/強：靠邊時不亂衝刺
         e.chargeTimer=chargeCd;
         e.charging=true; e.chargeTime=0.32;
         e.chDx=edx/edist; e.chDy=edy/edist;
@@ -5044,7 +5066,7 @@ class GameScene extends Phaser.Scene {
       }
       // 推人：找最近對象（玩家或其他 AI 都算）
       const pushCd=[6.0,4.5,3.0][diff]*({aggro:0.6,pack:0.9,camper:1.2}[tac]||1);
-      if(e.pushTimer<=0&&(!e.charging||e.remote)){
+      if(e.pushTimer<=0&&(!e.charging||e.remote)&&!e._inHot){ // 黏在醬油裡不能推
         const pTgt=allLive.reduce((a,b)=>Math.hypot(a.x-e.x,a.y-e.y)<=Math.hypot(b.x-e.x,b.y-e.y)?a:b);
         const pd=Math.hypot(pTgt.x-e.x,pTgt.y-e.y);
         if(pd<44&&!(pTgt.isPlayer&&this._ghostT>0)&&!(pTgt.ref&&pTgt.ref._ghostT>0)&&!(e._ghostT>0)){ // 復活無敵中不推/不被推
