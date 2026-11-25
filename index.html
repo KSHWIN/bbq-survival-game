@@ -413,6 +413,9 @@ function bbqFx(){
   const d={}; FX_LIST.forEach(f=>d[f.k]=!FX_OFF_DEFAULT.includes(f.k));
   try{ return Object.assign(d, JSON.parse(localStorage.getItem('bbq_fx_v3')||'{}')); }catch(e){ return d; }
 }
+const BBQ_SHAKE_LV=[['mid','📳 畫面震動：中',1],['strong','📳 畫面震動：強',1.5],['off','📴 畫面震動：關',0]];
+function bbqShakeLv(){ try{ return localStorage.getItem('bbq_shake')||'mid'; }catch(e){ return 'mid'; } }
+function bbqShakeMul(){ const l=BBQ_SHAKE_LV.find(x=>x[0]===bbqShakeLv()); return l?l[2]:1; }
 function bbqFxSave(o){ try{ localStorage.setItem('bbq_fx_v3',JSON.stringify(o)); }catch(e){} }
 
 // ── Boot Scene ──────────────────────────────────────────
@@ -638,6 +641,16 @@ class TeamScene extends Phaser.Scene {
       _irBtns.push(ib);
     });
 
+    // ── 畫面震動（強 / 中 / 關，存在這台電腦）────────────────────
+    {
+      const shBtn=this.add.rectangle(cx-330,H-78,180,30,0x1a1a1a,1).setStrokeStyle(2,0x999999).setDepth(20).setInteractive({useHandCursor:true});
+      const shTxt=this.add.text(cx-330,H-78,'',{fontSize:'14px',color:'#dddddd',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(21);
+      const shDesc=this.add.text(cx-330,H-104,'怕暈可以關掉',{fontSize:'11px',color:'#888888',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(21);
+      const showSh=()=>{ const l=BBQ_SHAKE_LV.find(x=>x[0]===bbqShakeLv())||BBQ_SHAKE_LV[0]; shTxt.setText(l[1]); window.BBQ_SHAKE=l[2]; };
+      showSh();
+      shBtn.on('pointerover',()=>shBtn.setFillStyle(0x2a2a2a)); shBtn.on('pointerout',()=>shBtn.setFillStyle(0x1a1a1a));
+      shBtn.on('pointerdown',()=>{ const i=BBQ_SHAKE_LV.findIndex(x=>x[0]===bbqShakeLv()); try{ localStorage.setItem('bbq_shake',BBQ_SHAKE_LV[(i+1)%BBQ_SHAKE_LV.length][0]); }catch(e){} showSh(); });
+    }
     // ── AI 戰術（點一下換一種）─────────────────────────────────
     if(!this.mpMode||window.MP.isHost){
       const STY=[['mixed','🎲 混搭','三隻 AI 各有個性：積極 / 圍剿 / 保守'],['pack','🐺 圍剿','AI 一起圍攻目前分數最高的人'],
@@ -2689,7 +2702,7 @@ class GameScene extends Phaser.Scene {
   }
   _bombBoom(b){
     const R=70, now=this.time.now, own=b.owner, ownLbl=own==='P'?'你的炭火彈':(own.label+' 的炭火彈');
-    this._addTrauma(0.3); try{ this._playImpact(0.9); }catch(err){}
+    if(own==='P'||(!this._pOut&&Math.hypot(this.p.x-b.x,this.p.y-b.y)<R+20)) this._addTrauma(0.3); try{ this._playImpact(0.9); }catch(err){}
     try{ const fg=this.add.graphics().setDepth(26), o={v:0};
       this.tweens.add({targets:o,v:1,duration:320,ease:'Quad.easeOut',
         onUpdate:()=>{ if(!fg.scene) return; fg.clear(); fg.fillStyle(0xffaa33,0.5*(1-o.v)); fg.fillCircle(b.x,b.y,R*(0.4+0.8*o.v)); fg.lineStyle(6*(1-o.v)+1,0xffffff,1-o.v); fg.strokeCircle(b.x,b.y,R*(0.5+0.9*o.v)); },
@@ -2781,7 +2794,7 @@ class GameScene extends Phaser.Scene {
     this._bombCredit(this._pBombBy,this._pBombT); this._pBombBy=null;
     this._soyCredit(this._soyBy,this._soyT,this._koT===this.time.now?(this._pHitBy&&this._pHitBy.label):null,this.heat,'你'); this._soyBy=null;
     if(this.lives<=0){ this._becomeGhostPlayer(); return; }
-    this._addTrauma(0.6);
+    this._addTrauma(0.3);
     const _ox=this.p.x, _oy=this.p.y;
     const pos=this._pickSafeSpot(); this.p.x=pos.x; this.p.y=pos.y; this.pv={x:0,y:0};
     this.heat=30; this.dashState=null; this._burn=0; this._respawnBeacon(_ox,_oy,pos.x,pos.y);
@@ -3247,12 +3260,13 @@ class GameScene extends Phaser.Scene {
   _addTrauma(a,cap){ const c=cap||1; const t=this._trauma||0; if(t>=c) return; this._trauma=Math.min(c,t+a); } // cap：連續事件的震動上限
   _updateShake(delta){
     const cam=this.cameras&&this.cameras.main; if(!cam) return;
+    if(window.BBQ_SHAKE===undefined) window.BBQ_SHAKE=bbqShakeMul();
     if(!(this._trauma>0)&&!this._shX&&!this._shY) return;
     const dt=delta/1000;
     this._trauma=Math.max(0,(this._trauma||0)-1.4*dt);
     this._shT+=dt*30;
     const k=this._trauma*this._trauma*(window.BBQ_SHAKE!==undefined?window.BBQ_SHAKE:1);
-    const nx=18*k*Math.sin(this._shT*1.7), ny=13*k*Math.sin(this._shT*2.3); // 加大：以前最多約 2px，幾乎感覺不到
+    const nx=12*k*Math.sin(this._shT*1.7), ny=9*k*Math.sin(this._shT*2.3); // 最大 12px（以前 18px 太晃）；強 ×1.5、關 ×0
     cam.scrollX+=nx-this._shX; cam.scrollY+=ny-this._shY; // 只動偏移量，不影響傾斜/縮放
     this._shX=nx; this._shY=ny;
     if(this._trauma<=0){ cam.scrollX-=this._shX; cam.scrollY-=this._shY; this._shX=0; this._shY=0; }
@@ -3271,7 +3285,6 @@ class GameScene extends Phaser.Scene {
         this.tweens.add({targets:d,x:x+Math.cos(a)*38,y:y+Math.sin(a)*38,alpha:0,duration:360,ease:'Cubic.easeOut',onComplete:()=>{ if(d.scene) d.destroy(); }});
       }
       if(this.pAnim){ this.pAnim.vsy+=7; this.pAnim.vsx-=5; }
-      this._addTrauma(0.18);
     }catch(e){ console.error('[pickupFx]',e); }
   }
   // 底部常駐按鍵列（在烤盤下方，不擋畫面）
@@ -3544,7 +3557,7 @@ class GameScene extends Phaser.Scene {
       const pw=Math.max(0.3,o.power||1);
       if(o.anim) this._charImpact(o.anim,o.dx||0,o.dy||0,pw);
       const fr=o.freeze!==undefined?o.freeze:Math.round(35+pw*30);
-      this._addTrauma(fr>0?Math.min(0.75,0.3+pw*0.22):0.12); // 命中一定有感的震動
+      if(o.shake!==false) this._addTrauma(fr>0?Math.min(0.8,0.45+pw*0.2):0.12); // 命中一定有感的震動（跟你無關的互推不震）
       if(fr>0){ this._hitStop=Math.max(this._hitStop||0,Math.min(130,fr)); this.tweens.timeScale=0; }
       this._playImpact(pw);
       if(o.star!==false&&o.x!==undefined){
@@ -4161,7 +4174,6 @@ class GameScene extends Phaser.Scene {
     }
     try{ const bt=this.add.text(px,py-20,'🍶',{fontSize:'30px'}).setOrigin(0.5).setDepth(40); // 醬油瓶飛過去
       this.tweens.add({targets:bt,x:tx,y:ty,angle:540,duration:300,ease:'Quad.easeOut',onComplete:()=>{ if(bt.scene) bt.destroy(); }}); }catch(err){}
-    this._addTrauma(0.2);
     if(ownerId==='player'){
       this.activeEffects.sauceCharge=0;
       this.showPop('🍶 醬油灘！');
@@ -4580,7 +4592,6 @@ class GameScene extends Phaser.Scene {
             this.tweens.add({targets:this.p,x:rx,y:ry,duration:240,ease:'Cubic.easeOut',
               onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this.subTxt.setText('反彈落下！');this.endGame(false);}}});
             this.showPop('🪞 反彈！');
-            this.cameras.main.shake(200,0.012);
             this._hitFeel({x:(this.p.x+e.x)/2,y:(this.p.y+e.y)/2,dx:-mx,dy:-my,power:1.1,anim:this.pAnim});
             this.dashState.active=false;
           } else if(this.fx.clash&&e.charging&&((e.chDx*(this.p.x-e.x)+e.chDy*(this.p.y-e.y))/(Math.hypot(this.p.x-e.x,this.p.y-e.y)||1))>0.5){
@@ -4600,7 +4611,6 @@ class GameScene extends Phaser.Scene {
             onComplete:()=>this.checkEnemyFall(e,i)});
           if(this.activeEffects.pepBoost>0) this._scatterPepper(e.x,e.y,false);
           this.spawnOilSplat(e.x,e.y,mx,my);
-          this.cameras.main.shake(160,0.005+charBst*0.007);
           const fx=this.add.graphics().setDepth(25);
           const fobj={v:0};
           this.tweens.add({targets:fobj,v:1,duration:220,ease:'Quad.easeOut',
@@ -5082,7 +5092,6 @@ class GameScene extends Phaser.Scene {
                   duration:240,ease:'Cubic.easeOut',
                   onComplete:()=>this.checkEnemyFall(e,i)});
                 this.showPop('🪞 鋁箔反彈 '+e.label+'！');
-                this.cameras.main.shake(200,0.012);
                 this._hitFeel({x:(this.p.x+e.x)/2,y:(this.p.y+e.y)/2,dx:rnx,dy:rny,power:1.1,anim:e.anim});
                 return;
               }
@@ -5103,7 +5112,6 @@ class GameScene extends Phaser.Scene {
               duration:240,ease:'Cubic.easeOut',
               onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this._addScore(e,3,null,null,true,this.heat);this.subTxt.setText('被 '+e.label+' 推落！');this.endGame(false);}else{this._spawnCollisionOil(this.p.x,this.p.y);
                 if(this.onFire(this.p.x,this.p.y)){ this.heat=Math.min(100,this.heat+15); this._notice('🔥 被推進火裡！熟度 +15%','#ff6a3a'); this._addTrauma(0.4); }}}});
-            this.cameras.main.shake(120,0.004+cBst*_juicyRes*0.005);
             this._hitFeel({x:(this.p.x+e.x)/2,y:(this.p.y+e.y)/2,dx:pnx,dy:pny,power:cBst*_juicyRes,anim:this.pAnim});
             this._xferHeat(e,null); if(this.stats) this.stats.pushed++;
             this._addScore(e,1); this._pHitBy=e; this._pHitT=this.time.now;
@@ -5117,7 +5125,7 @@ class GameScene extends Phaser.Scene {
             const cBst=(this.fx&&this.fx.heatKnock)?(0.55+(eRef.heat||0)/100*2.0):Math.min(1.5,1+(eRef.heat||0)/100*0.8);
             // AI 互推：碰撞點也噴油
             this._spawnCollisionOil((e.x+eRef.x)/2,(e.y+eRef.y)/2);
-            this._hitFeel({x:(e.x+eRef.x)/2,y:(e.y+eRef.y)/2,dx:pnx,dy:pny,power:0.5,anim:eRef.anim,freeze:0});
+            this._hitFeel({x:(e.x+eRef.x)/2,y:(e.y+eRef.y)/2,dx:pnx,dy:pny,power:0.5,anim:eRef.anim,freeze:0,shake:false});
             this._xferHeat(e,eRef); eRef._lastHitBy=e.label; eRef._lastHitT=this.time.now; this._addScore(e,1);
             this.tweens.add({targets:eRef,
               x:eRef.x+pnx*pForce*cBst,y:eRef.y+pny*pForce*cBst,
