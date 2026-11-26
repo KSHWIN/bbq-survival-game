@@ -2939,6 +2939,7 @@ class GameScene extends Phaser.Scene {
     }
     if(this._burn>0.45){ this._burnShT=(this._burnShT||0)-dt; if(this._burnShT<=0){ this._burnShT=0.28; this._addTrauma(0.07*this._burn); } }
     const g=this.burnLayer; g.clear();
+    this._drawFireRims(g);
     const drawFlames=(x,y,b,h,w)=>{
       if(b<=0.02) return;
       const t=this.time.now*0.001;
@@ -3143,6 +3144,7 @@ class GameScene extends Phaser.Scene {
     this.pours=[]; this.drops=[]; this._updatePours(dt); // 只畫液體，並算出自己踩到時的速度（給本地預測用）
     const g=this._netLayer&&this._netLayer.scene?this._netLayer:(this._netLayer=this.add.graphics().setDepth(16));
     g.clear();
+    this._drawFireRims(g);
     { const L=(sn.uw||[]).map(([x,y,w])=>({x,y,w})); (sn.e||[]).forEach(en=>{ if(en.id!==myId&&en.a&&!en.gh&&(en.u||0)>=3&&!(sn.uw||[]).some(u=>Math.abs(u[0]-en.x)<2&&Math.abs(u[1]-en.y)<2)) L.push({x:en.x,y:en.y,w:-1,full:true}); }); this._drawAiUlt(g,L); }
     if(sn.cl){ const [cx,cy,r,ct]=sn.cl; this.zoneLayer.fillStyle(0x66ccff,0.24); this.zoneLayer.fillCircle(cx,cy,r); this.zoneLayer.lineStyle(3,0x9fe6ff,0.95); this.zoneLayer.strokeCircle(cx,cy,r);
       this.zoneLayer.lineStyle(4,0xffffff,0.9); this.zoneLayer.beginPath(); this.zoneLayer.arc(cx,cy,r+6,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.max(0,ct/10),false); this.zoneLayer.strokePath(); }
@@ -4952,7 +4954,7 @@ class GameScene extends Phaser.Scene {
         if(f.timer<=0){
           f.tx=G.x+80+Math.random()*(G.w-160);
           f.ty=G.y+80+Math.random()*(G.h-160);
-          f.state='warning'; f.timer=0.7+Math.random()*0.6;
+          f.state='warning'; f.timer=1.5+Math.random()*0.5; f.warnMax=f.timer; // 預告 0.7–1.3 → 1.5–2 秒
         }
       } else if(f.state==='warning'){
         if(f.timer<=0){
@@ -7239,6 +7241,27 @@ class GameScene extends Phaser.Scene {
   _heatSummary(k,pre,post){
     const L=this._heatLog||{}, a=Object.keys(L).filter(x=>L[x]>=1).sort((x,y)=>L[y]-L[x]).slice(0,k||3);
     return a.length?(pre||'')+a.map(x=>x.replace(/（每秒.*）/,'')+' +'+Math.round(L[x])+'%').join('、')+(post||''):'';
+  }
+
+  // 火焰圈邊框畫在角色上面：站在火上也看得到；預告圈是虛線 + 倒數弧
+  _drawFireRims(g){
+    const t=this.time.now*0.001, m=this._fireMul||1;
+    (this.firePts||[]).forEach(f=>{
+      if(f.state==='warning'){
+        const x=f.tx??f.x, y=f.ty??f.y, r=this.FIRE_R_BASE*0.88*m;
+        const p=f.warnMax?Math.max(0,Math.min(1,1-f.timer/f.warnMax)):0.5;
+        const bl=0.55+0.45*Math.abs(Math.sin(t*(6+p*10)));
+        g.fillStyle(0xff6a1a,0.06+0.12*p); g.fillCircle(x,y,r);
+        for(let i=0;i<16;i++){ const a0=i/16*Math.PI*2+t*1.5; g.lineStyle(3,0xffa030,bl*0.9); g.beginPath(); g.arc(x,y,r,a0,a0+Math.PI/16,false); g.strokePath(); }
+        if(f.warnMax){ g.lineStyle(5,0xff4a1a,0.9); g.beginPath(); g.arc(x,y,r+6,-Math.PI/2,-Math.PI/2+Math.PI*2*p,false); g.strokePath(); }
+        return;
+      }
+      if((f.state==='active'||f.state==='dying')&&(f.alpha||0)>0.25){
+        const r=(f.r||this.FIRE_R_BASE)*0.88, a=Math.min(1,f.alpha), fl=0.6+0.4*Math.sin(t*12+(f.ph||0));
+        g.lineStyle(3,f.collision?0x44ffdd:0xff5a1a,0.75*a*fl); g.strokeCircle(f.x,f.y,r);
+        g.lineStyle(1.5,f.collision?0xaaffee:0xffd040,0.55*a); g.strokeCircle(f.x,f.y,r-4);
+      }
+    });
   }
 
   updateUltUI(){
