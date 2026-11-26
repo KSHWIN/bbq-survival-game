@@ -13,8 +13,10 @@
   - 出局 -1 ❤，3 秒後回場（2 秒無敵，有「⬇ 你在這裡」光柱）。命用完 → **鬼魂**：沿烤盤外圈走、按 A 丟**炭火彈**（1 秒預告、炸飛 + 熟度 +15%、冷卻 6 秒）；炸彈炸下一個人 → 復活一次（1 條命）。鬼魂不能得分。
   - 計分：撞中 +0.5、擊落 +3、擊落 🎯（熟度 ≥70%）再 +2、🍶 醬油助攻 +1、活到最後 +3。擊落另給：熟度 -30%、大絕 +1。結算畫面會列出每人的算式（`_bd` 分數明細）。
 - 撞人傳熱：對方 +10%、自己 -5%。站著不動 1.5 秒會焦（`stillBurn`）。熟度 ≥70% 頭上出現 🎯，AI 會圍攻。
-- 道具：冰塊（-42% 熟度、加速）、鋁箔（10 秒反彈）、大蒜（推力 ×1.7、身體變大）、**滾燙醬油**（按 A 往前丟 150px；踩到的人變慢、每秒 +8%、**不能衝刺**；4 秒內出局算丟的人擊落，被別人推下去則丟的人拿助攻）、**胡椒粉**（15 秒；身上有火紅光環；撞到人 → 對方打噴嚏定住 1 秒 +8%）。
-- 大絕：開局 0 格，能量球每 7 秒一顆，集 3 格按 D。
+- 道具：冰塊（-42% 熟度、加速）、鋁箔（10 秒反彈）、大蒜（7 秒身體 ×1.6、推力 ×2、撞得到的距離 54px；**沒有範圍爆發**，一次只撞一個人）、**滾燙醬油**（按 A 往前丟 150px；踩到的人變慢、每秒 +8%、**不能衝刺**；4 秒內出局算丟的人擊落，被別人推下去則丟的人拿助攻）、**胡椒粉**（15 秒；身上有火紅光環；撞到人 → **只有被撞的那個人**打噴嚏定住 1 秒 +8%，胡椒煙只是特效）。
+- 大絕：開局 0 格（勾「⚡ 開局送一發大絕」`fx.ultStart` 則開局滿格，預設關），能量球每 7 秒一顆，集 3 格按 D。吃到能量球 → 球飛向左上能量條（`_ultFly`），旁邊跳說明（`_ultCallout`）；滿格時能量條閃、「◀ 按 D 放大絕！」、頭上 D 轉盤發光（`_ultHudTick`）。AI 不會放大絕（只會搶球）。
+- 廚師翻面（傾斜）：預告 1.5 秒（整片箭頭）→ 翻的瞬間所有人急停、衝刺中斷 → 3 秒一直往下滑（130px/秒）。按反方向撐住（快的角色能慢慢爬上去），橫向只剩 35% 速度；衝刺不受影響。`_tiltF` / `_tiltVel` / `_tiltVisual` / `_drawTilt`；快照 `ti` 同步給客戶端。
+- 叉子（廚師）完全不震畫面。
 - 畫面震動：所有震動都進 `_addTrauma()`（創傷值，最大 12px），撞人只在 `_hitFeel()` 算一次；跟玩家無關的事不震。賽前設定有「強/中/關」（`localStorage bbq_shake`）。
 - 開場 3-2-1 倒數 `_countdown()`：倒數時遊戲暫停（tween 也停），所以用 requestAnimationFrame + 真實時間做動畫；目前只在第一局（看完說明卡後）出現。
 - 尚未決定：檸檬汁（變快）跟檸檬雨（炸飛、變慢）性格矛盾，可能統一成「速度」道具；每局都要倒數嗎；模擬中「亂衝」略強於「挑時機」。
@@ -27,7 +29,7 @@
 ## 工作流程
 - 改完、測過就 commit + push 到 master（不用再問）；只提交相關檔案（不要提交 `assets/* - 複製.png`、`docs/superpowers/` 草稿、`.superpowers/`、`.m4a`）。
 - 修改方式：用 Python 腳本把整個檔案讀成字串、`\r\n`→`\n` 後做「必須剛好出現一次」的取代，再寫回 CRLF。
-- 測試工具放在 `C:\Users\User\AppData\Local\Temp\bbqtools\`（暫存資料夾，可能被清掉）：`checkall.py`（每個 script 區塊語法檢查）、`loadcheck.js`、`sim3.js` / `simdbg.js`（快轉模擬，三種打法 passive/aggro/smart）、`an3.py`（模擬統計）、`mptest.js`（雙視窗連線測試，要先開本機 `server.js`）、`livestest.js`、`soytest.js`、`bdtest.js`、`shaketest.js`、`cdtest.js`。執行：`PW_PATH="C:/Users/User/AppData/Roaming/npm/node_modules/playwright" node xxx.js "D:/烤肉遊戲/index.html" <截圖資料夾>`。
+- 測試工具放在 `C:\Users\User\AppData\Local\Temp\bbqtools\`（暫存資料夾，可能被清掉）：`checkall.py`（每個 script 區塊語法檢查）、`loadcheck.js`、`sim3.js` / `simdbg.js`（快轉模擬，三種打法 passive/aggro/smart）、`an3.py`（模擬統計）、`mptest.js`（雙視窗連線測試，要先開本機 `server.js`）、`livestest.js`、`soytest.js`、`bdtest.js`、`shaketest.js`、`cdtest.js`、`tilttest.js`（胡椒/大蒜/叉子/傾斜/大絕 UI）、`mptilt.js`（mptest + 傾斜同步）。本機伺服器要在 `C:\Users\User\AppData\Local\Temp\bbqsrv\` 跑（那裡才有 node_modules；先把 `server.js` 複製過去）。執行：`PW_PATH="C:/Users/User/AppData/Roaming/npm/node_modules/playwright" node xxx.js "D:/烤肉遊戲/index.html" <截圖資料夾>`。
 - 關測試伺服器只關 port 3000 那個 process，**不要** `taskkill /IM node.exe`（會把 Claude Code 自己也關掉）。
 - 省 token：少截圖（只截局部）、測試只印結果。
 
