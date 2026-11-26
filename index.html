@@ -1778,7 +1778,7 @@ class GameScene extends Phaser.Scene {
   create(){
     bbqFitCam(this);
     const c=this.charData;
-    this.heat=0; this.alive=true; this.pushCD=0; this.timeLeft=this.levelData.timer;
+    this.heat=0; this._heatLog={}; this.alive=true; this.pushCD=0; this.timeLeft=this.levelData.timer;
     this.lastDir={x:1,y:0}; this.firePhase=0; this.pushWas=false; this.wobbleTween=null; this.dashState=null; this.dashTrail=[];
     this.fx=bbqFx(); // 場地效果開關
     this.stats={pushes:0,hits:0,kos:0,pushed:0}; // 本局統計（結算顯示）
@@ -1956,6 +1956,7 @@ class GameScene extends Phaser.Scene {
     this.goldenZoneMark=this.add.rectangle(62+50*2.2,36,30*2.2,14,0xffcc00,0.28).setOrigin(0,0.5).setDepth(1);
     this.heatBarFg=this.add.rectangle(62,36,0,14,0xff4400).setOrigin(0,0.5);
     this.heatTxt  =this.add.text(292,28,'0%',ts(12));
+    this.heatSrcTxt=this.add.text(332,30,'',{fontSize:'11px',color:'#ffb070',fontFamily:'sans-serif',stroke:'#000000',strokeThickness:3});
     this.add.text(12,50,'推擠[A]',ts(12,'#66ccff'));
     this.pushBarBg=this.add.rectangle(74,58,120,12,0x112244).setOrigin(0,0.5);
     this.pushBarFg=this.add.rectangle(74,58,120,10,0x44aaff).setOrigin(0,0.5);
@@ -2186,7 +2187,7 @@ class GameScene extends Phaser.Scene {
     const A=10; // 模擬結果：15% 太快把人烤熟，回合不到 20 秒就結束
     if(from===null){ const d=Math.min(A/2,this.heat); this.heat-=d; if(d>0.5) this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'-'+Math.round(d)+'% 🧊','#8fe8ff'); }
     else from.heat=Math.max(0,(from.heat||0)-A/2);
-    if(to===null){ this.heat=Math.min(100,this.heat+A); this._lastHeatSrc=from?'被 '+from.label+' 撞到傳熱':'被撞傳熱'; this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'+'+A+'% 🔥','#ff7a4a'); }
+    if(to===null){ this._hAdd(from?'被撞傳熱':'被撞傳熱',A); this._lastHeatSrc=from?'被 '+from.label+' 撞到傳熱':'被撞傳熱'; this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'+'+A+'% 🔥','#ff7a4a'); }
     else { to.heat=Math.min(100,(to.heat||0)+A); if(from===null) this._floatTxt(to.x,to.y-46,'+'+A+'% 🔥','#ff7a4a'); }
   }
   _floatTxt(x,y,str,col,big){
@@ -2447,7 +2448,7 @@ class GameScene extends Phaser.Scene {
     this._inHotSoy=pHot&&this.alive&&!this._pOut;
     if(this._inHotSoy&&this.dashState&&this.dashState.active) this.dashState.active=false; // 黏住：衝刺停下來
     this.enemies.forEach(e=>{ if(e._inHot&&e.charging&&!e.remote){ e.charging=false; e.vx*=0.3; e.vy*=0.3; } });
-    if(pHot&&this.alive&&!this._pOut&&!(ae.foil>0)){ this.heat=Math.min(100,this.heat+8*dt); this._lastHeatSrc='踩到滾燙醬油'; }
+    if(pHot&&this.alive&&!this._pOut&&!(ae.foil>0)){ this._hAdd('踩到滾燙醬油',8*dt); this._lastHeatSrc='踩到滾燙醬油'; }
     this.enemies.forEach(e=>{ if(e._inHot&&e.alive&&!(e.activeEffects&&e.activeEffects.foil>0)) e.heat=Math.min(100,(e.heat||0)+8*dt); });
     if(pLemon) ae.lemonFast=Math.max(ae.lemonFast||0,1.5); // 檸檬：踩到後 1.5 秒變快
     this._zoneMul=(ae.soySlow>0?(pHot?0.3:0.45):1)*(ae.lemonFast>0?1.5:1);
@@ -2468,7 +2469,7 @@ class GameScene extends Phaser.Scene {
       if(pb) r='被 '+pb.label+' 推出烤盤！';
       else if(this.tilt&&this.tilt.state==='active') r='烤盤傾斜，滑出去了！';
       else r='走到烤盤外面，掉下去了！';
-    } else if(r==='被烤熟了！') r='熟度到 100%，被烤熟了！'+(this._lastHeatSrc?'（最後是'+this._lastHeatSrc+'）':'');
+    } else if(r==='被烤熟了！') r='熟度到 100%，被烤熟了！'+this._heatSummary(3,'（','）');
     else if(r==='掉進火坑了！') r='外圈剝落，腳下的地方掉下去了！';
     else if(r==='反彈落下！') r='撞到有鋁箔的人，被反彈出去了！';
     return r;
@@ -2608,7 +2609,7 @@ class GameScene extends Phaser.Scene {
   _revivePlayer(){
     this._revived=true; this._pOut=false; this.lives=1; this._gp=null;
     const _ox=this.p.x, _oy=this.p.y;
-    const pos=this._pickSafeSpot(); this.p.x=pos.x; this.p.y=pos.y; this.pv={x:0,y:0}; this.heat=30; this._ghostT=2.0;
+    const pos=this._pickSafeSpot(); this.p.x=pos.x; this.p.y=pos.y; this.pv={x:0,y:0}; this.heat=30; this._heatLog={'復活時就有':30}; this._ghostT=2.0;
     if(this.playerSprite) this.playerSprite.clearTint(); this._respawnBeacon(_ox,_oy,pos.x,pos.y);
     this._banner('✨ 你復活了！','炭火彈炸下去一個人 → 回到場上（1 條命）'); this._refreshScoreTxt();
   }
@@ -2718,7 +2719,7 @@ class GameScene extends Phaser.Scene {
     if(own!=='P'&&this.alive&&!this._pOut&&!(this._ghostT>0)){
       const [nx,ny,d]=dirOf(this.p.x,this.p.y);
       if(d<R){ const f=120*(1-d/R*0.4)*(0.7+this.heat/100*0.9);
-        this.heat=Math.min(100,this.heat+15); this._lastHeatSrc='被'+ownLbl+'炸到';
+        this._hAdd('被炭火彈炸到',15); this._lastHeatSrc='被'+ownLbl+'炸到';
         this._pBombBy=own; this._pBombT=now; this._pHitBy=null;
         this._hitFeel({x:this.p.x,y:this.p.y,dx:nx,dy:ny,power:1.2,anim:this.pAnim});
         this.tweens.add({targets:this.p,x:this.p.x+nx*f,y:this.p.y+ny*f,duration:240,ease:'Cubic.easeOut',
@@ -2804,7 +2805,8 @@ class GameScene extends Phaser.Scene {
     this._addTrauma(0.3);
     const _ox=this.p.x, _oy=this.p.y;
     const pos=this._pickSafeSpot(); this.p.x=pos.x; this.p.y=pos.y; this.pv={x:0,y:0};
-    this.heat=30; this.dashState=null; this._burn=0; this._respawnBeacon(_ox,_oy,pos.x,pos.y);
+    this.heat=30; this._heatLog={'復活時就有':30}; this.dashState=null; this._burn=0; this._respawnBeacon(_ox,_oy,pos.x,pos.y);
+    this.time.delayedCall(400,()=>{ if(this.alive) this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'復活：熟度從 30% 開始','#ffb070'); });
     const ae=this.activeEffects; ['stun','slowpow','toxic','oilSlick','slip','soySlow','pepperVision'].forEach(k=>{ if(ae[k]!==undefined) ae[k]=0; });
     this._ghostT=2.0;
     this._notice('剩 '+'❤'.repeat(this.lives)+'　2 秒無敵後繼續','#ff8a8a'); this._refreshScoreTxt();
@@ -3740,7 +3742,7 @@ class GameScene extends Phaser.Scene {
     this._playImpact(0.7); // 亂刺：只有聲音，不震畫面
     const hit=(x,y)=>Math.abs(x-sx)<C/2+8&&Math.abs(y-sy)<C/2+8;
     if(this.alive&&hit(this.p.x,this.p.y)){
-      this.heat=Math.min(100,this.heat+20); this.activeEffects.stun=Math.max(this.activeEffects.stun,0.35); this._lastHeatSrc='被廚師叉子刺到';
+      this._hAdd('被廚師叉子刺到',20); this.activeEffects.stun=Math.max(this.activeEffects.stun,0.35);
       this._hitFeel({x:sx,y:sy,power:1.2,anim:this.pAnim,freeze:60,shake:false});
       this._notice('🍴 被叉到了！熟度 +20%','#ff7a4a');
     }
@@ -4170,7 +4172,7 @@ class GameScene extends Phaser.Scene {
   _scatterPepper(cx,cy,fromAI,tgt){
     this._pepperBurst(cx,cy); // 撞到瞬間：一大團胡椒煙
     // 噴嚏：附近的人定住 1 秒、熟度 +8%（胡椒不再只是減速）
-    if(fromAI){ if(this.alive&&!this._pOut){ this.activeEffects.stun=Math.max(this.activeEffects.stun||0,1.0); this.heat=Math.min(100,this.heat+8); this._floatTxt(this.p.x,this.p.y-60,'🤧 哈啾！定住 1 秒','#ffd080'); } }
+    if(fromAI){ if(this.alive&&!this._pOut){ this.activeEffects.stun=Math.max(this.activeEffects.stun||0,1.0); this._hAdd('胡椒噴嚏',8); this._floatTxt(this.p.x,this.p.y-60,'🤧 哈啾！定住 1 秒','#ffd080'); } }
     else [tgt].forEach(e=>{ if(!e||!e.alive||e._ghostT>0) return; // 只有被撞的那個人打噴嚏（不再範圍攻擊）
       e.stunTimer=Math.max(e.stunTimer||0,1.0); e.heat=Math.min(100,(e.heat||0)+8); this._floatTxt(e.x,e.y-50,'🤧 哈啾！','#ffd080'); });
     for(let i=0;i<22;i++){
@@ -4834,21 +4836,23 @@ class GameScene extends Phaser.Scene {
     const fireImmune=ae.foil>0||glideOn||(this.ultState&&this.ultState.type==='tofu');
     const heatCap=(this.ultState&&this.ultState.heatMax)?this.ultState.heatMax:(shieldOn?130:100);
     if(this.onFire(this.p.x,this.p.y)){
-      if(!fireImmune){ this.heat=Math.min(heatCap,this.heat+26*mult*(this.charData.fireMult||1.0)*dt); this._lastHeatSrc='站在火焰圈裡'; } // 火更燙：15→26
+      if(!fireImmune){ this._hAdd('站在火焰圈裡',26*mult*(this.charData.fireMult||1.0)*dt,heatCap); } // 火更燙：15→26
       this.sizzleTimer-=dt;
       if(this.sizzleTimer<=0&&!fireImmune){this.playSound('sizzle');this.sizzleTimer=0.6;}
-    } else this.heat=Math.min(heatCap,this.heat+(this.fx.passiveHeat?0.7:0.2)*dt); // 待著會熟：一局 60 秒約 +42%
-    if(this.heatMode==='ring'&&!fireImmune){ const _rh=this._ringHeat(this.p.x,this.p.y); if(_rh>=6) this._lastHeatSrc='待在中心高溫區'; if(_rh>0) this.heat=Math.min(heatCap,this.heat+_rh*mult*dt); }
-    if(ae.toxic>0) this.heat=Math.min(heatCap,this.heat+18*dt);
+    } else this._hAdd('待著會熟（每秒 +'+(this.fx.passiveHeat?0.7:0.2)+'%）',(this.fx.passiveHeat?0.7:0.2)*dt,heatCap,true); // 待著會熟：一局 60 秒約 +42%
+    if(this.heatMode==='ring'&&!fireImmune){ const _rh=this._ringHeat(this.p.x,this.p.y); if(_rh>0) this._hAdd(_rh>=6?'待在中心高溫區':'待在中圈（微熱）',_rh*mult*dt,heatCap); }
+    if(ae.toxic>0) this._hAdd('焦糖中毒',18*dt,heatCap);
     if(shieldOn){
       this.enemies.forEach(e=>{
         if(!e.alive) return;
         const d=Math.hypot(this.p.x-e.x,this.p.y-e.y);
-        if(d<120){const absorb=5*dt;e.heat=Math.max(0,e.heat-absorb);this.heat=Math.min(130,this.heat+absorb*0.5);}
+        if(d<120){const absorb=5*dt;e.heat=Math.max(0,e.heat-absorb);this._hAdd('護盾吸別人的熱',absorb*0.5,130,true);}
       });
     }
-    this._stillT=Math.hypot(this.pv.x,this.pv.y)>25?0:(this._stillT||0)+dt;
-    if(this.fx.stillBurn&&this._stillT>1.5&&!fireImmune){ this.heat=Math.min(heatCap,this.heat+Math.max(0,this.heat-_hB0)*0.5+1.2*dt); this._lastHeatSrc='站著不動被烤焦'; } // 站著不動：熟度上升 ×1.5
+    { const _mv=Math.hypot(this.p.x-(this._stX??this.p.x),this.p.y-(this._stY??this.p.y))/(dt||0.016); this._stX=this.p.x; this._stY=this.p.y;
+      const _key=this.keys.left.isDown||this.keys.right.isDown||this.keys.up.isDown||this.keys.down.isDown||GKEYS['ArrowLeft']||GKEYS['ArrowRight']||GKEYS['ArrowUp']||GKEYS['ArrowDown'];
+      this._stillT=(_mv>25||_key)?0:(this._stillT||0)+dt; } // 以前只看自己的速度：被推飛、撐住傾斜、被定住都會算成「站著不動」
+    if(this.fx.stillBurn&&this._stillT>1.5&&!fireImmune){ this._hAdd('站著不動被烤焦',Math.max(0,this.heat-_hB0)*0.5+1.2*dt,heatCap); } // 站著不動：熟度上升 ×1.5
     if(this.heat>=heatCap){this.subTxt.setText('被烤熟了！');this.endGame(false);return;}
 
     // ── 正向循環：黃金熟度區（50-80%） ─────────────────────────
@@ -5205,7 +5209,7 @@ class GameScene extends Phaser.Scene {
               x:this.p.x+pnx*pForce*cBst*_kRes*_juicyRes,y:this.p.y+pny*pForce*cBst*_kRes*_juicyRes,
               duration:240,ease:'Cubic.easeOut',
               onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this._addScore(e,3,null,null,true,this.heat);this.subTxt.setText('被 '+e.label+' 推落！');this.endGame(false);}else{this._spawnCollisionOil(this.p.x,this.p.y);
-                if(this.onFire(this.p.x,this.p.y)){ this.heat=Math.min(100,this.heat+15); this._notice('🔥 被推進火裡！熟度 +15%','#ff6a3a'); this._addTrauma(0.4); }}}});
+                if(this.onFire(this.p.x,this.p.y)){ this._hAdd('被推進火裡',15); this._notice('🔥 被推進火裡！熟度 +15%','#ff6a3a'); this._addTrauma(0.4); }}}});
             this._hitFeel({x:(this.p.x+e.x)/2,y:(this.p.y+e.y)/2,dx:pnx,dy:pny,power:cBst*_juicyRes,anim:this.pAnim});
             this._xferHeat(e,null); if(this.stats) this.stats.pushed++;
             this._addScore(e,1); this._pHitBy=e; this._pHitT=this.time.now;
@@ -5423,7 +5427,7 @@ class GameScene extends Phaser.Scene {
       if(lp.life<=0) return false;
       if(Math.hypot(this.p.x-lp.x,this.p.y-lp.y)<lp.r){
         this.activeEffects.slowpow=Math.max(this.activeEffects.slowpow,0.3);
-        this.heat=Math.min(100,this.heat+6*dt);
+        this._hAdd('踩到檸檬酸汁',6*dt);
       }
       this.enemies.forEach(e=>{
         if(!e.alive) return;
@@ -5810,7 +5814,7 @@ class GameScene extends Phaser.Scene {
               this.cameras.main.shake(280,0.015);
               // 酸液效果：減速 2.5 秒 + 加熱
               ae.slowpow=Math.max(ae.slowpow,5.0);
-              this.heat=Math.min(100,this.heat+10*(1-dist/72));
+              this._hAdd('被檸檬雨打到',10*(1-dist/72));
               if(!inGrill(nx2,ny2)){
                 this.subTxt.setText('被檸檬汁噴飛！');this.endGame(false);
               } else {
@@ -6131,7 +6135,7 @@ class GameScene extends Phaser.Scene {
         this.p.x-(G.x+pad), (G.x+G.w-pad)-this.p.x,
         this.p.y-(G.y+pad), (G.y+G.h-pad)-this.p.y
       );
-      if(edgeDist<22&&!(this.activeEffects.foil>0)){ this.heat=Math.min(100,this.heat+10*dt); this._lastHeatSrc='貼著剝落的邊緣（邊緣很燙）'; } // 原本 30px 內 +35%/秒（再疊 +24%）太狠又看不出來
+      if(edgeDist<22&&!(this.activeEffects.foil>0)){ this._hAdd('貼著剝落的邊緣（邊緣很燙）',10*dt); } // 原本 30px 內 +35%/秒（再疊 +24%）太狠又看不出來
       this.enemies.forEach(e=>{
         if(!e.alive) return;
         const eDist=Math.min(e.x-(G.x+pad),(G.x+G.w-pad)-e.x,e.y-(G.y+pad),(G.y+G.h-pad)-e.y);
@@ -6465,7 +6469,7 @@ class GameScene extends Phaser.Scene {
           const d=Math.hypot(this.p.x-e.x,this.p.y-e.y);
           if(d<220){
             const absorb=Math.min(e.heat,55); e.heat=Math.max(0,e.heat-absorb);
-            this.heat=Math.min(200,this.heat+absorb*0.8);
+            this._hAdd('大絕吸別人的熱',absorb*0.8,200,true);
             e.stunTimer=(e.stunTimer||0)+2.5; e._brittleT=this.time.now+6000; // 凍脆：6 秒內被撞飛 2.5 倍
             for(let ic=0;ic<8;ic++){const ang=ic*Math.PI/4;const icg={r:0};const icfx=this.add.graphics().setDepth(24);
               this.tweens.add({targets:icg,r:1,duration:400,ease:'Quad.easeOut',
@@ -6849,7 +6853,7 @@ class GameScene extends Phaser.Scene {
       if(us.absorbTimer<=0){
         this.enemies.filter(e=>e.alive).forEach(e=>{
           const d=Math.hypot(this.p.x-e.x,this.p.y-e.y);
-          if(d<150){const absorb=10*dt;e.heat=Math.max(0,e.heat-absorb);this.heat=Math.min(200,this.heat+absorb*0.5);
+          if(d<150){const absorb=10*dt;e.heat=Math.max(0,e.heat-absorb);this._hAdd('大絕吸別人的熱',absorb*0.5,200,true);
             if(e.heat<3)e.stunTimer=Math.max(e.stunTimer||0,0.4);}
         });
         if(Math.random()<0.25){
@@ -7170,7 +7174,7 @@ class GameScene extends Phaser.Scene {
       else {
         hitMe=true;
         const nx=(this.p.x-e.x)/(pd||1), ny=(this.p.y-e.y)/(pd||1), F=260*(1-0.45*pd/R)*kb(this.heat)*(this.activeEffects.juicy>0?0.5:1);
-        this.heat=Math.min(100,this.heat+10); this._lastHeatSrc='被 '+e.label+' 的大絕炸到';
+        this._hAdd('被 '+e.label+' 的大絕炸到',10);
         this._pHitBy=e; this._pHitT=now; if(this.dashState) this.dashState.active=false;
         this.tweens.add({targets:this.p,x:this.p.x+nx*F,y:this.p.y+ny*F,duration:300,ease:'Cubic.easeOut',
           onComplete:()=>{ if(this.alive&&!inGrill(this.p.x,this.p.y)){ this._addScore(e,3,null,null,true,this.heat); this.subTxt.setText('被 '+e.label+' 的大絕炸飛！'); this.endGame(false); } }});
@@ -7219,10 +7223,23 @@ class GameScene extends Phaser.Scene {
     if(!this._hwTxt||!this._hwTxt.scene) this._hwTxt=this.add.text(0,0,'',{fontSize:'12px',color:'#ffb070',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:4}).setOrigin(0.5).setDepth(31);
     const show=this.alive&&!this._pOut&&this._hwRate>3&&this._lastHeatSrc&&this.netRole!=='client';
     this._hwTxt.setVisible(!!show);
+    this._hsT=(this._hsT||0)-dt; if(this._hsT<=0&&this.heatSrcTxt&&this.heatSrcTxt.scene){ this._hsT=0.5; this.heatSrcTxt.setText(this.netRole==='client'?'':this._heatSummary(2,'← ','')); }
     if(show) this._hwTxt.setText('🔥 +'+Math.round(this._hwRate)+'%/秒　'+this._lastHeatSrc).setPosition(this.p.x,this.p.y+(this.fx&&this.fx.respawn?50:38));
   }
   // 大絕的「易飛」加成：被豆腐凍脆 ×2.5、在培根煙 / 香菇霧 / 辣椒裡 ×1.6
   _ultKnockMul(e){ const now=this.time.now; let m=1; if((e._brittleT||0)>now) m*=2.5; if((e._smokeT||0)>now) m*=1.6; return m; }
+
+  // 玩家加熱一律走這裡：記下這條命每種來源加了多少（死掉時、HUD 都看得到）
+  // quiet=true：不改「最近的加熱原因」（像每秒 +0.7% 這種背景加熱，不要蓋掉真正的原因）
+  _hAdd(src,n,cap,quiet){
+    if(!(n>0)) return; const b=this.heat; this.heat=Math.min(cap||100,this.heat+n); const d=this.heat-b; if(d<=0) return;
+    const L=this._heatLog||(this._heatLog={}); L[src]=(L[src]||0)+d;
+    if(!quiet) this._lastHeatSrc=src;
+  }
+  _heatSummary(k,pre,post){
+    const L=this._heatLog||{}, a=Object.keys(L).filter(x=>L[x]>=1).sort((x,y)=>L[y]-L[x]).slice(0,k||3);
+    return a.length?(pre||'')+a.map(x=>x.replace(/（每秒.*）/,'')+' +'+Math.round(L[x])+'%').join('、')+(post||''):'';
+  }
 
   updateUltUI(){
     if(!this.ultDots)return;
@@ -7320,7 +7337,7 @@ class GameScene extends Phaser.Scene {
         g.fillCircle(hz.x+Math.cos(fang)*fr*0.5,fy,3+intensity*2);
       }
       if(Math.hypot(this.p.x-hz.x,this.p.y-hz.y)<r&&this.alive){
-        this.heat=Math.min(100,this.heat+dt*8); this._lastHeatSrc='站在油漬燒起來的地方';
+        this._hAdd('站在油漬燒起來的地方',dt*8);
       }
       return true;
     });
@@ -7415,7 +7432,7 @@ class GameScene extends Phaser.Scene {
             }
           });
           const pd=Math.hypot(this.p.x-f.x,this.p.y-f.y);
-          if(pd<f.sz+25) this.heat=Math.min(99,this.heat+20);
+          if(pd<f.sz+25) this._hAdd('被火柱噴到',20,99);
           // 爆發視覺
           const bg=this.add.graphics().setDepth(8);const bv={v:0};
           this.tweens.add({targets:bv,v:1,duration:850,ease:'Quad.easeOut',
