@@ -609,18 +609,18 @@ class TeamScene extends Phaser.Scene {
       _diffBtns.push(db);
     });
     // ── 道具出現頻率 ─────────────────────────────────────
-    // ── 熱源模式：🔥 火焰圈 / 🎯 中心熱區 ─────────────────────
+    // ── 熱源模式：🔥 火焰圈 / 🎯 中心熱區 / 👥 人多變熱 ─────────
     if(!this.gameData.heatMode){ try{ this.gameData.heatMode=localStorage.getItem('bbq_heatmode')||'fire'; }catch(e){ this.gameData.heatMode='fire'; } }
     const _hmY=H-176;
     this.add.text(cx-170,_hmY-14,'熱源模式：',{fontSize:'13px',color:'#aaaaaa',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(6);
     const _hmBtns=[];
-    [['fire','🔥 火焰圈',0x883300],['ring','🎯 中心熱區',0x8a1a1a]].forEach(([k,label,col],hi)=>{
+    [['fire','🔥 火焰圈',0x883300],['ring','🎯 中心熱區',0x8a1a1a],['crowd','👥 人多變熱',0x6a2a7a]].forEach(([k,label,col],hi)=>{
       const bx=cx-62+hi*104;
       const hb=this.add.rectangle(bx,_hmY,96,24,this.gameData.heatMode===k?col:0x333333,1).setDepth(6).setInteractive({useHandCursor:true});
       this.add.text(bx,_hmY,label,{fontSize:'12px',color:'#ffffff',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(7);
       hb.on('pointerdown',()=>{
         this.gameData.heatMode=k; try{ localStorage.setItem('bbq_heatmode',k); }catch(e){}
-        _hmBtns.forEach((b,j)=>b.setFillStyle(j===hi?[0x883300,0x8a1a1a][j]:0x333333));
+        _hmBtns.forEach((b,j)=>b.setFillStyle(j===hi?[0x883300,0x8a1a1a,0x6a2a7a][j]:0x333333));
       });
       _hmBtns.push(hb);
     });
@@ -1784,6 +1784,7 @@ class GameScene extends Phaser.Scene {
     this.stats={pushes:0,hits:0,kos:0,pushed:0}; // 本局統計（結算顯示）
     this._resultShown=false; this._leaving=false; this._burn=0; this._bumpT=0; this._ghostT=0; this.deaths=0;
     this.pours=[]; this.drops=[]; this.zones=[]; this._zoneMul=1; this._fireMul=1; // 醬油/檸檬、火力全開
+    this.crowdZones=[]; this._crowdC=null; this._crowdRandT=6; // 人多變熱
     this.cool=null; this._coolT=3; this._coolNext=null; this._inCoolPrev=false; // 冷卻圈：開局 3 秒後出現
     if(this.fx&&this.fx.ultOrb){ this.ultCharge=this.fx.ultStart?3:0; this.ultOrbTimer=3; } // 能量球模式：大絕從 0 開始
     this._ultFreeze=0;
@@ -2014,8 +2015,8 @@ class GameScene extends Phaser.Scene {
     this.time.addEvent({delay:1000,loop:true,callback:()=>{
       if(!this.alive) return;
       this.timeLeft--;
-      if(this.timeLeft===20&&this.fx&&(this.fx.fire||this.heatMode==='ring')){ this._fireMul=1.35;
-        this._banner('🔥 火力全開！',this.heatMode==='ring'?'最後 20 秒：中間的高溫區變大了':'最後 20 秒：火變大、熄了很快又燒起來'); this._addTrauma(0.35); }
+      if(this.timeLeft===20&&this.fx&&(this.fx.fire||this.heatMode!=='fire')){ this._fireMul=1.35;
+        this._banner('🔥 火力全開！',this.heatMode==='crowd'?'最後 20 秒：熱區變大、更燙':this.heatMode==='ring'?'最後 20 秒：中間的高溫區變大了':'最後 20 秒：火變大、熄了很快又燒起來'); this._addTrauma(0.35); }
       if(this.timeLeft<=0) this.endGame(!this._pOut,true);
     }});
     this._setupHelpUI(); // 操作說明卡 + 底部按鍵列 + 震動系統
@@ -2260,6 +2261,7 @@ class GameScene extends Phaser.Scene {
       if(this.fork){ const f=this.fork, inX=Math.abs(e.x-f.cx)<f.half+30, inY=Math.abs(e.y-f.cy)<f.half+30;
         if(inX&&inY){ const dx=e.x-f.cx, dy=e.y-f.cy, d=Math.hypot(dx,dy)||1; e.vx+=dx/d*HK; e.vy+=dy/d*HK; } }
       (this.holes||[]).forEach(h=>flee(h.x,h.y,(h.r||22)+45,HK));
+      if(this.heatMode==='crowd') (this.crowdZones||[]).forEach(z=>{ if(z.st!=='fade') flee(z.x,z.y,z.r+35,HK*0.8); });
       (this.flares||[]).forEach(fl=>{ if(fl.state==='warning') flee(fl.x,fl.y,(fl.sz||68)+30,HK); });
       (this.evtQueue||[]).forEach(ev=>{ if(ev.type==='skewer'&&ev.state==='warn') flee(ev.x,ev.targetY,60,HK); });
     }
@@ -2790,6 +2792,7 @@ class GameScene extends Phaser.Scene {
       if(this.fork&&Math.abs(x-this.fork.cx)<this.fork.half+60&&Math.abs(y-this.fork.cy)<this.fork.half+60) sc-=1000;
       (this.holes||[]).forEach(h=>{ if(Math.hypot(x-h.x,y-h.y)<80) sc-=500; });
       if(this.heatMode==='ring') sc-=this._ringHeat(x,y)*40;
+      if(this.heatMode==='crowd') (this.crowdZones||[]).forEach(z=>{ if(Math.hypot(x-z.x,y-z.y)<z.r+50) sc-=600; });
       [{x:this.p.x,y:this.p.y},...this.enemies.filter(e=>e.alive)].forEach(o=>{ const d=Math.hypot(x-o.x,y-o.y); if(d<140) sc-=(140-d); });
       if(sc>bestScore){ bestScore=sc; best={x,y}; }
     }
@@ -3102,7 +3105,7 @@ class GameScene extends Phaser.Scene {
     const R=v=>Math.round(v), st=this.stats||{};
     const ents=[{id:'H',k:this.charData.key,n:window.MP.myNickname||'房主',x:R(this.p.x),y:R(this.p.y),h:R(this.heat),a:this.alive?1:0,g:(this._ghostT>0&&!this._pOut)?1:0,gh:this._pOut?1:0,lv:this.lives,pp:this.activeEffects.pepBoost>0?1:0,sk:this._inHotSoy?1:0,s:this.score||0,u:Math.floor(this.ultCharge||0)}];
     this.enemies.forEach((e,i)=>ents.push({id:e.pid||('a'+i),k:e.ck,n:e.label,x:R(e.x),y:R(e.y),h:R(e.heat||0),a:(e.alive||e.isGhost)?1:0,g:e._ghostT>0?1:0,gh:e.isGhost?1:0,lv:e.lives??0,pp:(e.activeEffects&&e.activeEffects.pepBoost>0)?1:0,sk:e._inHot?1:0,s:e.score||0,u:(e.ultCharge||0),pc:e.remote?+(e._pushCD||0).toFixed(2):0}));
-    const sn={tl:this.timeLeft,e:ents,lm:this.fx.respawn?1:0,bm:(this.bombs||[]).map(b=>[R(b.x),R(b.y),+b.t.toFixed(2)]),hm:this.heatMode,fm:this._fireMul||1,sp:this.shrinkPad||0,sw:this.shrinkWarning?1:0,uw:this.enemies.filter(e=>e._ultWind>0).map(e=>[R(e.x),R(e.y),+(1-e._ultWind/(e._ultWindMax||1)).toFixed(2)]),ti:this.tilt?[this.tilt.x,this.tilt.y,this.tilt.state==='active'?1:0,+this.tilt.timer.toFixed(2),this.tilt.force,this.tilt.rot,this.tilt.hold,this.tilt.lbl]:null,
+    const sn={tl:this.timeLeft,e:ents,lm:this.fx.respawn?1:0,bm:(this.bombs||[]).map(b=>[R(b.x),R(b.y),+b.t.toFixed(2)]),hm:this.heatMode,fm:this._fireMul||1,sp:this.shrinkPad||0,sw:this.shrinkWarning?1:0,uw:this.enemies.filter(e=>e._ultWind>0).map(e=>[R(e.x),R(e.y),+(1-e._ultWind/(e._ultWindMax||1)).toFixed(2)]),cz:this.heatMode==='crowd'?(this.crowdZones||[]).map(z=>[R(z.x),R(z.y),R(z.r),z.st==='warn'?0:z.st==='hot'?1:2,+(z.p||0).toFixed(2)]):null,ti:this.tilt?[this.tilt.x,this.tilt.y,this.tilt.state==='active'?1:0,+this.tilt.timer.toFixed(2),this.tilt.force,this.tilt.rot,this.tilt.hold,this.tilt.lbl]:null,
       f:this.firePts.filter(f=>f.state!=='cooldown').map(f=>({x:R(f.x),y:R(f.y),tx:R(f.tx||f.x),ty:R(f.ty||f.y),st:f.state,al:+(f.alpha||0).toFixed(2),c:f.collision?1:0,sd:f.spd||1,ph:+(f.ph||0).toFixed(2)})),
       o:(this.ultOrbs||[]).map(o=>[R(o.x),R(o.y),o.preSpawn?1:0]),
       it:(this.mapItems||[]).map(it=>[R(it.x),R(it.y),it.type,it.good?1:0]),
@@ -3140,6 +3143,7 @@ class GameScene extends Phaser.Scene {
     this.heatMode=sn.hm; this._fireMul=sn.fm;
     this.firePts=(sn.f||[]).map(f=>({x:f.x,y:f.y,tx:f.tx,ty:f.ty,state:f.st,alpha:f.al,collision:!!f.c,spd:f.sd,ph:f.ph,r:46}));
     this.drawFires(this.firePhase); this._drawRings();
+    this.crowdZones=(sn.cz||[]).map(([x,y,r,st,p])=>({x,y,r,st:['warn','hot','fade'][st]||'warn',p})); this._drawCrowdZones();
     if(sn.z) this.zones=sn.z.map(z=>({x:z[0],y:z[1],r:z[2],kind:z[3]?'lemon':'soy',life:z[4],age:9,owner:null}));
     this.pours=[]; this.drops=[]; this._updatePours(dt); // 只畫液體，並算出自己踩到時的速度（給本地預測用）
     const g=this._netLayer&&this._netLayer.scene?this._netLayer:(this._netLayer=this.add.graphics().setDepth(16));
@@ -3372,7 +3376,7 @@ class GameScene extends Phaser.Scene {
     T(PX,y,'── 地圖上的東西 ──',16,'#ffaa44',{fontStyle:'bold'}).setOrigin(0.5);
     y+=34;
     const legend=[
-      this.heatMode==='ring'?['fire','🎯 中心熱區','越靠中間越燙；外圈涼，但靠近邊緣']:['fire','火焰圈','站在圈內會越烤越熟'],
+      this.heatMode==='crowd'?['fire','👥 人多變熱','人擠在一起的地方會冒出熱區；偶爾也會隨機出現']:this.heatMode==='ring'?['fire','🎯 中心熱區','越靠中間越燙；外圈涼，但靠近邊緣']:['fire','火焰圈','站在圈內會越烤越熟'],
       ['warn','預警圈（虛線、閃爍）','等一下這裡會出事，先離開'],
       ['item','道具（圓圈裡的圖示）','走過去就會撿起來'],
       ['hole','破洞／外圈崩塌','掉下去直接出局'],
@@ -4843,6 +4847,7 @@ class GameScene extends Phaser.Scene {
       if(this.sizzleTimer<=0&&!fireImmune){this.playSound('sizzle');this.sizzleTimer=0.6;}
     } else this._hAdd('待著會熟（每秒 +'+(this.fx.passiveHeat?0.7:0.2)+'%）',(this.fx.passiveHeat?0.7:0.2)*dt,heatCap,true); // 待著會熟：一局 60 秒約 +42%
     if(this.heatMode==='ring'&&!fireImmune){ const _rh=this._ringHeat(this.p.x,this.p.y); if(_rh>0) this._hAdd(_rh>=6?'待在中心高溫區':'待在中圈（微熱）',_rh*mult*dt,heatCap); }
+    if(this.heatMode==='crowd'&&!fireImmune){ const _ch=this._crowdHeat(this.p.x,this.p.y); if(_ch>0) this._hAdd('站在熱區裡（人擠出來的）',_ch*mult*dt,heatCap); }
     if(ae.toxic>0) this._hAdd('焦糖中毒',18*dt,heatCap);
     if(shieldOn){
       this.enemies.forEach(e=>{
@@ -4943,7 +4948,7 @@ class GameScene extends Phaser.Scene {
     // 火焰狀態機：cooldown → warning → active → dying → cooldown
     this.firePts.forEach(f=>{
       f.timer-=dt;
-      if((!this.fx.fire||this.heatMode==='ring')&&!f.collision){ f.state='cooldown'; f.alpha=0; f.timer=1; return; } // 關閉火焰圈 / 中心熱區模式不用火焰圈
+      if((!this.fx.fire||this.heatMode!=='fire')&&!f.collision){ f.state='cooldown'; f.alpha=0; f.timer=1; return; } // 關閉火焰圈 / 中心熱區模式不用火焰圈
       if(f.state==='active'){
         f.alpha=Math.min(1.0,(f.alpha||0)+dt*4); // 快速淡入
         if(f.timer<=0){ f.state='dying'; f.timer=0.50; }
@@ -5275,6 +5280,7 @@ class GameScene extends Phaser.Scene {
       } }
       const _eFoil=e.activeEffects&&e.activeEffects.foil>0, _eHB=e.heat||0;
       if(this.heatMode==='ring'&&!_eFoil){ const _erh=this._ringHeat(e.x,e.y); if(_erh>0) e.heat=Math.min(100,(e.heat||0)+_erh*dt); }
+      if(this.heatMode==='crowd'&&!_eFoil){ const _ech=this._crowdHeat(e.x,e.y); if(_ech>0) e.heat=Math.min(100,(e.heat||0)+_ech*dt); }
       if(!_eFoil&&this.onFire(e.x,e.y)) e.heat=Math.min(100,e.heat+24*dt);
       else if(!_eFoil)                   e.heat=Math.min(100,e.heat+(this.fx.passiveHeat?0.7:0.8)*dt);
       e._stillT=Math.hypot(e.vx,e.vy)<0.4?(e._stillT||0)+dt:0;
@@ -5377,7 +5383,9 @@ class GameScene extends Phaser.Scene {
     if(this.evtTimer<=0){this.spawnRandEvent();this.evtTimer=11+Math.random()*5;}
     this._updatePours(dt);
     this._updateCool(dt);
+    this._updateCrowdHeat(dt);
     this._drawRings();
+    this._drawCrowdZones();
     this.updateRandEvents(dt); if(!this.alive) return;
     this.updateShrink(dt);    if(!this.alive) return;
     this.updateHoles(dt);     if(!this.alive) return;
@@ -7246,6 +7254,14 @@ class GameScene extends Phaser.Scene {
   // 火焰圈邊框畫在角色上面：站在火上也看得到；預告圈是虛線 + 倒數弧
   _drawFireRims(g){
     const t=this.time.now*0.001, m=this._fireMul||1;
+    if(this.heatMode==='crowd') (this.crowdZones||[]).forEach(z=>{
+      if(z.st==='warn'){ const bl=0.5+0.5*Math.abs(Math.sin(t*(6+z.p*10)));
+        for(let i=0;i<20;i++){ const a0=i/20*Math.PI*2-t*1.2; g.lineStyle(3,0xff7a3a,bl*0.85); g.beginPath(); g.arc(z.x,z.y,z.r,a0,a0+Math.PI/20,false); g.strokePath(); }
+        g.lineStyle(5,0xff3a1a,0.9); g.beginPath(); g.arc(z.x,z.y,z.r+6,-Math.PI/2,-Math.PI/2+Math.PI*2*z.p,false); g.strokePath();
+      } else { const a=z.st==='hot'?1:z.p, fl=0.65+0.35*Math.sin(t*8+z.x);
+        g.lineStyle(3,0xff4a1a,0.7*a*fl); g.strokeCircle(z.x,z.y,z.r);
+        if(z.st==='hot'){ g.lineStyle(2,0xffd060,0.6); g.beginPath(); g.arc(z.x,z.y,z.r+5,-Math.PI/2,-Math.PI/2+Math.PI*2*z.p,false); g.strokePath(); } } // 剩餘時間
+    });
     (this.firePts||[]).forEach(f=>{
       if(f.state==='warning'){
         const x=f.tx??f.x, y=f.ty??f.y, r=this.FIRE_R_BASE*0.88*m;
@@ -7261,6 +7277,71 @@ class GameScene extends Phaser.Scene {
         g.lineStyle(3,f.collision?0x44ffdd:0xff5a1a,0.75*a*fl); g.strokeCircle(f.x,f.y,r);
         g.lineStyle(1.5,f.collision?0xaaffee:0xffd040,0.55*a); g.strokeCircle(f.x,f.y,r-4);
       }
+    });
+  }
+
+  // ══ 👥 人多變熱：有人擠在一起超過 1 秒 → 那裡冒出熱區，逼大家散開；太久沒冒就隨機冒一個 ══
+  _updateCrowdHeat(dt){
+    if(this.heatMode!=='crowd'){ this.crowdZones=[]; return; }
+    const m=this._fireMul||1, WARN=1.2, FADE=0.8;
+    let Z=this.crowdZones||(this.crowdZones=[]);
+    Z.forEach(z=>{ z.t-=dt;
+      if(z.st==='warn'&&z.t<=0){ z.st='hot'; z.t=z.dur; }
+      else if(z.st==='hot'&&z.t<=0){ z.st='fade'; z.t=FADE; }
+      z.p=z.st==='warn'?Math.min(1,1-z.t/WARN):z.st==='hot'?Math.max(0,z.t/z.dur):Math.max(0,z.t/FADE);
+    });
+    Z=this.crowdZones=Z.filter(z=>!(z.st==='fade'&&z.t<=0));
+    const pad=(this.shrinkPad||0)+40;
+    const spawn=(x,y,crowd)=>{
+      const r=Math.min(130,105*m+(crowd?15:0));
+      x=Phaser.Math.Clamp(x,G.x+pad+r*0.5,G.x+G.w-pad-r*0.5); y=Phaser.Math.Clamp(y,G.y+pad+r*0.5,G.y+G.h-pad-r*0.5);
+      Z.push({x,y,r,st:'warn',t:WARN,dur:4.5,p:0,crowd});
+      this._tip('crowdHeat',x,y,'👥 人多變熱','人擠在一起太久，那裡就會冒出熱區（每秒 +13%）。快散開！');
+      if(crowd){ this._floatTxt(x,y-20,'🔥 太擠了！要變熱了','#ffb070'); if(Math.hypot(this.p.x-x,this.p.y-y)<r+60) this._notice('👥 這裡太擠了，快散開！','#ffb070'); }
+      this._crowdRandT=9+Math.random()*4;
+    };
+    // 找最擠的地方：4 人以上的局要 3 個人，人少時 2 個人就算
+    const ents=[]; if(this.alive&&!this._pOut) ents.push({x:this.p.x,y:this.p.y});
+    this.enemies.forEach(e=>{ if(e.alive&&!e.isGhost) ents.push({x:e.x,y:e.y}); });
+    const need=ents.length>=4?3:2, R=130;
+    let best=null;
+    ents.forEach(a=>{ const nb=ents.filter(b=>Math.hypot(a.x-b.x,a.y-b.y)<R);
+      if(nb.length>=need&&(!best||nb.length>best.n)) best={n:nb.length,x:nb.reduce((s,b)=>s+b.x,0)/nb.length,y:nb.reduce((s,b)=>s+b.y,0)/nb.length}; });
+    const blocked=best&&(Z.length>=3||Z.some(z=>Math.hypot(z.x-best.x,z.y-best.y)<z.r+60)||(this.cool&&Math.hypot(this.cool.x-best.x,this.cool.y-best.y)<(this.cool.r||70)+20)); // 冷卻圈本來就是要大家去搶，不在那裡冒熱
+    if(best&&!blocked){
+      const c=this._crowdC;
+      if(c&&Math.hypot(c.x-best.x,c.y-best.y)<100){ c.t+=dt; c.x+=(best.x-c.x)*0.1; c.y+=(best.y-c.y)*0.1; }
+      else this._crowdC={x:best.x,y:best.y,t:0};
+      if(this._crowdC.t>=1.0){ spawn(this._crowdC.x,this._crowdC.y,true); this._crowdC=null; }
+    } else this._crowdC=null;
+    // 太久沒形成：隨機冒一個（避開冷卻圈、別的熱區）
+    this._crowdRandT=(this._crowdRandT===undefined?6:this._crowdRandT)-dt;
+    if(this._crowdRandT<=0&&Z.length<3){
+      for(let i=0;i<30;i++){
+        const x=G.x+pad+80+Math.random()*(G.w-pad*2-160), y=G.y+pad+80+Math.random()*(G.h-pad*2-160);
+        if(Z.some(z=>Math.hypot(z.x-x,z.y-y)<z.r+120)) continue;
+        if(this.cool&&Math.hypot(this.cool.x-x,this.cool.y-y)<(this.cool.r||70)+110) continue;
+        spawn(x,y,false); break;
+      }
+      if(this._crowdRandT<=0) this._crowdRandT=2;
+    }
+  }
+  // 熱區每秒加多少熟度（燒的時候 13%/秒，最後 20 秒 ×1.35；快消失時漸弱）
+  _crowdHeat(x,y){
+    let h=0; (this.crowdZones||[]).forEach(z=>{ if(z.st==='warn') return; if(Math.hypot(x-z.x,y-z.y)<z.r) h=Math.max(h,13*(this._fireMul||1)*(z.st==='fade'?z.p:1)); });
+    return h;
+  }
+  // 地面的熱區（畫在角色下面；邊框在 _drawFireRims 畫在角色上面）
+  _drawCrowdZones(){
+    if(this.heatMode!=='crowd'){ if(this.crowdLayer&&this.crowdLayer.scene) this.crowdLayer.clear(); return; }
+    const g=this.crowdLayer&&this.crowdLayer.scene?this.crowdLayer:(this.crowdLayer=this.add.graphics().setDepth(1));
+    g.clear(); const t=this.time.now*0.001, pulse=0.85+0.15*Math.sin(t*3);
+    (this.crowdZones||[]).forEach(z=>{
+      if(z.st==='warn'){ g.fillStyle(0xff6a1a,0.06+0.14*z.p); g.fillCircle(z.x,z.y,z.r*(0.3+0.7*z.p)); return; }
+      const a=z.st==='hot'?1:z.p;
+      for(let k=0;k<4;k++){ g.fillStyle(k<2?0xff3300:0xffaa22,(0.13+k*0.05)*pulse*a); g.fillCircle(z.x,z.y,z.r*(1-k*0.22)); }
+      for(let i=0;i<5;i++){ const ang=i/5*Math.PI*2+t*0.4, rr=z.r*0.55, hx=z.x+Math.cos(ang)*rr, hy=z.y+Math.sin(ang)*rr-((t*30+i*17)%36); // 熱氣往上飄
+        g.lineStyle(2,0xffe0b0,0.16*a); g.lineBetween(hx,hy,hx+Math.sin(t*4+i)*4,hy-16); }
     });
   }
 

@@ -18,6 +18,7 @@
 - 弱大絕加強（`_ultKnockMul`，只影響玩家衝刺撞飛距離）：豆腐 → 附近的人凍脆 6 秒（×2.5，冰藍圈）；培根 → 全場煙燻 9 秒（×1.6）；香菇 → 霧裡 1 秒就定身、霧裡 ×1.6；辣椒 → 踩到辣椒素嗆到彈開 85px + 3 秒 ×1.6（紫圈）。
 - 廚師翻面（傾斜）：預告 1.5 秒（整片箭頭）→ 翻的瞬間所有人急停、衝刺中斷 → 3 秒一直往下滑（130px/秒）。按反方向撐住（快的角色能慢慢爬上去），橫向只剩 35% 速度；衝刺不受影響。`_tiltF` / `_tiltVel` / `_tiltVisual` / `_drawTilt`；快照 `ti` 同步給客戶端。
 - 叉子（廚師）完全不震畫面。
+- 熱源模式（賽前設定）：🔥 火焰圈 `fire`（預設）/ 🎯 中心熱區 `ring` / **👥 人多變熱 `crowd`**：3 人（局裡少於 4 人時 2 人）擠在 130px 內超過 1 秒 → 那裡預告 1.2 秒 → 熱區燒 4.5 秒（半徑約 120，每秒 +13%，最後 20 秒 ×1.35）；9–13 秒沒冒就隨機冒一個；最多 3 個，不會冒在冷卻圈上。AI 會躲。`_updateCrowdHeat` / `_crowdHeat` / `_drawCrowdZones`（邊框在 `_drawFireRims`），快照 `cz`。被定住的 AI 不會被加熱（舊行為：定住時整段 AI 更新都跳過）。
 - 烤盤破洞：半徑 32–46（圓形判定 0.8r）；預告 2.2 秒畫面是烤焦（橘紅 → 焦黑、裂痕、冒煙），破了是邊緣還在燒的焦黑洞（`_drawHole`，房主客戶端共用，快照 `ho` 帶狀態+進度）。`checkEnemyFall(e,i,natural,force)`：force=掉進洞（以前 AI 永遠不會掉進洞）。
 - 加熱來源（玩家）：火焰圈 +26%/秒、中心熱區、待著會熟 +0.7%/秒、站著不動、被撞 +10%、滾燙醬油 +8%/秒、炭火彈 +15%、叉子 +20%、胡椒噴嚏 +8%、被推進火裡 +15%、火柱 +20%、AI 大絕 +10%、**外圈剝落邊緣 22px 內 +10%/秒**（以前 30px 內 +35%、10px 內再 +24%，又沒提示）、**撞人噴的小油漬聚 5 塊以上變熱區 +8%/秒**。**玩家加熱一律走 `_hAdd(來源,量,上限,quiet)`**（記在 `_heatLog`，每條命重算；復活記「復活時就有 30」）。熟度數字旁顯示前兩名（`heatSrcTxt`），被烤熟的出局原因列前三名（`_heatSummary`）；每秒升超過 3% 時腳下顯示原因（`_heatWhy`）。站著不動的判定看「實際位移 > 25px/秒 或有按方向鍵」（以前只看自己的速度，被推飛、撐住傾斜都算不動）。身上起火 = 站在火焰圈 / 中心高溫區（`_updateBurn`）。火焰預告 1.5–2 秒（`f.warnMax`）；火圈邊框畫在角色上面（`_drawFireRims`：預告 = 虛線圈 + 倒數弧，燒起來 = 實線框，房主畫在 burnLayer、客戶端畫在 _netLayer）。
 - 畫面震動：所有震動都進 `_addTrauma()`（創傷值，最大 12px），撞人只在 `_hitFeel()` 算一次；跟玩家無關的事不震。賽前設定有「強/中/關」（`localStorage bbq_shake`）。
@@ -32,7 +33,7 @@
 ## 工作流程
 - 改完、測過就 commit + push 到 master（不用再問）；只提交相關檔案（不要提交 `assets/* - 複製.png`、`docs/superpowers/` 草稿、`.superpowers/`、`.m4a`）。
 - 修改方式：用 Python 腳本把整個檔案讀成字串、`\r\n`→`\n` 後做「必須剛好出現一次」的取代，再寫回 CRLF。
-- 測試工具放在 `C:\Users\User\AppData\Local\Temp\bbqtools\`（暫存資料夾，可能被清掉）：`checkall.py`（每個 script 區塊語法檢查）、`loadcheck.js`、`sim3.js` / `simdbg.js`（快轉模擬，三種打法 passive/aggro/smart）、`an3.py`（模擬統計）、`mptest.js`（雙視窗連線測試，要先開本機 `server.js`）、`livestest.js`、`soytest.js`、`bdtest.js`、`shaketest.js`、`cdtest.js`、`tilttest.js`（胡椒/大蒜/叉子/傾斜/大絕 UI）、`mptilt.js`（mptest + 傾斜 / 遠端大絕 / 破洞同步）、`aiulttest.js`（AI 大絕、外圈加熱、破洞、豆腐凍脆）、`heatlogtest.js`（加熱記帳、站著不動判定、烤熟原因）。本機伺服器要在 `C:\Users\User\AppData\Local\Temp\bbqsrv\` 跑（那裡才有 node_modules；先把 `server.js` 複製過去）。執行：`PW_PATH="C:/Users/User/AppData/Roaming/npm/node_modules/playwright" node xxx.js "D:/烤肉遊戲/index.html" <截圖資料夾>`。
+- 測試工具放在 `C:\Users\User\AppData\Local\Temp\bbqtools\`（暫存資料夾，可能被清掉）：`checkall.py`（每個 script 區塊語法檢查）、`loadcheck.js`、`sim3.js` / `simdbg.js`（快轉模擬，三種打法 passive/aggro/smart）、`an3.py`（模擬統計）、`mptest.js`（雙視窗連線測試，要先開本機 `server.js`）、`livestest.js`、`soytest.js`、`bdtest.js`、`shaketest.js`、`cdtest.js`、`tilttest.js`（胡椒/大蒜/叉子/傾斜/大絕 UI）、`mptilt.js`（mptest + 傾斜 / 遠端大絕 / 破洞同步）、`aiulttest.js`（AI 大絕、外圈加熱、破洞、豆腐凍脆）、`heatlogtest.js`（加熱記帳、站著不動判定、烤熟原因）、`crowdtest.js`（人多變熱）、`firerimtest.js`（火圈預告 / 邊框）。本機伺服器要在 `C:\Users\User\AppData\Local\Temp\bbqsrv\` 跑（那裡才有 node_modules；先把 `server.js` 複製過去）。執行：`PW_PATH="C:/Users/User/AppData/Roaming/npm/node_modules/playwright" node xxx.js "D:/烤肉遊戲/index.html" <截圖資料夾>`。
 - 關測試伺服器只關 port 3000 那個 process，**不要** `taskkill /IM node.exe`（會把 Claude Code 自己也關掉）。
 - 省 token：少截圖（只截局部）、測試只印結果。
 
