@@ -113,6 +113,9 @@ const TITLE_BG = "data:image/webp;base64,UklGRtxRAgBXRUJQVlA4INBRAgBwLgqdASoABgA
 .lobby-input::placeholder { color: #664422; }
 .lobby-label { font-size: 0.85rem; color: #cc9966; margin-bottom: 6px; display: block; }
 .lobby-error { color: #ff6666; font-size: 0.88rem; margin-bottom: 10px; min-height: 20px; }
+.lobby-error.wait { color: #ffd27a; }
+.lobby-invite { margin: -2px 0 14px; padding: 9px 12px; border-radius: 10px; background: rgba(255,160,40,0.14); border: 1px dashed rgba(255,180,80,0.6); color: #ffe2b0; font-size: 0.9rem; text-align: center; line-height: 1.5; }
+.lobby-invite b { font-family: 'Bungee','Consolas',monospace; color: #ffb43a; letter-spacing: .08em; }
 .lobby-section { margin-bottom: 20px; }
 .wr-code {
   font-size: 2.2rem; font-weight: 900; color: #ffcc44; text-align: center;
@@ -305,7 +308,16 @@ const TITLE_BG = "data:image/webp;base64,UklGRtxRAgBXRUJQVlA4INBRAgBwLgqdASoABgA
 .wr-title { font-size:2rem; line-height:1.1; color:var(--cream); text-shadow:0 2px 0 #000, 0 0 22px rgba(255,120,30,0.45); }
 .wr-title b { color:var(--flame); font-weight:inherit; }
 
-/* 號碼牌 */
+/* 邀請連結（朋友點開就進房）+ 號碼牌 */
+.wr-invite-wrap { display:flex; align-items:center; gap:22px; }
+.wr-invite { font-family:inherit; cursor:pointer; padding:9px 16px 8px; border-radius:12px; border:2px solid var(--ember); background:rgba(255,106,26,0.14); color:var(--cream);
+  font-size:.95rem; line-height:1.2; white-space:nowrap; box-shadow:0 4px 0 rgba(0,0,0,0.45); transition:transform .15s, background .15s, border-color .15s; }
+.wr-invite small { display:block; font-size:.66rem; color:var(--ash); margin-top:3px; letter-spacing:.06em; }
+.wr-invite:hover { background:rgba(255,106,26,0.3); transform:translateY(-2px); }
+.wr-invite:active { transform:translateY(2px); box-shadow:0 1px 0 rgba(0,0,0,0.45); }
+.wr-invite.ok { border-color:#7dff9a; background:rgba(60,200,110,0.18); } .wr-invite.ok small { color:#b8ffc8; }
+.wr-seat .wins { font-family:'Bungee','Consolas',monospace; font-size:.78rem; color:#ffd84a; flex-shrink:0; text-shadow:0 1px 0 #000; white-space:nowrap; }
+@media (max-width: 720px) { .wr-invite-wrap { flex-wrap:wrap; gap:14px; } }
 .wr-ticket { position:relative; display:flex; align-items:center; gap:12px; cursor:pointer; user-select:none; margin-right:8px;
   padding:8px 20px 8px 18px; background:linear-gradient(180deg,#fff6e2,#f6dfb4); color:#3a1606; border-radius:6px;
   transform:rotate(-2deg); box-shadow:0 5px 0 #9a5a24, 0 10px 24px rgba(0,0,0,0.5); transition:transform .18s, box-shadow .18s; }
@@ -475,6 +487,7 @@ const TITLE_BG = "data:image/webp;base64,UklGRtxRAgBXRUJQVlA4INBRAgBwLgqdASoABgA
   <!-- Screen: Join Room -->
   <div id="screen-join" class="lobby-card" style="display:none">
     <div class="lobby-title">加入房間</div>
+    <div class="lobby-invite" id="join-invite" style="display:none"></div>
     <label class="lobby-label">房間代碼（6碼）</label>
     <input class="lobby-input" id="join-code" placeholder="例：BBQ42K" maxlength="6"
       style="text-transform:uppercase;letter-spacing:0.15em;font-size:1.3rem">
@@ -490,9 +503,12 @@ const TITLE_BG = "data:image/webp;base64,UklGRtxRAgBXRUJQVlA4INBRAgBwLgqdASoABgA
     <!-- Header -->
     <div class="wr-head">
       <div><div class="wr-kicker">炭火已點・等人入座</div><div class="wr-title">等待<b>室</b></div></div>
-      <div class="wr-ticket" id="wr-ticket" title="點擊複製房號" onclick="Lobby.copyCode()">
-        <span class="wr-ticket-lbl">房號</span><span class="wr-code" id="wr-room-code">------</span>
-        <span class="wr-ticket-hint" id="wr-copy-hint">點一下複製，傳給朋友</span>
+      <div class="wr-invite-wrap">
+        <button class="wr-invite" id="wr-invite-btn" onclick="Lobby.copyInvite()">🔗 複製邀請連結<small>朋友點開就進房</small></button>
+        <div class="wr-ticket" id="wr-ticket" title="點擊複製房號" onclick="Lobby.copyCode()">
+          <span class="wr-ticket-lbl">房號</span><span class="wr-code" id="wr-room-code">------</span>
+          <span class="wr-ticket-hint" id="wr-copy-hint">點一下複製房號</span>
+        </div>
       </div>
     </div>
 
@@ -1113,6 +1129,11 @@ class TeamScene extends Phaser.Scene {
         const c=_aiPick[i];
         this.participants.push({id:'ai'+i,name:'AI '+(i+1),charKey:c.key,char:c,team:'none',isPlayer:false});
       }
+      // 再來一局：沿用房主上一局在這個畫面選的設定（熱源 / 難度 / 道具 / AI 戰術 / 模式 / AI 的隊伍）
+      const L=data.rematch&&window.MP.isHost&&window.MP._lastSetup;
+      if(L){ ['heatMode','aiDiff','itemRate','aiStyle'].forEach(k=>{ if(L[k]!=null) data[k]=L[k]; });
+        if(L.gameMode) this.gameMode=L.gameMode;
+        this.participants.forEach(p=>{ if(!p.isPlayer&&L.teams&&L.teams[p.id]) p.team=L.teams[p.id]; }); }
     } else {
       // 單人模式：玩家 + AI 隨機選角
       this.participants=[{id:'player',name:'你',charKey:data.char.key,char:data.char,team:'none',isPlayer:true,isSelf:true}];
@@ -1283,8 +1304,21 @@ class TeamScene extends Phaser.Scene {
     this.helpTxt=this.add.text(cx,428,'',{fontSize:'12px',color:'#c9a27a',fontFamily:FF,stroke:'#000000',strokeThickness:3}).setOrigin(0.5).setDepth(6);
     this._refreshTeamUI();
 
+    // ── 再來一局（房主）：停一下讓大家看一眼陣容就自動開打；想改設定 → 點一下畫面取消自動開始 ──
+    if(this.mpMode&&isHost&&this.gameData.rematch){
+      const rt=this.add.text(cx,H/2-250,'🔥 再來一局！馬上開烤…（要改設定就點一下畫面）',{fontSize:'17px',color:'#fff4d6',fontFamily:FF,backgroundColor:'#c2380a',padding:{x:14,y:6}}).setOrigin(0.5).setDepth(60);
+      // 用真實時間（剛開好的畫面前 120 幀 Phaser 會把每幀時間壓在 16ms，電腦慢的話 1.3 秒會變成好幾秒）
+      let off=false; const alive=()=>!!(this.sys&&this.sys.settings&&this.sys.isActive());
+      window.setTimeout(()=>{ if(!off&&alive()) this._startGame(); },1300);
+      this.input.once('pointerdown',()=>{ off=true; if(rt.scene) rt.setText('已暫停自動開始：調好再按「開烤！」').setBackgroundColor('#553322');
+        window.setTimeout(()=>{ if(rt.scene) rt.destroy(); },1800); }); // 提示會蓋到模式按鈕 → 一下就收掉
+    }
+
     // ── 多人模式：監聽主機廣播的 team_confirmed ────────────────
-    if(this.mpMode&&!isHost){
+    if(this.mpMode&&!isHost&&window.MP._teamOK){ // 房主已經按開始了（我這邊畫面比較慢才開好）→ 直接進場
+      const t=window.MP._teamOK; window.MP._teamOK=null;
+      this.time.delayedCall(60,()=>this._launchFromTeamData(t));
+    } else if(this.mpMode&&!isHost){
       const sock=window.MP&&window.MP.socket;
       if(sock){
         sock.on('game_event',(evt)=>{
@@ -1386,6 +1420,8 @@ class TeamScene extends Phaser.Scene {
     const d=this.gameData;
     const teamsData=this.participants.map(p=>({id:p.id,team:p.team||'none',isPlayer:p.isPlayer}));
     if(this.mpMode&&window.MP&&window.MP.socket&&window.MP.isHost){
+      const tm={}; this.participants.forEach(p=>{ if(!p.isPlayer) tm[p.id]=p.team||'none'; });
+      window.MP._lastSetup={heatMode:d.heatMode,aiDiff:d.aiDiff,itemRate:d.itemRate,aiStyle:d.aiStyle,gameMode:this.gameMode,teams:tm}; // 「再來一局」用
       // 主機：廣播 team_confirmed，然後自己也進遊戲
       window.MP.socket.emit('game_event',{type:'team_confirmed',teams:teamsData});
     }
@@ -3613,8 +3649,8 @@ class GameScene extends Phaser.Scene {
     const st=this.stats||{hits:0,kos:0};
     const myName=this.netRole?(window.MP.myNickname||'房主'):((this.charData&&this.charData.name)||'你');
     const _lm=this.fx&&this.fx.respawn;
-    const board=[{id:'H',name:myName,score:this.score||0,hits:st.hits||0,kos:st.kos||0,deaths:this.deaths||0,alive:_lm?!this._pOut:!!win,me:true,bd:this._bd||{}}];
-    this.enemies.forEach((e,i)=>board.push({id:e.pid||('a'+i),name:e.label,score:e.score||0,hits:e.sHits||0,kos:e.sKos||0,deaths:e.deaths||0,alive:_lm?!e.isGhost:!!e.alive,me:false,bd:e._bd||{}}));
+    const board=[{id:'H',name:myName,score:this.score||0,hits:st.hits||0,kos:st.kos||0,deaths:this.deaths||0,alive:_lm?!this._pOut:!!win,me:true,bd:this._bd||{},hu:1,tm:this.playerTeam||'none'}];
+    this.enemies.forEach((e,i)=>board.push({id:e.pid||('a'+i),name:e.label,score:e.score||0,hits:e.sHits||0,kos:e.sKos||0,deaths:e.deaths||0,alive:_lm?!e.isGhost:!!e.alive,me:false,bd:e._bd||{},hu:e.remote?1:0,tm:e.team||'none'}));
     board.sort((a,b)=>(b.score-a.score)||((b.alive?1:0)-(a.alive?1:0))||((b.me?1:0)-(a.me?1:0)));
     return board;
   }
@@ -4038,10 +4074,25 @@ class GameScene extends Phaser.Scene {
     if(this._netZT<=0){ this._netZT=0.5; sn.z=(this.zones||[]).map(z=>[R(z.x),R(z.y),R(z.r),z.kind==='soy'?0:1,+z.life.toFixed(1)]); }
     window.MP.socket.emit('snap',sn);
   }
-  _netSendEnd(win){
+  _netSendEnd(win,aborted){
     if(this._netEndSent) return; this._netEndSent=true;
     const board=this._finalScores(win), rv=this._rivalText();
-    window.MP.socket.emit('game_over',{board:board.map(r=>({id:r.id,name:r.name,score:r.score,hits:r.hits,kos:r.kos,deaths:r.deaths,alive:r.alive,bd:r.bd||{},rv}))});
+    if(!aborted){ try{ this._tallyAdd(board); }catch(e){ console.error('[tally]',e); } } // 房主按 ESC 中途結束的不算一局
+    { const P=(window.MP.tally&&window.MP.tally.p)||{}; board.forEach(r=>{ if(r.w==null){ const o=r.hu&&P[r.id==='H'?window.MP.myId:r.id]; r.w=o?o.w:0; } }); }
+    window.MP.socket.emit('game_over',{board:board.map(r=>({id:r.id,name:r.name,score:r.score,hits:r.hits,kos:r.kos,deaths:r.deaths,alive:r.alive,bd:r.bd||{},w:r.w||0,rv})),tally:window.MP.tally||null});
+  }
+  // 這個房間的累計戰績：房主記，跟結算一起送給大家（每個人都留一份 → 換房主也接得下去）。
+  // 個人制：分數最高的真人 +1 勝（AI 拿第一就沒人拿到）；隊伍制：總分高的那隊每個真人 +1 勝
+  _tallyAdd(board){
+    const T=(window.MP.tally&&window.MP.tally.p)?window.MP.tally:(window.MP.tally={n:0,p:{}});
+    const hum=board.filter(r=>r.hu); let win=[];
+    if(this.gameMode==='team'){ const sum={blue:0,red:0}; board.forEach(r=>{ if(sum[r.tm]!=null) sum[r.tm]+=r.score; });
+      const wt=sum.blue===sum.red?null:(sum.blue>sum.red?'blue':'red'); win=hum.filter(r=>wt&&r.tm===wt); }
+    else { const top=board.length?board[0].score:0; win=hum.filter(r=>top>0&&r.score===top); }
+    T.n=(T.n||0)+1;
+    hum.forEach(r=>{ const k=r.id==='H'?window.MP.myId:r.id, o=T.p[k]||(T.p[k]={w:0,g:0}); o.g++; if(win.indexOf(r)>=0) o.w++; r.w=o.w; });
+    if(typeof Lobby!=='undefined'&&Lobby._updatePlayerList) Lobby._updatePlayerList(window.MP.players||[]);
+    return T;
   }
   // 連線中按 ESC：房主 → 直接結算給大家；客戶端 → 自己回等待室
   _rivalText(){
@@ -4054,7 +4105,7 @@ class GameScene extends Phaser.Scene {
     return '⚔ 剋星：'+nm(best.a)+' 擊落 '+nm(best.b)+' '+best.ab+' 次';
   }
   _netLeave(){
-    if(this.netRole==='host') this._netSendEnd(false);
+    if(this.netRole==='host') this._netSendEnd(false,true);
     const ov=document.getElementById('lobby-overlay');
     if(ov){ ov.classList.remove('hidden'); if(typeof Lobby!=='undefined'){ if(Lobby._roomCode) Lobby._showWaitingRoom(); else Lobby.showLanding(); } }
     window.setTimeout(()=>{ if(gameInstance){ gameInstance.destroy(true); gameInstance=null; } },16);
@@ -5457,8 +5508,9 @@ class GameScene extends Phaser.Scene {
     this.add.text(PX,PY-PH/2+88,(title||'')+(reason?'　'+reason:''),{fontSize:'18px',color:win?'#88ffaa':'#ffb0a0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1);
     // 計分規則（加權）
     const _lm=!!(this.fx&&this.fx.respawn);
-    this.add.text(PX,PY-PH/2+118,_lm?'計分：往外撞中 ×0.5　擊落 ×3　🎯 快熟 +2　⚔ 復仇 +2　🍶 助攻 +1　👻 鬼魂炸中 +0.5 / 炸出 +1　活到最後 +3':'計分：撞中 ×1　擊落 ×3　活到最後 +3',
+    { const rt=this.add.text(PX,PY-PH/2+118,_lm?'往外撞中 +0.5　擊落 +3　🎯快熟 +2　⚔復仇 +2　🍶助攻 +1　👻鬼魂 +0.5 / +1　存活 +3':'計分：撞中 ×1　擊落 ×3　活到最後 +3',
       {fontSize:'13px',color:'#ffcf8a',fontFamily:'sans-serif',backgroundColor:'#2a1608',padding:{x:8,y:3}}).setOrigin(0.5).setDepth(D+1);
+      if(rt.width>PW-28) rt.setScale((PW-28)/rt.width); } // 以前這行比面板寬，兩邊被切掉
     const fmt=v=>Math.round(v*10)/10;
     const formula=(r)=>{ const b=r.bd||{}, parts=[];
       if(b.hit) parts.push('撞中 '+b.hit+(_lm?'×0.5':'')+'='+fmt(b.hitPts||0));
@@ -5470,6 +5522,10 @@ class GameScene extends Phaser.Scene {
       if(b.gko) parts.push('👻 炸出去 '+b.gko+'×1='+b.gko);
       if(b.surv) parts.push('存活 +'+b.surv);
       return parts.length?parts.join('　+　')+'　=　'+fmt(r.score):'沒有得分'; };
+    // 連線：這個房間打到第幾局、每個人累計贏幾局（🏆×N）
+    const _T=this.multiplay&&window.MP&&window.MP.tally;
+    const _wOf=r=>{ if(r.w!=null) return r.w; const o=_T&&_T.p&&_T.p[r.id==='H'?window.MP.myId:r.id]; return o?o.w:0; };
+    if(_T&&_T.n) this.add.text(PX-PW/2+18,PY-PH/2+20,'第 '+_T.n+' 局',{fontSize:'14px',color:'#ffcf8a',fontFamily:'sans-serif',fontStyle:'bold',backgroundColor:'#3a1c0c',padding:{x:8,y:3}}).setOrigin(0,0.5).setDepth(D+1);
     // 排行榜（前 5 名；你不在前 5 就多列一行）
     const rows=board.slice(0,5); if(rank>5) rows.push(me);
     rows.forEach((r,i)=>{
@@ -5479,6 +5535,7 @@ class GameScene extends Phaser.Scene {
       this.add.text(PX-PW/2+36,y,pos+'.',{fontSize:'18px',color:col,fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(D+1);
       this.add.text(PX-PW/2+68,y,r.name+(r.me?'（你）':'')+(r.alive?'':' ✖'),{fontSize:'18px',color:col,fontFamily:'sans-serif',fontStyle:r.me?'bold':'normal'}).setOrigin(0,0.5).setDepth(D+1);
       this.add.text(PX+70,y,(_lm?'出局 '+r.deaths+' 次':''),{fontSize:'13px',color:'#9a8a78',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1);
+      { const w=this.multiplay?_wOf(r):0; if(w>0) this.add.text(PX+142,y,'🏆×'+w,{fontSize:'14px',color:'#ffd84a',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(D+1); }
       this.add.text(PX+PW/2-36,y,fmt(r.score)+' 分',{fontSize:'20px',color:col,fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(1,0.5).setDepth(D+1);
       this.add.text(PX-PW/2+68,y+19,formula(r),{fontSize:'13px',color:r.me?'#ffe9b0':'#c9b8a0',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1);
     });
@@ -5487,26 +5544,46 @@ class GameScene extends Phaser.Scene {
     const st=this.stats||{pushes:0,hits:0,kos:0,pushed:0};
     this.add.text(PX,PY+PH/2-112,'你：推擊 '+st.pushes+' 次（撞中 '+st.hits+'）　擊落 '+st.kos+'　被推 '+st.pushed+' 次',
       {fontSize:'15px',color:'#ffe9c4',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1);
+    const _t0=performance.now(), _isH=()=>!!(window.MP&&window.MP.isHost), _rmOk=()=>performance.now()-_t0>2000; // 結算出來 2 秒後才能按（大家先看一眼分數）
+    let _rb=null;
     const go=(what)=>{
-      if(this._leaving) return; this._leaving=true;
+      if(this._leaving) return;
+      if(what==='rematch'){ // 連線：房主直接開下一局（同樣的人、同樣的設定，不回等待室）
+        if(!_isH()||!_rmOk()) return;
+        if(typeof Lobby==='undefined'||!Lobby.rematch()){ if(_rb) _rb.t2.setText('連線中斷，等一下再按'); return; }
+        this._leaving=true; if(_rb) _rb.t1.setText('🔥 開烤中…');
+        this.time.delayedCall(5000,()=>{ this._leaving=false; }); // 伺服器沒回應 → 可以再按一次
+        return;
+      }
+      this._leaving=true;
       if(what==='again') this.scene.restart();
       else if(what==='select') window.setTimeout(()=>{ createGame(); },16);
       else { const ov=document.getElementById('lobby-overlay'); if(ov){ ov.classList.remove('hidden'); if(typeof Lobby!=='undefined'){ if(this.multiplay&&Lobby._roomCode) Lobby._showWaitingRoom(); else Lobby.showLanding(); } }
-             window.setTimeout(()=>{ if(gameInstance){ gameInstance.destroy(true); gameInstance=null; } },16); }
+             const _g=gameInstance; // 這 16ms 內房主剛好開下一局 → 不要把新開的那個關掉
+             window.setTimeout(()=>{ if(gameInstance&&gameInstance===_g){ gameInstance.destroy(true); gameInstance=null; } },16); }
     };
-    const btns=this.multiplay?[['回等待室','M','home',0xff6600]]:[['▶ 再玩一次','Enter','again',0xff6600],['選角色','ESC','select',0x553322],['回主頁','M','home',0x333333]];
+    const btns=this.multiplay?[['▶ 再來一局','Enter','rematch',0xff6600],['回等待室','M','home',0x553322]]:[['▶ 再玩一次','Enter','again',0xff6600],['選角色','ESC','select',0x553322],['回主頁','M','home',0x333333]];
+    const _bw=this.multiplay?208:160;
     btns.forEach(([label,key,what,col],i)=>{
-      const bx=PX+(btns.length===1?0:(i-1)*172), by=PY+PH/2-64;
-      const b=this.add.rectangle(bx,by,160,52,col,1).setStrokeStyle(2,0xffcc77).setDepth(D+1).setInteractive({useHandCursor:true});
-      this.add.text(bx,by-8,label,{fontSize:'19px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+2);
-      this.add.text(bx,by+14,'（'+key+'）',{fontSize:'12px',color:'#ffdcb0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+2);
+      const bx=PX+(i-(btns.length-1)/2)*(_bw+12), by=PY+PH/2-64;
+      const b=this.add.rectangle(bx,by,_bw,52,col,1).setStrokeStyle(2,0xffcc77).setDepth(D+1).setInteractive({useHandCursor:true});
+      const t1=this.add.text(bx,by-8,label,{fontSize:'19px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+2);
+      const t2=this.add.text(bx,by+14,'（'+key+'）',{fontSize:'12px',color:'#ffdcb0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+2);
       b.on('pointerover',()=>b.setScale(1.05)); b.on('pointerout',()=>b.setScale(1));
       b.on('pointerdown',()=>go(what));
+      if(what==='rematch') _rb={b,t1,t2};
     });
+    if(_rb){ // 房主：亮的按鈕（2 秒後可按）；其他人：灰的「等房主」（房主中途換人也會跟著變）
+      const rf=()=>{ if(!_rb.b.scene||this._leaving) return; const h=_isH(), ok=_rmOk();
+        _rb.b.setFillStyle(h?0xff6600:0x3a3a3a,1).setAlpha(h&&!ok?0.55:1);
+        _rb.t1.setText(h?'▶ 再來一局':'⏳ 等房主開下一局').setFontSize(h?19:17);
+        _rb.t2.setText(h?(ok?'（Enter）同樣的人直接開打':'…'):'不用按，會自動開始'); };
+      rf(); this.time.addEvent({delay:250,loop:true,callback:rf});
+    }
     // 用鍵盤事件（快速點按也收得到）
     this.input.keyboard.on('keydown',(ev)=>{
       const c=ev.code;
-      if(this.multiplay){ if(c==='KeyM'||c==='Enter'||c==='Escape') go('home'); return; }
+      if(this.multiplay){ if(c==='Enter') go('rematch'); else if(c==='KeyM'||c==='Escape') go('home'); return; }
       if(c==='Enter'||c==='Space'||c==='KeyR') go('again');
       else if(c==='Escape') go('select');
       else if(c==='KeyM') go('home');
@@ -8854,6 +8931,42 @@ const Lobby = {
     ov.classList.toggle('ld-on', id === 'screen-landing');
     if (window.BBQMusic && !ov.classList.contains('hidden')) BBQMusic.play('menu');
     if (id !== 'screen-landing') this.toggleHow(false);
+    if (id !== 'screen-join') this._joinWaitStop();
+  },
+
+  // ── 邀請連結：等待室「複製邀請連結」→ 朋友點開網址（?room=房號）就到加入畫面；記得暱稱的人直接進房 ──
+  _nickLoad() { try { return localStorage.getItem('bbq_nick') || ''; } catch (e) { return ''; } },
+  _nickSave(n) { try { localStorage.setItem('bbq_nick', n); } catch (e) {} },
+  _inviteUrl() {
+    const sv = new URLSearchParams(location.search).get('server');
+    return location.href.split(/[?#]/)[0] + '?room=' + this._roomCode + (sv ? '&server=' + encodeURIComponent(sv) : '');
+  },
+  copyInvite() {
+    const b = document.getElementById('wr-invite-btn'), url = this._inviteUrl();
+    const done = () => { if (!b) return; b.classList.add('ok'); b.innerHTML = '✓ 連結已複製<small>貼到 LINE / Discord 給朋友</small>';
+      clearTimeout(this._invT); this._invT = setTimeout(() => { b.classList.remove('ok'); b.innerHTML = '🔗 複製邀請連結<small>朋友點開就進房</small>'; }, 2200); };
+    const fail = () => { try { window.prompt('複製這個連結傳給朋友：', url); } catch (e) {} };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, fail); else fail();
+  },
+  _joinWaitStop() { clearTimeout(this._joinWaitT); this._joinWaitT = null; },
+  _initInvite() {
+    const nk = this._nickLoad();
+    ['create-nickname', 'join-nickname'].forEach(id => { const el = document.getElementById(id); if (el && nk && !el.value) el.value = nk; });
+    // Enter 送出（中文輸入法選字的 Enter 不算）
+    const onEnter = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); fn(); } }); };
+    onEnter('create-nickname', () => this.createRoom()); onEnter('join-code', () => this.joinRoom()); onEnter('join-nickname', () => this.joinRoom());
+    const jc = document.getElementById('join-code'); if (jc) jc.addEventListener('input', () => this._joinWaitStop());
+    const rc = (new URLSearchParams(location.search).get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (rc.length !== 6 || !jc) return;
+    this.showJoin(); jc.value = rc;
+    const iv = document.getElementById('join-invite');
+    if (iv) { iv.style.display = ''; iv.innerHTML = '🎟 朋友邀你進房 <b>' + rc + '</b><br>' + (nk ? '正在帶你進去…' : '輸入暱稱，按 Enter 就進去'); }
+    if (nk) this.joinRoom(); else { const jn = document.getElementById('join-nickname'); if (jn) setTimeout(() => jn.focus(), 60); }
+  },
+  _setTally(t) { window.MP.tally = t; this._updatePlayerList(window.MP.players || []); },
+  rematch() { // 結算畫面：房主按「再來一局」→ 同樣的人、同樣的設定直接開打（不回等待室）
+    if (!this._isHost || !this._socket || !this._socket.connected) return false;
+    this._rematch = true; this._socket.emit('start_game'); return true;
   },
 
   toggleHow(on) {
@@ -8962,9 +9075,15 @@ const Lobby = {
     s.on('connect_error', () => {
       const ce = document.getElementById('create-error');
       const je = document.getElementById('join-error');
-      if (ce) ce.textContent = '無法連線到伺服器';
-      if (je) je.textContent = '無法連線到伺服器';
+      if (ce) { ce.textContent = '連不上伺服器，重試中…（伺服器剛睡醒大約要 30 秒）'; ce.classList.remove('wait'); }
+      if (je) { je.textContent = '連不上伺服器，重試中…（伺服器剛睡醒大約要 30 秒）'; je.classList.remove('wait'); }
     });
+    // 不管現在在哪個畫面都要收到的事（用 onAny：各場景會 off('game_event') / off('game_end')，不能被它們清掉）
+    s.onAny((ev, d) => { try {
+      if (ev === 'game_event' && d && d.type === 'team_confirmed') window.MP._teamOK = d.teams || []; // 房主按開始時我的畫面還沒開好 → 先記著
+      else if (ev === 'game_event' && d && d.type === 'tally' && d.tally) this._setTally(d.tally);
+      else if (ev === 'game_end' && d && d.tally) this._setTally(d.tally);
+    } catch (e) { console.error('[lobby any]', e); } });
   },
 
   _rejoin(s) {
@@ -8979,10 +9098,14 @@ const Lobby = {
 
   createRoom() {
     const nickname = document.getElementById('create-nickname').value.trim();
-    if (!nickname) { document.getElementById('create-error').textContent = '請輸入暱稱'; return; }
+    const ce = document.getElementById('create-error');
+    if (!nickname) { ce.classList.remove('wait'); ce.textContent = '請輸入暱稱'; return; }
+    this._nickSave(nickname); ce.classList.add('wait'); ce.textContent = '連線中…（伺服器剛睡醒大約要 30 秒）';
     this._connectSocket(s => {
       s.emit('create_room', { nickname, charKey: this._myChar, pid: window.MP.myId }, (res) => {
+        ce.classList.remove('wait'); ce.textContent = '';
         if (!res.ok) { document.getElementById('create-error').textContent = res.err; return; }
+        window.MP.tally = { n: 0, p: {} }; window.MP._lastSetup = null;
         this._roomCode = res.code; this._isHost = true; this._settings = { ...res.settings };
         window.MP.roomCode = res.code; window.MP.isHost = true;
         window.MP.myNickname = nickname; window.MP.myCharKey = this._myChar; window.MP.myTeam = this._myTeam;
@@ -8992,14 +9115,27 @@ const Lobby = {
     });
   },
 
-  joinRoom() {
+  joinRoom(auto) {
     const code = document.getElementById('join-code').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
     const nickname = document.getElementById('join-nickname').value.trim();
-    if (code.length !== 6) { document.getElementById('join-error').textContent = '請輸入 6 碼房間代碼'; return; }
-    if (!nickname) { document.getElementById('join-error').textContent = '請輸入暱稱'; return; }
+    const err = (t, wait) => { const el = document.getElementById('join-error'); el.textContent = t; el.classList.toggle('wait', !!wait); };
+    if (!auto) this._joinWaitStop();
+    if (code.length !== 6) { err('請輸入 6 碼房間代碼'); return; }
+    if (!nickname) { err('請輸入暱稱'); return; }
+    this._nickSave(nickname);
+    if (!auto) err('連線中…（伺服器剛睡醒大約要 30 秒）', true);
     this._connectSocket(s => {
       s.emit('join_room', { code, nickname, charKey: this._myChar, pid: window.MP.myId }, (res) => {
+        if (!res.ok && /已開始/.test(res.err || '')) { // 這局正在打：每 1.2 秒再試，打完（結算畫面那幾秒）就自動進房
+          err('🔥 這一局正在打（最多 1 分鐘）— 打完自動帶你進房，不用重按…', true);
+          clearTimeout(this._joinWaitT);
+          this._joinWaitT = setTimeout(() => { if (document.getElementById('screen-join').style.display !== 'none' && !this._roomCode) this.joinRoom(true); }, 1200);
+          return;
+        }
+        this._joinWaitStop(); err('');
+        { const iv = document.getElementById('join-invite'); if (iv) iv.style.display = 'none'; }
         if (!res.ok) { document.getElementById('join-error').textContent = res.err; return; }
+        window.MP.tally = { n: 0, p: {} }; window.MP._lastSetup = null;
         this._roomCode = res.code; this._isHost = !!res.isHost; this._settings = { ...res.settings };
         window.MP.roomCode = res.code; window.MP.isHost = this._isHost;
         window.MP.myNickname = nickname; window.MP.myCharKey = this._myChar; window.MP.myTeam = this._myTeam;
@@ -9012,11 +9148,15 @@ const Lobby = {
 
   _setupSocketListeners(s) {
     s.off('player_list'); s.off('settings_update'); s.off('game_start'); s.off('host_changed');
-    s.on('player_list', (players) => { window.MP.players = players; this._updatePlayerList(players); });
+    s.on('player_list', (players) => { window.MP.players = players; this._updatePlayerList(players);
+      // 有新的人進房 → 房主把累計戰績傳給他
+      if (this._isHost && window.MP.tally && window.MP.tally.n && players.length > (this._lastPC || 0)) s.emit('game_event', { type: 'tally', tally: window.MP.tally });
+      this._lastPC = players.length; });
     s.on('settings_update', (settings) => { this._settings = { ...settings }; window.MP.settings = settings; this._renderSettings(); });
     s.on('game_start', ({ settings, players }) => {
-      window.MP.enabled = true; window.MP.settings = settings; window.MP.players = players;
-      this._launchGame();
+      window.MP.enabled = true; window.MP.settings = settings; window.MP.players = players; window.MP._teamOK = null;
+      const rm = !!this._rematch; this._rematch = false;
+      this._launchGame(rm);
     });
     s.on('host_changed', ({ newHost }) => {
       this._isHost = newHost === s.id; window.MP.isHost = this._isHost; this._renderHostControls();
@@ -9037,17 +9177,19 @@ const Lobby = {
     const isTeam = this._settings.gameMode === 'team';
     const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
     const myId = window.MP.myId;
+    const tally = (window.MP.tally && window.MP.tally.p) || {}, rounds = (window.MP.tally && window.MP.tally.n) || 0;
     const max = Math.max(players.length, (this._settings && this._settings.maxPlayers) || players.length);
     let html = players.map(p => {
       const dot = isTeam ? `<span class="tm" style="background:${p.team === 'blue' ? '#4488ff' : '#ff4444'}"></span>` : '';
       const name = this._getChars().find(c => c.key === p.charKey)?.name || p.charKey || '';
       const src = this._charImg(p.charKey);
       const me = myId && p.id === myId;
-      return `<div class="wr-seat${me ? ' me' : ''}">${src ? `<img src="${src}" alt="">` : ''}<div style="min-width:0;flex:1"><div class="nm">${p.isHost ? '👑 ' : ''}${esc(p.nickname)}</div><div class="ch">${esc(name)}${me ? '・你' : ''}</div></div>${dot}</div>`;
+      const tw = tally[p.id] && tally[p.id].w;
+      return `<div class="wr-seat${me ? ' me' : ''}">${src ? `<img src="${src}" alt="">` : ''}<div style="min-width:0;flex:1"><div class="nm">${p.isHost ? '👑 ' : ''}${esc(p.nickname)}</div><div class="ch">${esc(name)}${me ? '・你' : ''}</div></div>${tw ? `<span class="wins" title="這個房間累計贏了 ${tw} 局">🏆×${tw}</span>` : ''}${dot}</div>`;
     }).join('');
     for (let k = players.length; k < max; k++) html += `<div class="wr-seat empty">空位・AI 補上</div>`;
     el.innerHTML = html;
-    const cnt = document.getElementById('wr-seat-count'); if (cnt) cnt.textContent = players.length + ' / ' + max;
+    const cnt = document.getElementById('wr-seat-count'); if (cnt) cnt.textContent = players.length + ' / ' + max + (rounds ? '　·　已打 ' + rounds + ' 局' : '');
   },
 
   _renderSettings() {
@@ -9133,16 +9275,17 @@ const Lobby = {
     // 不改房號文字（以前會變「已複製！」→ 框變寬、連點兩下房號就不見了）：改成蓋一個「已複製」章
     const t = document.getElementById('wr-ticket'), h = document.getElementById('wr-copy-hint');
     const done = () => { if (!t) return; t.classList.remove('copied'); void t.offsetWidth; t.classList.add('copied'); if (h) h.textContent = '✓ 已複製，貼給朋友就能加入';
-      clearTimeout(this._copyT); this._copyT = setTimeout(() => { t.classList.remove('copied'); if (h) h.textContent = '點一下複製，傳給朋友'; }, 1600); };
+      clearTimeout(this._copyT); this._copyT = setTimeout(() => { t.classList.remove('copied'); if (h) h.textContent = '點一下複製房號'; }, 1600); };
     if (navigator.clipboard) navigator.clipboard.writeText(this._roomCode).then(done, done); else done();
   },
 
   startGame() {
     if (!this._isHost || !this._socket) return;
+    this._rematch = false;
     this._socket.emit('start_game');
   },
 
-  _launchGame() {
+  _launchGame(rematch) {
     document.getElementById('lobby-overlay').classList.add('hidden');
     const myPlayer = window.MP.players.find(p => p.id === window.MP.myId);
     const charKey = myPlayer ? myPlayer.charKey : window.MP.myCharKey;
@@ -9153,16 +9296,16 @@ const Lobby = {
       enemyCnt: Math.max(0, (window.MP.settings.maxPlayers||4) - window.MP.players.length),
       aiDiff: 1,
       multiplay: true,
+      rematch: !!rematch, // 房主在結算畫面按「再來一局」→ 賽前設定沿用上一局、自動開始
     };
-    if(gameInstance){
-      gameInstance.scene.start('Team', launchData);
-    } else {
-      window._PENDING_GAME_START={scene:'Team',data:launchData};
-      createGame();
-    }
+    // 一律重建畫面：上一局的結算可能還開著（以前直接 scene.start('Team') → 舊的 Game 還在跑，兩個疊在一起）
+    if (gameInstance) { try { gameInstance.scene.getScenes(true).forEach(sc => gameInstance.scene.stop(sc.scene.key)); } catch (e) { console.error('[launch]', e); } }
+    window._PENDING_GAME_START = { scene: 'Team', data: launchData };
+    createGame();
   },
 };
 try { Lobby._initTitle(); } catch (e) { console.error('[title]', e); }
+try { Lobby._initInvite(); } catch (e) { console.error('[invite]', e); }
 </script>
 </body>
 </html>

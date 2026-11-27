@@ -61,6 +61,7 @@
 - 修改方式：用 Python 腳本把整個檔案讀成字串、`\r\n`→`\n` 後做「必須剛好出現一次」的取代，再寫回 CRLF。
 - 測試工具放在 `C:\Users\User\AppData\Local\Temp\bbqtools\`（暫存資料夾，可能被清掉）：`checkall.py`（每個 script 區塊語法檢查）、`loadcheck.js`、`sim3.js` / `simdbg.js`（快轉模擬，三種打法 passive/aggro/smart）、`an3.py`（模擬統計）、`mptest.js`（雙視窗連線測試，要先開本機 `server.js`）、`livestest.js`、`soytest.js`、`bdtest.js`、`shaketest.js`、`cdtest.js`、`tilttest.js`（胡椒/大蒜/叉子/傾斜/大絕 UI）、`mptilt.js`（mptest + 傾斜 / 遠端大絕 / 破洞同步）、`aiulttest.js`（AI 大絕、外圈加熱、破洞、豆腐凍脆）、`heatlogtest.js`（加熱記帳、站著不動判定、烤熟原因）、`crowdtest.js`（人多變熱）、`firerimtest.js`（火圈預告 / 邊框）。本機伺服器要在 `C:\Users\User\AppData\Local\Temp\bbqsrv\` 跑（那裡才有 node_modules；先把 `server.js` 複製過去）。執行：`PW_PATH="C:/Users/User/AppData/Roaming/npm/node_modules/playwright" node xxx.js "D:/烤肉遊戲/index.html" <截圖資料夾>`。
 - 關測試伺服器只關 port 3000 那個 process，**不要** `taskkill /IM node.exe`（會把 Claude Code 自己也關掉）。
+- **port 3000 可能被別的專案佔用**（例如 Remotion studio）：先看那個 port 是誰的，不是 `server.js` 就**不要關**，改用 `PORT=3111 node server.js`，測試檔用 `sed 's#localhost:3000#localhost:3111#g'` 做一份（`mptest_3111.js`、`mpskill_3111.js`、`rejointest_3222.js`）。
 - 省 token：少截圖（只截局部）、測試只印結果。
 
 ## 遊戲啟動 / 關閉邏輯
@@ -92,6 +93,13 @@
   - 客戶端自己：出局有音效 + 震、分數一次跳 ≥3 有「擊落得分」提示、按 A 衝刺有音效。
   - **遠端玩家不吃 AI 的轉向力**：敵人更新裡「躲火 / 躲縮圈 / 被能量球吸」會加在 `e.vx`，以前遠端真人也被套用（能量球出現就被拉約 30px/秒、縮圈後靠邊被往中間推約 75px/秒）；現在進 `_remoteControl` 前還原成 `_v0x/_v0y`。
   - 測試 `mpskill.js`（在房主那邊換 `e.ck` 把 10 隻都試一遍）。
+- **邀請連結 / 再來一局 / 累計戰績（2026-11，只改客戶端，`server.js` 沒動）**：
+  - 邀請連結：等待室「🔗 複製邀請連結」（`Lobby.copyInvite` / `_inviteUrl` = 網址 + `?room=房號`）。開啟時 `Lobby._initInvite()`：有 `?room=` → 直接到加入畫面、房號填好；記得暱稱（`localStorage bbq_nick`）就自動進房。暱稱 / 房號輸入框按 Enter 送出（擋掉中文輸入法選字的 Enter：`isComposing` / keyCode 229）。那一局正在打（伺服器回「遊戲已開始」）→ 每 1.2 秒自動重試（`_joinWaitT`），打完自動進房。
+  - 再來一局：連線結算畫面「▶ 再來一局（Enter）」只有房主能按（結算出來 2 秒後才亮；其他人看到灰色「⏳ 等房主開下一局」），`Lobby.rematch()` → `start_game` → 每個人 `_launchGame(rematch)`。房主的賽前設定沿用上一局（`window.MP._lastSetup`），1.3 秒後自動開打（用 `setTimeout` 真實時間；點一下畫面取消自動開始）。真機約 1.8 秒回到場上。
+  - `_launchGame` **一律重建 Phaser**（先 stop 所有 scene 再 `createGame()`）：以前客戶端還停在結算畫面時房主開局 → Team 疊在舊的 Game 上。
+  - `Lobby._connectSocket` 裡的 `s.onAny(...)` 是「不管在哪個畫面都要收」的事件（各場景會 `off('game_event')`，一般監聽會被清掉）：`team_confirmed` 先記在 `window.MP._teamOK`（客戶端畫面比較慢才開好 TeamScene 也進得去）、`tally`、`game_end` 帶的 `tally`。
+  - 累計戰績 `window.MP.tally={n:局數,p:{pid:{w:贏,g:打}}}`：房主在 `_netSendEnd` 呼叫 `_tallyAdd(board)`（房主按 ESC 中斷的不算），跟 `game_over` 一起送。個人制 = 分數最高的真人 +1（平手都算、AI 第一就沒人拿）；隊伍制 = 總分高的那隊的真人。`_finalScores` 每列多 `hu`（真人）、`tm`（隊伍）。結算左上「第 N 局」、名字旁 🏆×N；等待室座位卡 🏆×N、人數旁「已打 N 局」；有新的人進房，房主用 `game_event {type:'tally'}` 補傳。開房 / 進房時歸零。
+  - 測試：`rematchtest.js`（邀請連結、三個人連打三局、比賽中加入）、`rematch2.js`（隊伍制戰績、取消自動開始、客戶端慢、客戶端停在結算 / 回等待室）。swiftshader 很慢時 Phaser 剛開好的前 120 幀會把每幀時間壓在 16ms → `time.delayedCall` 會比真實時間慢很多（測試別用它算時間）。
 - 尚未支援（第二階段）：遠端玩家的**角色專屬大絕**（按 D 還是通用的 170 範圍爆炸）、斷線由 AI 接手；「一條命」模式房主出局整局就結束。
 
 ## 語法檢查
