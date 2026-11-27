@@ -58,6 +58,8 @@
 - GameScene 的 `netRole`：`'host'` / `'client'` / `null`（單人）。遠端真人在房主那邊是 `enemies` 裡 `remote:true` 的角色，由 `_remoteControl()` 操控。
 - 客戶端 `_clientUpdate()` 只畫畫面，自己的角色本地先動再對齊房主位置。
 - 本機測試：`node server.js` 後開 `index.html?server=http://localhost:3000`。
+- **斷線重連**：socket.io 每次重連都會再觸發 `connect`。`Lobby._connectSocket` 只在第一次連上時執行動作，之後重連走 `_rejoin()` → 伺服器 `rejoin_room` 回到同一個房號（房間不見了就用同一個房號重建，房主保留設定）。房間沒人時保留 3 分鐘（`room._delT`）才刪。以前每次重連都重新「建立房間」→ 房號一直變、朋友找不到房間。測試：`rejointest.js`（會自己開關本機伺服器）。
+- Render 每次 push 都會重開伺服器（記憶體裡的房間全清）：建議在 Render 設 Build Filters 只看 `server.js` / `package.json`。
 - 已同步：命數、鬼魂（遠端玩家變鬼魂也能丟炸彈）、炸彈、胡椒光環、醬油黏住、復活光柱、結算算式。
 - 尚未支援（第二階段）：遠端玩家的 S 技能 / D 大絕、客戶端的打擊特效與音效、斷線由 AI 接手；「一條命」模式房主出局整局就結束。
 

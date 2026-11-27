@@ -42,15 +42,37 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join_room', ({ code, nickname, charKey }, cb) => {
+    code = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     const room = rooms[code];
-    if (!room) return cb({ ok: false, err: '找不到此房間' });
+    if (!room) return cb({ ok: false, err: '找不到此房間：請確認代碼，或請房主回到等待室再看一次房號' });
     if (room.state !== 'waiting') return cb({ ok: false, err: '遊戲已開始' });
     const realCount = Object.values(room.players).length;
     if (realCount >= room.settings.maxPlayers) return cb({ ok: false, err: '房間已滿' });
     room.players[socket.id] = { nickname, charKey, team: 'blue', ready: false };
+    if (room._delT) { clearTimeout(room._delT); room._delT = null; }
+    let tookHost = false;
+    if (!room.players[room.host]) { room.host = socket.id; tookHost = true; } // 房主斷線中：先由你當房主
     myRoom = code;
     socket.join(code);
-    cb({ ok: true, code, isHost: false, settings: room.settings, players: buildPlayerList(room) });
+    cb({ ok: true, code, isHost: tookHost, settings: room.settings, players: buildPlayerList(room) });
+    io.to(code).emit('player_list', buildPlayerList(room));
+  });
+
+  // 斷線重連（伺服器重開、網路閃斷、電腦睡眠）：回到同一個房號，房間不見了就用同一個房號重建
+  socket.on('rejoin_room', ({ code, nickname, charKey, team, wasHost, settings }, cb) => {
+    code = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!code) return cb && cb({ ok: false, err: 'no code' });
+    let room = rooms[code];
+    if (!room) room = rooms[code] = { host: socket.id, players: {}, state: 'waiting', gameState: {},
+      settings: { maxPlayers: 4, gameMode: 'individual', ultFromStart: false, ...(wasHost && settings ? settings : {}) } };
+    if (room._delT) { clearTimeout(room._delT); room._delT = null; }
+    room.players[socket.id] = { nickname, charKey, team: team || (wasHost ? 'red' : 'blue'), ready: false };
+    const oldHost = room.host;
+    if (wasHost || !room.players[room.host]) room.host = socket.id;
+    myRoom = code;
+    socket.join(code);
+    if (cb) cb({ ok: true, code, isHost: room.host === socket.id, settings: room.settings, players: buildPlayerList(room) });
+    if (oldHost !== room.host) io.to(code).emit('host_changed', { newHost: room.host });
     io.to(code).emit('player_list', buildPlayerList(room));
   });
 
@@ -122,9 +144,12 @@ io.on('connection', (socket) => {
       if (remaining.length > 0) {
         room.host = remaining[0];
         io.to(myRoom).emit('host_changed', { newHost: room.host });
-      } else {
-        delete rooms[myRoom];
       }
+    }
+    if (Object.keys(room.players).length === 0) { // 沒人了：留 3 分鐘給斷線的人重連，之後才刪
+      const code = myRoom;
+      if (room._delT) clearTimeout(room._delT);
+      room._delT = setTimeout(() => { const r = rooms[code]; if (r && Object.keys(r.players).length === 0) delete rooms[code]; }, 180000);
     }
     io.to(myRoom).emit('player_list', buildPlayerList(room));
   });

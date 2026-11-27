@@ -7984,13 +7984,30 @@ const Lobby = {
 
   _connectSocket(cb) {
     if (this._socket && this._socket.connected) return cb(this._socket);
-    const s = io(SERVER_URL);
-    s.on('connect', () => { this._socket = s; window.MP.socket = s; window.MP.myId = s.id; cb(s); });
+    this._pendingCb = cb;
+    if (this._socket) return; // 連線中：連上後執行最後一次要求的動作
+    const s = io(SERVER_URL); this._socket = s; window.MP.socket = s;
+    // 注意：'connect' 在每次斷線重連後都會再觸發。以前每次都重跑「建立房間」→ 房號自己變掉、朋友找不到房間。
+    s.on('connect', () => {
+      window.MP.myId = s.id;
+      const f = this._pendingCb; this._pendingCb = null;
+      if (f) f(s); else if (this._roomCode) this._rejoin(s);
+    });
     s.on('connect_error', () => {
       const ce = document.getElementById('create-error');
       const je = document.getElementById('join-error');
       if (ce) ce.textContent = '無法連線到伺服器';
       if (je) je.textContent = '無法連線到伺服器';
+    });
+  },
+
+  _rejoin(s) {
+    s.emit('rejoin_room', { code: this._roomCode, nickname: window.MP.myNickname, charKey: this._myChar, team: this._myTeam,
+      wasHost: this._isHost, settings: this._settings }, (res) => {
+      if (!res || !res.ok) return;
+      this._isHost = !!res.isHost; window.MP.isHost = this._isHost; this._settings = { ...res.settings }; window.MP.settings = res.settings;
+      window.MP.players = res.players; this._setupSocketListeners(s);
+      if (document.getElementById('screen-waiting').style.display !== 'none') { this._renderSettings(); this._renderHostControls(); }
     });
   },
 
@@ -8010,15 +8027,15 @@ const Lobby = {
   },
 
   joinRoom() {
-    const code = document.getElementById('join-code').value.trim().toUpperCase();
+    const code = document.getElementById('join-code').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
     const nickname = document.getElementById('join-nickname').value.trim();
     if (code.length !== 6) { document.getElementById('join-error').textContent = '請輸入 6 碼房間代碼'; return; }
     if (!nickname) { document.getElementById('join-error').textContent = '請輸入暱稱'; return; }
     this._connectSocket(s => {
       s.emit('join_room', { code, nickname, charKey: this._myChar }, (res) => {
         if (!res.ok) { document.getElementById('join-error').textContent = res.err; return; }
-        this._roomCode = res.code; this._isHost = false; this._settings = { ...res.settings };
-        window.MP.roomCode = res.code; window.MP.isHost = false;
+        this._roomCode = res.code; this._isHost = !!res.isHost; this._settings = { ...res.settings };
+        window.MP.roomCode = res.code; window.MP.isHost = this._isHost;
         window.MP.myNickname = nickname; window.MP.myCharKey = this._myChar; window.MP.myTeam = this._myTeam;
         this._setupSocketListeners(s);
         this._updatePlayerList(res.players);
@@ -8036,7 +8053,7 @@ const Lobby = {
       this._launchGame();
     });
     s.on('host_changed', ({ newHost }) => {
-      if (newHost === s.id) { this._isHost = true; window.MP.isHost = true; this._renderHostControls(); }
+      this._isHost = newHost === s.id; window.MP.isHost = this._isHost; this._renderHostControls();
     });
   },
 
