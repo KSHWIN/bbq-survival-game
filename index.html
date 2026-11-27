@@ -468,7 +468,7 @@ const TITLE_BG = "data:image/webp;base64,UklGRtxRAgBXRUJQVlA4INBRAgBwLgqdASoABgA
       <div><b>💥 推飛</b>越熟的人越容易被推飛——先把對手撞熱，再一口氣推出去</div>
       <div><b>⚡ 大絕</b>搶場上的能量球，吃滿 3 顆按 <kbd>D</kbd> 放大絕</div>
       <div><b>🎁 變數</b>道具和場地事件會隨機出現，看到提示就閃或去搶</div>
-      <div class="lobby-keys"><kbd>←↑↓→</kbd> 移動　<kbd>A</kbd> 推擠　<kbd>S</kbd> 技能　<kbd>D</kbd> 大絕　<kbd>H</kbd> 說明</div>
+      <div class="lobby-keys"><kbd>←↑↓→</kbd> 移動　<kbd>A</kbd> 推擠　<kbd>S</kbd> 技能　<kbd>D</kbd> 大絕　<kbd>1</kbd>–<kbd>4</kbd> 表情　<kbd>H</kbd> 說明</div>
     </div>
     <button class="ld-btn ld-host" onclick="Lobby.toggleHow(false)">知道了！</button>
     </div>
@@ -2376,6 +2376,9 @@ class SelectScene extends Phaser.Scene {
   }
 }
 
+// 快捷表情（數字鍵 1–4）、結算搞笑獎項：[統計欄位, 至少幾次, 稱號, 是不是丟臉的獎]
+const BBQ_EMOTES=['😂','😡','👍','😭'];
+const BBQ_AWARDS=[['self',2,'🕳 自由落體王',1],['cook',2,'🔥 烤焦王',1],['whiff',4,'💨 空氣拳王',1],['rev',2,'⚔ 記仇王',0],['gh',2,'👻 怨靈',0],['crn',1,'🗡 弒君者',0],['took',9,'🧲 人肉沙包',1],['ko',4,'💀 清場王',0],['hit',8,'🥊 撞人狂',0]];
 class GameScene extends Phaser.Scene {
   constructor(){ super('Game'); }
   init(data){ this.charData=data.char||this.charData||CHARS[0]; this.levelData=data.level||this.levelData||LEVELS[0]; this.enemyCnt=data.enemyCnt||2; this.aiDiff=data.aiDiff??1; this.itemRate=data.itemRate??1; this.humans=data.humans||[]; this.aiKeys=data.aiKeys||null;
@@ -2401,7 +2404,7 @@ class GameScene extends Phaser.Scene {
     this._foilLayer=null; this._foilTx=null; this._foilMax=null; this._foilWas=0; this._foilHitT=0; this._nfx=null;
     this._lfTxt=null; this._lfLayer=null; this._bombLayer=null; this._pBombBy=null; this._pBombT=0;
     this.time.delayedCall(0,()=>this._refreshScoreTxt());
-    this.score=0; this._bd={}; this._crown=null; this._crownSeen=false; this._crownTxt=null; this._netCr=0; this._scoreFinal=false; this._sbT=0; this._sbTxt=null; this._pHitBy=null; // 計分（重開時清掉上一局的排行榜物件）
+    this.score=0; this._bd={}; this._crown=null; this._crownSeen=false; this._crownTxt=null; this._netCr=0; this._ems={}; this._emAt=0; this._netEm=0; this._aw={}; this._scoreFinal=false; this._sbT=0; this._sbTxt=null; this._pHitBy=null; // 計分（重開時清掉上一局的排行榜物件）
     // 重開（R / 再玩一次）時，上一局留下的 UI 參照都清掉，避免去操作已銷毀的物件
     this._tipCur=null; this._bannerObjs=null; this._bannerUntil=0; this._noticeTxt=null; this._noticeTw=null;
     this.fork=null; this.bigChef=null; this._forkDim=null; this.forkFx=null; this.ovLayer=null; this.ovPow=null;
@@ -3407,6 +3410,8 @@ class GameScene extends Phaser.Scene {
   }
   _onEnemyOut(e,i){
     e.deaths=(e.deaths||0)+1; e.lives=Math.max(0,(e.lives??3)-1);
+    { const a=e._aw||(e._aw={}); if((e.heat||0)>=100) a.cook=(a.cook||0)+1; // 結算獎項：被烤熟 / 沒人推自己掉下去
+      else if(!(e._lastHitBy&&this.time.now-(e._lastHitT||0)<3000)&&!e._bombBy&&!e._soyBy&&e._fell) a.self=(a.self||0)+1; e._fell=false; } // 自己掉下去 / 掉進洞（被叉子叉走不算）
     this._bombCredit(e._bombBy,e._bombT); e._bombBy=null;
     { const pushed=e._koByT&&this.time.now-e._koByT<300; this._soyCredit(e._soyBy,e._soyT,pushed?(e._lastHitBy==='player'?'player':e._lastHitBy):null,e.heat,e.label); e._soyBy=null; e._koByT=0; }
     if(e.lives>0){ e._respawnAt=this.time.now+3000; return; }
@@ -3537,6 +3542,7 @@ class GameScene extends Phaser.Scene {
       this._drawPepAura(g,o.x,o.y,blink);
       const ic=this._pepIcons[o.k]; if(ic) ic.setVisible(true).setPosition(o.x-34,o.y-36).setAlpha(blink);
     });
+    this._emoteTick();
     { this._crownTick(dt); const c=this._crown; // 👑 第一名頭上的皇冠
       if(c==='P'){ const sp=this.playerSprite; this._crownDraw(this.p.x,this.p.y,this._ovTop()-6,!!(this.alive&&!this._pOut&&sp&&sp.visible)); }
       else if(c){ const sp=this.enemySprites[this.enemies.indexOf(c)]; this._crownDraw(c.x,c.y,sp?(sp.baseScale||0.23)*sp.height*0.46*((c.activeEffects&&c.activeEffects.garlic>0)?1.6:1):34,!!(this.alive&&c.alive&&!c.isGhost&&sp&&sp.visible)); }
@@ -3570,6 +3576,8 @@ class GameScene extends Phaser.Scene {
     const reason=this.subTxt.text||'出局'; this.subTxt.setText('');
     this.tweens.killTweensOf(this.p);
     this.deaths=(this.deaths||0)+1; this.lives=Math.max(0,(this.lives??3)-1);
+    { const a=this._aw||(this._aw={}); if(/烤熟/.test(reason)) a.cook=(a.cook||0)+1;
+      else if(!(this._pHitBy&&this.time.now-(this._pHitT||0)<3000)&&!this._pBombBy&&!this._soyBy&&/^掉|剝落/.test(reason)) a.self=(a.self||0)+1; } // 只有「掉落 / 掉進洞 / 站在剝落的外圈」才算自己掉（叉子、檸檬、反彈不算）
     this._bombCredit(this._pBombBy,this._pBombT); this._pBombBy=null;
     this._soyCredit(this._soyBy,this._soyT,this._koT===this.time.now?(this._pHitBy&&this._pHitBy.label):null,this.heat,'你'); this._soyBy=null;
     if(this.lives<=0){ this._becomeGhostPlayer(); return; }
@@ -3593,6 +3601,7 @@ class GameScene extends Phaser.Scene {
     if(e.activeEffects) Object.keys(e.activeEffects).forEach(k=>e.activeEffects[k]=0);
     const sp=this.enemySprites[i]; if(sp){ sp.setVisible(true).setPosition(e.x,e.y); }
     if(this.enemyFx[i]) this.enemyFx[i].setVisible(false);
+    this._aiEmote(e,Math.random()<0.5?2:4,0.4,500);
   }
   _updateGhosts(dt){
     const blink=0.35+0.35*Math.sin(this.time.now*0.03);
@@ -3642,7 +3651,7 @@ class GameScene extends Phaser.Scene {
       if(x!==undefined&&x!==null) this._floatTxt(x+22,y-62,'+'+n+' 分'+(_mul>1?' ⚡×2':''),_mul>1?'#ffd84a':'#ffe066');
     } else {
       who.score=(who.score||0)+n;
-      if(ko) who.sKos=(who.sKos||0)+1; else who.sHits=(who.sHits||0)+1;
+      if(ko){ who.sKos=(who.sKos||0)+1; this._aiEmote(who,1,0.5,450); } else who.sHits=(who.sHits||0)+1;
     }
     return n;
   }
@@ -3663,7 +3672,7 @@ class GameScene extends Phaser.Scene {
     else if(top.s>cur.s) nx=top;
     if(!nx){ this._crown=null; return; }
     if(nx.k===this._crown) return;
-    this._crown=nx.k;
+    this._crown=nx.k; this._aiEmote(nx.k,3,0.6,350);
     const mine=nx.k==='P', nm=mine?(this.netRole?(window.MP.myNickname||'房主'):'你'):nx.k.label;
     this._pushFeed('👑 '+nm+' 戴上皇冠（擊落 +2）','#ffd84a');
     if(!this._crownSeen){ this._crownSeen=true; this._banner('👑 皇冠出現！','第一名戴皇冠 — 擊落他多 +2 分'); }
@@ -3684,6 +3693,69 @@ class GameScene extends Phaser.Scene {
     const x2=tl<=10&&tl>0;
     t.setText((x2?'⚡×2　':'')+tl+'s').setColor(x2?'#ffd84a':'#ffcc66').setScale(x2?1+0.07*Math.abs(Math.sin(this.time.now*0.008)):1);
   }
+  // ══ 快捷表情（數字鍵 1–4）：頭上冒一個對話泡泡 2 秒。id 跟快照一樣：'H' 房主 / pid 真人 / 'a'+i AI ══
+  _emoteKey(n){
+    if(this._introOpen||this._resultShown||this._finishing) return;
+    const t=performance.now(); if(t-(this._emAt||0)<500) return; this._emAt=t; // 不能洗版
+    if(this.netRole==='client'){ this._netEm=n; this._emoteShow(window.MP.myId,n); } // 自己先看到，再送給房主轉給大家
+    else this._emote('H',n);
+    this.playSound('emote');
+  }
+  _emote(id,n){
+    n=n|0; if(!id||n<1||n>BBQ_EMOTES.length) return;
+    if(this.netRole==='host') (this._netEv=this._netEv||[]).push({k:'em',id,n});
+    this._emoteShow(id,n);
+  }
+  _emoteShow(id,n){
+    try{
+      const E=this._ems||(this._ems={}), em=BBQ_EMOTES[(n|0)-1]; if(!em) return;
+      if(E[id]&&E[id].c.scene) E[id].c.destroy();
+      const c=this.add.container(-99,-99).setDepth(27), g=this.add.graphics();
+      g.fillStyle(0x000000,0.3); g.fillRoundedRect(-21,-18,46,40,13);
+      g.fillStyle(0xfff8e8,1); g.fillRoundedRect(-23,-21,46,40,13); g.fillTriangle(-15,17,-3,17,-19,30);
+      g.lineStyle(2.5,0x3a1c0c,1); g.strokeRoundedRect(-23,-21,46,40,13);
+      g.lineStyle(3,0xfff8e8,1); g.lineBetween(-14,19,-4,19); // 蓋掉尾巴跟框接起來的那段線
+      g.lineStyle(2.5,0x3a1c0c,1); g.lineBetween(-15,19,-19,30); g.lineBetween(-19,30,-3,19);
+      const t=this.add.text(0,-2,em,{fontSize:'26px',padding:{x:2,y:4}}).setOrigin(0.5);
+      c.add([g,t]); c.setScale(0.2);
+      E[id]={c,t0:performance.now(),n};
+    }catch(err){ console.error('[emote]',err); }
+  }
+  _emoteSp(id){
+    if(this.netRole==='client'){ if(id===window.MP.myId) return this.playerSprite; const r=this._netEnts&&this._netEnts[id]; return r?r.sp:null; }
+    if(id==='H') return this.playerSprite;
+    const i=this.enemies.findIndex((e,k)=>(e.pid||('a'+k))===id); return i<0?null:this.enemySprites[i];
+  }
+  // 每幀：泡泡跟著角色（用真實時間，頓幀 / 倒數時也照跑）
+  _emoteTick(){
+    const E=this._ems; if(!E) return; const now=performance.now();
+    for(const id in E){ const o=E[id]; if(!o.c.scene){ delete E[id]; continue; }
+      const age=now-o.t0; if(age>2000){ o.c.destroy(); delete E[id]; continue; }
+      const sp=this._emoteSp(id);
+      if(!sp||!sp.scene||!sp.visible){ o.c.setVisible(false); continue; }
+      const top=(sp.baseScale||0.23)*sp.height*0.46, k=Math.min(1,age/170), sc=k<1?(0.3+0.7*k)*(1+0.4*Math.sin(k*Math.PI)):1;
+      const own=sp===this.playerSprite; // 自己頭上有熟度條 + A/S/D 轉盤 → 泡泡放更高，不要蓋住
+      o.c.setVisible(true).setPosition(Math.min(W-28,sp.x+(own?28:32)),Math.max(26,sp.y-top-(own?62:22)+Math.sin(age*0.012)*2)).setScale(sc).setAngle(Math.sin(age*0.01)*4).setAlpha(age>1700?Math.max(0,(2000-age)/300):1);
+    }
+  }
+  // AI 偶爾也會比表情（擊落人 😂、復活 😡 / 😭、戴上皇冠 👍）→ 單人也熱鬧，順便讓人知道有這功能
+  _aiEmote(e,n,p,delay){
+    if(!e||e==='P'||e.remote||Math.random()>p) return;
+    this.time.delayedCall(delay||300,()=>{ if(this._finishing||this._resultShown||!e.alive||e.isGhost) return; const i=this.enemies.indexOf(e); if(i>=0) this._emote('a'+i,n); });
+  }
+  // ══ 結算搞笑獎項：每人最多一個稱號。照順序發；數字最大的人拿（丟臉的獎同數字給名次低的，厲害的獎給名次高的）══
+  _awards(board){
+    const lm=!!(this.fx&&this.fx.respawn);
+    const st=board.map(r=>{ const a=(r._o&&r._o._aw)||{}, b=r.bd||{};
+      return {self:a.self||0,cook:a.cook||0,whiff:a.whiff||0,took:a.took||0,crn:b.crn||0,rev:b.rev||0,ko:b.ko||0,gh:(b.gh||0)+(b.gko||0),hit:b.hit||0,deaths:r.deaths||0}; });
+    this._awStats=st;
+    BBQ_AWARDS.forEach(([k,min,title,neg])=>{ let bi=-1;
+      board.forEach((r,i)=>{ if(r.aw||st[i][k]<min) return; if(bi<0||st[i][k]>st[bi][k]||(neg&&st[i][k]===st[bi][k])) bi=i; });
+      if(bi>=0) board[bi].aw=title+' ×'+st[bi][k]; });
+    if(lm){ const z=board.filter((r,i)=>st[i].deaths===0); if(z.length===1&&!z[0].aw) z[0].aw='🛡 金剛不壞'; } // 只有一個人整場沒出局
+    { const z=board.filter((r,i)=>!r.aw&&!st[i].hit&&!st[i].ko&&!st[i].gh); if(z.length) z[z.length-1].aw='🧘 佛系烤肉'; } // 一下都沒撞到人（只發一個，給名次最後的）
+    return board;
+  }
   // 結算分數（只算一次）：活到最後的人 +3
   _finalScores(win){
     if(!this._scoreFinal){
@@ -3700,9 +3772,11 @@ class GameScene extends Phaser.Scene {
     const st=this.stats||{hits:0,kos:0};
     const myName=this.netRole?(window.MP.myNickname||'房主'):((this.charData&&this.charData.name)||'你');
     const _lm=this.fx&&this.fx.respawn;
-    const board=[{id:'H',name:myName,score:this.score||0,hits:st.hits||0,kos:st.kos||0,deaths:this.deaths||0,alive:_lm?!this._pOut:!!win,me:true,bd:this._bd||{},hu:1,tm:this.playerTeam||'none'}];
-    this.enemies.forEach((e,i)=>board.push({id:e.pid||('a'+i),name:e.label,score:e.score||0,hits:e.sHits||0,kos:e.sKos||0,deaths:e.deaths||0,alive:_lm?!e.isGhost:!!e.alive,me:false,bd:e._bd||{},hu:e.remote?1:0,tm:e.team||'none'}));
+    const board=[{id:'H',name:myName,score:this.score||0,hits:st.hits||0,kos:st.kos||0,deaths:this.deaths||0,alive:_lm?!this._pOut:!!win,me:true,bd:this._bd||{},hu:1,tm:this.playerTeam||'none',_o:this}];
+    this.enemies.forEach((e,i)=>board.push({id:e.pid||('a'+i),name:e.label,score:e.score||0,hits:e.sHits||0,kos:e.sKos||0,deaths:e.deaths||0,alive:_lm?!e.isGhost:!!e.alive,me:false,bd:e._bd||{},hu:e.remote?1:0,tm:e.team||'none',_o:e}));
     board.sort((a,b)=>(b.score-a.score)||((b.alive?1:0)-(a.alive?1:0))||((b.me?1:0)-(a.me?1:0)));
+    try{ this._awards(board); }catch(err){ console.error('[awards]',err); }
+    board.forEach(r=>{ delete r._o; });
     return board;
   }
   // 右側即時排行榜（烤盤外的右邊空白）
@@ -3900,11 +3974,12 @@ class GameScene extends Phaser.Scene {
       s.on('input',(inp)=>{ const e=this.enemies.find(x=>x.pid===inp.id); if(!e) return;
         const prevPush=e.inp&&e.inp.push; e.inp=inp; if(prevPush) e.inp.push=true; // 按鍵事件不能丟
         if(inp.skill) e._skAt=performance.now();
+        if(inp.em){ const t=performance.now(); if(t-(e._emAt||0)>450){ e._emAt=t; this._emote(e.pid,inp.em); this.playSound('emote'); } } // 表情：房主轉給大家
         if(inp.q){ e._ack=inp.q; e._ackAt=performance.now(); } }); // 回報「做到第幾個按鍵」給客戶端對位置
       this._netKeepAlive();
     } else {
       s.on('game_end',(d)=>{ if(this._netEnding||!this.sys||!this.sys.isActive()) return; this._netEnding=true; this._netBoard=d&&d.board||null; this.statusTxt.setText('時間到！'); this.endGame(true,true); });
-      s.on('snap',(sn)=>{ this._snap=sn; this._snapAt=performance.now(); if(sn.ev) sn.ev.forEach(ev=>{ try{ if(ev.k==='b') this._banner(ev.t,ev.d); else if(ev.k==='f') this._pushFeed(ev.m,ev.c); else if(ev.k==='h') this._netHit(ev); else if(ev.k==='sk') this._netSkillEv(ev); }catch(err){ console.error('[net ev]',err); } }); });
+      s.on('snap',(sn)=>{ this._snap=sn; this._snapAt=performance.now(); if(sn.ev) sn.ev.forEach(ev=>{ try{ if(ev.k==='b') this._banner(ev.t,ev.d); else if(ev.k==='f') this._pushFeed(ev.m,ev.c); else if(ev.k==='h') this._netHit(ev); else if(ev.k==='sk') this._netSkillEv(ev); else if(ev.k==='em'){ if(ev.id!==window.MP.myId){ this._emoteShow(ev.id,ev.n); if(!/^a\d+$/.test(String(ev.id))) this.playSound('emote'); } } }catch(err){ console.error('[net ev]',err); } }); });
       s.on('host_left',()=>{ this._banner('😢 房主離線了','這局無法繼續，2 秒後回到大廳');
         this.time.delayedCall(2000,()=>{ const ov=document.getElementById('lobby-overlay'); if(ov){ ov.classList.remove('hidden'); if(typeof Lobby!=='undefined') Lobby.showLanding(); }
           window.setTimeout(()=>{ if(gameInstance){ gameInstance.destroy(true); gameInstance=null; } },16); }); });
@@ -3953,7 +4028,7 @@ class GameScene extends Phaser.Scene {
         if((e._lockUntil||0)>now){ _lock(); return; } } }
     if(inp.push){ inp.push=false; if(e._pushCD<=0&&!(e._ghostT>0)&&!e._inHot){ e._pushCD=1.2; e._dashT=0.22; const l=Math.hypot(e._ldx||1,e._ldy||0)||1; e._ddx=(e._ldx||1)/l; e._ddy=(e._ldy||0)/l; e.pushTimer=0; } }
     if(inp.ult){ inp.ult=false; if((e.ultCharge||0)>=3&&!(e._ultWind>0)&&!(e._ghostT>0)&&!e.isGhost) this._aiUltStart(e,0.6); }
-    if(e._dashT>0){ e._dashT-=dt; e.charging=true; e.vx=e._ddx*9; e.vy=e._ddy*9; if(e._dashT<=0){ e.charging=false; e.vx*=0.3; e.vy*=0.3; e._openUntil=this.time.now+700; } }
+    if(e._dashT>0){ e._dashT-=dt; e.charging=true; e.vx=e._ddx*9; e.vy=e._ddy*9; if(e._dashT<=0){ e.charging=false; e.vx*=0.3; e.vy*=0.3; e._openUntil=this.time.now+700; if(e.pushTimer<=0){ const a=e._aw||(e._aw={}); a.whiff=(a.whiff||0)+1; } } }
     else { e.charging=false; e.pushTimer=Math.max(e.pushTimer,0.5); const k=1-Math.exp(-dt*22); e.vx+=(dx*sp-e.vx)*k; e.vy+=(dy*sp-e.vy)*k; }
   }
   // ══ 連線：遠端真人的 S 技能 + 打擊特效同步（2026-11）══════════════
@@ -4130,7 +4205,7 @@ class GameScene extends Phaser.Scene {
     const board=this._finalScores(win), rv=this._rivalText();
     if(!aborted){ try{ this._tallyAdd(board); }catch(e){ console.error('[tally]',e); } } // 房主按 ESC 中途結束的不算一局
     { const P=(window.MP.tally&&window.MP.tally.p)||{}; board.forEach(r=>{ if(r.w==null){ const o=r.hu&&P[r.id==='H'?window.MP.myId:r.id]; r.w=o?o.w:0; } }); }
-    window.MP.socket.emit('game_over',{board:board.map(r=>({id:r.id,name:r.name,score:r.score,hits:r.hits,kos:r.kos,deaths:r.deaths,alive:r.alive,bd:r.bd||{},w:r.w||0,rv})),tally:window.MP.tally||null});
+    window.MP.socket.emit('game_over',{board:board.map(r=>({id:r.id,name:r.name,score:r.score,hits:r.hits,kos:r.kos,deaths:r.deaths,alive:r.alive,bd:r.bd||{},w:r.w||0,aw:r.aw||'',rv})),tally:window.MP.tally||null});
   }
   // 這個房間的累計戰績：房主記，跟結算一起送給大家（每個人都留一份 → 換房主也接得下去）。
   // 個人制：分數最高的真人 +1 勝（AI 拿第一就沒人拿到）；隊伍制：總分高的那隊每個真人 +1 勝
@@ -4168,8 +4243,8 @@ class GameScene extends Phaser.Scene {
     const L=this.keys.left.isDown||GKEYS['ArrowLeft'], Rt=this.keys.right.isDown||GKEYS['ArrowRight'], U=this.keys.up.isDown||GKEYS['ArrowUp'], Dn=this.keys.down.isDown||GKEYS['ArrowDown'];
     // 方向一改變就立刻送（不用等下一個 0.05 秒）；每個按鍵有編號 q，房主回報做到第幾個，用來對位置
     this._inT=(this._inT||0)-dt; const _ah=this.keys.push.isDown, _kb=(L?1:0)|(Rt?2:0)|(U?4:0)|(Dn?8:0)|(_ah?16:0);
-    if(this._inT<=0||_kb!==this._lastKb||this._netPush||this._netSkill||this._netUlt){ this._inT=0.05; this._lastKb=_kb; const q=++this._inSeq; this._seqT[q]=performance.now(); delete this._seqT[q-80];
-      window.MP.socket.emit('input',{l:!!L,r:!!Rt,u:!!U,d:!!Dn,ah:!!_ah,push:this._netPush,skill:this._netSkill,ult:this._netUlt,q}); this._netPush=false; this._netSkill=false; this._netUlt=false; }
+    if(this._inT<=0||_kb!==this._lastKb||this._netPush||this._netSkill||this._netUlt||this._netEm){ this._inT=0.05; this._lastKb=_kb; const q=++this._inSeq; this._seqT[q]=performance.now(); delete this._seqT[q-80];
+      window.MP.socket.emit('input',{l:!!L,r:!!Rt,u:!!U,d:!!Dn,ah:!!_ah,push:this._netPush,skill:this._netSkill,ult:this._netUlt,em:this._netEm||0,q}); this._netPush=false; this._netSkill=false; this._netUlt=false; this._netEm=0; }
     if(!sn) return;
     if(this._netEnding) return;
     this.firePhase=(this.firePhase||0)+dt;
@@ -4208,13 +4283,13 @@ class GameScene extends Phaser.Scene {
       let rec=this._netEnts[en.id];
       if(!rec||!rec.sp.scene){ const ch=CHARS.find(c=>c.key===en.k)||CHARS[0], sp=this.add.image(en.x,en.y,ch.img).setDepth(9);
         const bs=0.23*(0.6+(ch.weight||1)*0.4); sp.setScale(bs); sp.baseScale=bs;
-        rec=this._netEnts[en.id]={sp,anim:this._mkAnim(),x:en.x,y:en.y,tag:this.add.text(0,0,(en.id[0]==='a'?'':'👤 ')+en.n,{fontSize:'12px',color:en.id[0]==='a'?'#dddddd':'#9fe0ff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:3}).setOrigin(0.5).setDepth(23)}; }
+        rec=this._netEnts[en.id]={sp,anim:this._mkAnim(),x:en.x,y:en.y,tag:this.add.text(0,0,(/^a\d+$/.test(en.id)?'':'👤 ')+en.n,{fontSize:'12px',color:/^a\d+$/.test(en.id)?'#dddddd':'#9fe0ff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:3}).setOrigin(0.5).setDepth(23)}; }
       const big=Math.hypot(en.x-rec.x,en.y-rec.y)>120; rec.x=big?en.x:rec.x+(en.x-rec.x)*Math.min(1,dt*14); rec.y=big?en.y:rec.y+(en.y-rec.y)*Math.min(1,dt*14);
       rec.sp.setVisible(!!en.a); rec.tag.setVisible(!!en.a);
       if(en.a){ this._animChar(rec.sp,rec.anim,rec.x,rec.y,dt,{base:rec.sp.baseScale,heat:en.h,shadow:this.shadowLayer});
         const t=en.h/100; if(en.gh) rec.sp.setTint(0xaaccff); else rec.sp.setTint(Phaser.Display.Color.GetColor(255,Math.round(255-t*70),Math.round(255-t*110)));
         rec.sp.setAlpha(en.gh?0.5:(en.g?0.35+0.35*Math.sin(this.time.now*0.03):1));
-        rec.tag.setText((en.id[0]==='a'?'':'👤 ')+en.n+(sn.lm?' '+(en.gh?'👻':'❤'.repeat(Math.max(0,en.lv||0))):'')+(!en.gh&&en.h>=70?' 🎯':'')+(en.sk?' 🍶黏住':''));
+        rec.tag.setText((/^a\d+$/.test(en.id)?'':'👤 ')+en.n+(sn.lm?' '+(en.gh?'👻':'❤'.repeat(Math.max(0,en.lv||0))):'')+(!en.gh&&en.h>=70?' 🎯':'')+(en.sk?' 🍶黏住':''));
         rec.tag.setPosition(rec.x,rec.y-(en.id===sn.cr?66:54)); if(en.pp) this._drawPepAura(g,rec.x,rec.y); if(en.ab&&!en.gh) this._skAura(g,en.ab,rec.x,rec.y); this._applyFlash(rec.sp,rec.anim,dt); this._netFoil(g,en,rec.x,rec.y,false); }
       else this._netFoil(g,en,rec.x,rec.y,false);
     });
@@ -4224,6 +4299,7 @@ class GameScene extends Phaser.Scene {
       if(ce&&ce.a&&!ce.gh){ if(cr===myId){ cx=this.p.x; cy=this.p.y; ct=this._ovTop()-6; ok=true; } else { const r=this._netEnts[cr]; if(r&&r.sp.scene){ cx=r.x; cy=r.y; ct=(r.sp.baseScale||0.23)*r.sp.height*0.46; ok=true; } } }
       this._crownDraw(cx,cy,ct,ok);
       if(cr!==this._netCr){ if(cr===myId&&ok){ this._floatTxt(this.p.x,this.p.y-this._ovTop()-60,'👑 你是第一名！','#ffd84a',true); this.playSound('good'); } this._netCr=cr; } }
+    this._emoteTick();
     // 介面
     this._timerShow(sn.tl);
     const list=(sn.e||[]).map(en=>({name:(en.id===sn.cr?'👑':'')+(en.id===myId?'你':en.n),score:en.s,alive:!!en.a,me:en.id===myId})).sort((a,b)=>b.score-a.score);
@@ -4357,9 +4433,10 @@ class GameScene extends Phaser.Scene {
     this._tipQ=[]; this._tipCur=null;
     this._buildKeyBar();
     this.input.keyboard.on('keydown-H',()=>{ if(!this._introOpen) this._helpReq=true; }); // 用事件，快速點按也收得到
+    ['ONE','TWO','THREE','FOUR'].forEach((k,i)=>{ this.input.keyboard.on('keydown-'+k,()=>this._emoteKey(i+1)); this.input.keyboard.on('keydown-NUMPAD_'+k,()=>this._emoteKey(i+1)); }); // 快捷表情
     if(!window._bbqIntroSeen&&!this.multiplay) this._showIntro(true);
     // 連線模式沒有說明卡：開場用橫幅提示按鍵（每個人自己顯示，不廣播）
-    if(this.multiplay) this.time.delayedCall(700,()=>{ if(this.sys&&this.sys.isActive()) this._banner('🎮 操作方式','↑↓←→ 移動・A 衝撞・S 技能・D 大絕（吃紫球集滿 3 格）',true); });
+    if(this.multiplay) this.time.delayedCall(700,()=>{ if(this.sys&&this.sys.isActive()) this._banner('🎮 操作方式','↑↓←→ 移動・A 衝撞・S 技能・D 大絕（集滿 3 格）・1–4 表情',true); });
   }
   _addTrauma(a,cap){ const c=cap||1; const t=this._trauma||0; if(t>=c) return; this._trauma=Math.min(c,t+a); } // cap：連續事件的震動上限
   _updateShake(delta){
@@ -4394,7 +4471,7 @@ class GameScene extends Phaser.Scene {
   // 底部常駐按鍵列（在烤盤下方，不擋畫面）
   _buildKeyBar(){
     const y=H-21; // 最底部；烤盤正下方留給訊息列
-    const items=[['←↑↓→','移動'],['A','推擠'],['S',(this.charData&&this.charData.ability)||'技能'],['D','大絕'],['H','說明']];
+    const items=[['←↑↓→','移動'],['A','推擠'],['S',(this.charData&&this.charData.ability)||'技能'],['D','大絕'],['1–4','表情'],['H','說明']];
     const cont=this.add.container(0,0).setDepth(30);
     const g=this.add.graphics(); cont.add(g);
     const parts=[]; let total=0;
@@ -4691,6 +4768,7 @@ class GameScene extends Phaser.Scene {
       const pw=Math.max(0.3,o.power||1);
       if(this.netRole==='host'&&this._netEv&&o.x!==undefined) this._netEv.push({k:'h',x:Math.round(o.x),y:Math.round(o.y),dx:+(o.dx||0).toFixed(2),dy:+(o.dy||0).toFixed(2),p:+pw.toFixed(1),v:this._animId(o.anim),s:o.star===false?0:1}); // 客戶端也要有打擊感
       if(o.anim) this._charImpact(o.anim,o.dx||0,o.dy||0,pw);
+      if(o.anim&&this.netRole!=='client'){ const v=o.anim===this.pAnim?this:this.enemies.find(e=>e.anim===o.anim); if(v){ const a=v._aw||(v._aw={}); a.took=(a.took||0)+1; } } // 被打幾下（結算獎項）
       const fr=o.freeze!==undefined?o.freeze:Math.round(35+pw*30);
       if(o.shake!==false) this._addTrauma(fr>0?Math.min(0.8,0.45+pw*0.2):0.12); // 命中一定有感的震動（跟你無關的互推不震）
       if(fr>0){ this._hitStop=Math.max(this._hitStop||0,Math.min(130,fr)); this.tweens.timeScale=0; }
@@ -4916,6 +4994,7 @@ class GameScene extends Phaser.Scene {
       g.gain.setValueAtTime(vol,now); g.gain.exponentialRampToValueAtTime(0.001,now+dur);
       o.start(now); o.stop(now+dur);
     };
+    if(type==='emote'){ mk(784,0.07,0.09,'triangle'); setTimeout(()=>{ if(this.ac) mk(1175,0.1,0.08,'triangle'); },65); return; } // 表情：啵啵
     if(type==='foil'){ // 撿到鋁箔：嘩啦的銀色上滑音
       [880,1175,1568,2093].forEach((fr,i)=>setTimeout(()=>{ if(this.ac) mk(fr,0.28,0.09,'triangle'); },i*55));
       try{ const sz=Math.floor(ac.sampleRate*0.35),buf=ac.createBuffer(1,sz,ac.sampleRate),d=buf.getChannelData(0); for(let i=0;i<sz;i++) d[i]=(Math.random()*2-1)*(1-i/sz)*0.12;
@@ -5436,7 +5515,7 @@ class GameScene extends Phaser.Scene {
 
   checkEnemyFall(e,i,natural,force){ // force：掉進洞（人還在烤盤範圍內）
     if(force||!inGrill(e.x,e.y)){
-      e.alive=false;
+      e.alive=false; e._fell=true;
       if(this.enemySprites[i]) this.enemySprites[i].setVisible(false);
       if(this.enemyFx[i])      this.enemyFx[i].setVisible(false);
       this._hitFeel({x:e.x,y:e.y,power:1.8,freeze:110});
@@ -5552,6 +5631,7 @@ class GameScene extends Phaser.Scene {
   // 結算面板：標題、原因、本局統計、三個大按鈕（滑鼠或鍵盤都可以）
   _showResult(win,boardIn){
     if(this._resultShown) return; this._resultShown=true;
+    Object.keys(this._ems||{}).forEach(k=>{ const o=this._ems[k]; if(o&&o.c&&o.c.scene) o.c.destroy(); }); this._ems={};
     const title=this.statusTxt.text, reason=this.subTxt.text;
     this.statusTxt.setText(''); this.subTxt.setText('');
     let board=boardIn?boardIn.map(r=>({...r,me:this.netRole==='client'?r.id===window.MP.myId:r.id==='H'})):this._finalScores(win);
@@ -5594,7 +5674,13 @@ class GameScene extends Phaser.Scene {
       const col=r.me?'#ffe066':(r.alive?'#ffffff':'#999999');
       if(r.me){ this.add.rectangle(PX,y+9,PW-40,44,0xffcc44,0.15).setDepth(D); }
       this.add.text(PX-PW/2+36,y,pos+'.',{fontSize:'18px',color:col,fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(D+1);
-      this.add.text(PX-PW/2+68,y,r.name+(r.me?'（你）':'')+(r.alive?'':' ✖'),{fontSize:'18px',color:col,fontFamily:'sans-serif',fontStyle:r.me?'bold':'normal'}).setOrigin(0,0.5).setDepth(D+1);
+      const nt=this.add.text(PX-PW/2+68,y,r.name+(r.me?'（你）':'')+(r.alive?'':' ✖'),{fontSize:'18px',color:col,fontFamily:'sans-serif',fontStyle:r.me?'bold':'normal'}).setOrigin(0,0.5).setDepth(D+1);
+      if(r.aw){ // 搞笑獎項：名字旁邊的金色貼紙，一個一個蓋上去
+        const ax=nt.x+nt.width+10, at=this.add.text(ax,y,r.aw,{fontSize:'13px',color:'#2a1608',fontFamily:'sans-serif',fontStyle:'bold',backgroundColor:'#ffd84a',padding:{x:6,y:2}}).setOrigin(0,0.5).setDepth(D+2);
+        const room=(_lm?PX+64:PX+136)-ax, fs=at.width>room?Math.max(0.6,room/at.width):1;
+        at.setScale(fs*1.9).setAlpha(0).setAngle(-6);
+        this.tweens.add({targets:at,scaleX:fs,scaleY:fs,alpha:1,angle:-2,delay:650+i*230,duration:200,ease:'Back.easeOut',onStart:()=>{ if(this.sys&&this.sys.isActive()) this.playSound('emote'); }});
+      }
       this.add.text(PX+70,y,(_lm?'出局 '+r.deaths+' 次':''),{fontSize:'13px',color:'#9a8a78',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1);
       { const w=this.multiplay?_wOf(r):0; if(w>0) this.add.text(PX+142,y,'🏆×'+w,{fontSize:'14px',color:'#ffd84a',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(D+1); }
       this.add.text(PX+PW/2-36,y,fmt(r.score)+' 分',{fontSize:'20px',color:col,fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(1,0.5).setDepth(D+1);
@@ -8519,7 +8605,7 @@ class GameScene extends Phaser.Scene {
     return od<40||dt>0.2; }
   // 衝刺撲空：冷卻多 0.5 秒、0.7 秒破綻（被撞飛 1.35 倍，附近 AI 會趁機衝過來）。亂衝不再比挑時機划算
   _dashWhiff(){
-    const now=this.time.now; this.pushCD+=0.5; this._openUntil=now+700;
+    const now=this.time.now; this.pushCD+=0.5; this._openUntil=now+700; { const a=this._aw||(this._aw={}); a.whiff=(a.whiff||0)+1; }
     this._floatTxt(this.p.x,this.p.y-this._ovTop()-30,'💨 撲空','#fff066');
     this._tip('whiff',this.p.x,this.p.y,'💨 撲空','衝刺沒撞到人：要多等一下才能再衝，而且 0.7 秒內被撞會飛更遠（黃圈）。看準了再衝！');
     const diff=this.aiDiff??1;
