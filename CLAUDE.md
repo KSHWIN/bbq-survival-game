@@ -6,7 +6,7 @@
 - Scene 順序：BootScene → SelectScene → TeamScene（賽前設定）→ GameScene
 - 大廳 UI：`#lobby-overlay`（HTML + CSS，z-index: 9999，蓋在 Phaser canvas 上方）
   - 等待室 v2（夜市炭烤攤風）：CSS 在 `/* ══ 等待室 v2` 那段；字型 Google Fonts Huninn（中文）+ Bungee（房號、數字）；角色圖直接用 `IMG['char_'+key]`（`Lobby._charImg`）；房號是號碼牌 `#wr-ticket`，複製時蓋「已複製」章、不改房號文字；玩家用座位卡顯示，空位寫「AI 補上」；高度 ≤800px 有緊湊版。背景火星 `.lobby-embers`。
-- 連線伺服器：`server.js`（socket.io，部署在 Render，push 到 master 會自動重新部署；免費方案會休眠）
+- 連線伺服器：`server.js`（socket.io，部署在 Render Singapore `https://bbq-sg.onrender.com`，舊 Oregon 服務可刪，push 到 master 會自動重新部署；免費方案會休眠）
 - 發布：GitHub Pages（https://kshwin.github.io/bbq-survival-game/），push 到 master 約 1 分鐘生效
 
 ## 目前的遊戲規則（2026-11 定案）
