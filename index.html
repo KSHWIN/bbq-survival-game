@@ -224,7 +224,7 @@ const TITLE_BG = "data:image/webp;base64,UklGRtxRAgBXRUJQVlA4INBRAgBwLgqdASoABgA
 /* ══ 首頁 v3：美式後院 BBQ ══════════════════════════ */
 #lobby-overlay { background-color:#140600; }
 #lobby-overlay::before { content:''; position:absolute; inset:0; z-index:0; pointer-events:none;
-  background: linear-gradient(180deg, rgba(12,4,0,0.72), rgba(12,4,0,0.86)), var(--title-bg, none) center 60% / cover no-repeat; transition: opacity .4s; }
+  background: radial-gradient(ellipse 80% 70% at 50% 45%, rgba(10,3,0,0.30), rgba(10,3,0,0.72) 100%), linear-gradient(180deg, rgba(12,4,0,0.34), rgba(12,4,0,0.5)), var(--title-bg, none) center 60% / cover no-repeat; transition: opacity .4s; }
 #lobby-overlay.ld-on::before { background:
   radial-gradient(ellipse 70% 55% at 50% 38%, transparent 30%, rgba(10,3,0,0.55) 100%),
   linear-gradient(180deg, rgba(20,6,30,0.25) 0%, transparent 30%, transparent 62%, rgba(12,4,0,0.92) 100%),
@@ -289,145 +289,178 @@ const TITLE_BG = "data:image/webp;base64,UklGRtxRAgBXRUJQVlA4INBRAgBwLgqdASoABgA
 @keyframes ldBob { from{transform:translateY(0) rotate(-2deg)} to{transform:translateY(-8px) rotate(2deg)} }
 @media (max-height:620px) { .ld-tag { display:none; } }
 
-#screen-waiting {
-  font-family:'Huninn','Microsoft JhengHei','Noto Sans TC',sans-serif;
+/* ══ 等待室 v3：後院木牌（跟首頁 v3 同一套：粗咖啡邊、奶油 / 黃 / 紅大按鈕；字比 v2 少）══ */
+#lobby-overlay { --ink:#3a1406; --paper:#fff4d6; --sun:#ffd23f; --well:rgba(38,13,2,0.42); --rim:rgba(58,20,6,0.78); }
+#screen-waiting, .wd-form {
+  font-family:'Huninn','Microsoft JhengHei','Noto Sans TC',sans-serif; color:var(--paper);
   background:
-    radial-gradient(ellipse 80% 40% at 50% 0%, rgba(255,120,40,0.10), transparent 70%),
-    linear-gradient(180deg, #1d0e07 0%, #140804 100%);
-  border:1px solid rgba(255,130,50,0.38); border-radius:20px;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.6), 0 30px 80px rgba(0,0,0,0.65), 0 0 60px rgba(255,90,20,0.18), inset 0 1px 0 rgba(255,200,140,0.08);
-  max-height:96vh; overflow-y:auto; overflow-x:hidden;
-  animation: wrIn .45s cubic-bezier(.2,.8,.2,1) both;
+    repeating-linear-gradient(90deg, transparent 0 134px, rgba(30,10,0,0.42) 134px 136px, rgba(255,225,180,0.07) 136px 137px),
+    repeating-linear-gradient(177deg, rgba(255,230,190,0.045) 0 2px, transparent 2px 9px),
+    linear-gradient(180deg, #80502a 0%, #6a4020 55%, #573216 100%);
+  border:4px solid var(--ink); border-radius:18px;
+  box-shadow: 0 8px 0 #230c03, 0 26px 60px rgba(0,0,0,0.6), inset 0 2px 0 rgba(255,225,180,0.28), inset 0 -4px 0 rgba(0,0,0,0.22);
+  animation: wrIn .45s cubic-bezier(.2,1.2,.3,1) both;
 }
-#screen-waiting::before { content:''; position:absolute; left:24px; right:24px; top:-1px; height:2px; border-radius:2px;
-  background:linear-gradient(90deg, transparent, var(--ember), var(--flame), var(--ember), transparent); box-shadow:0 0 14px rgba(255,120,30,0.8); }
-@keyframes wrIn { from{opacity:0; transform:translateY(14px) scale(.985)} to{opacity:1; transform:none} }
+#screen-waiting { max-height:95vh; overflow-y:auto; overflow-x:hidden; }
+#screen-waiting::before, #screen-waiting::after, .wd-form::before, .wd-form::after { content:''; position:absolute; top:9px; width:9px; height:9px; border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, #f4ecdc, #9a9284 55%, #4a443a); box-shadow:0 1px 0 rgba(0,0,0,0.5); }
+#screen-waiting::before, .wd-form::before { left:10px; } #screen-waiting::after, .wd-form::after { right:10px; }
+@keyframes wrIn { from{opacity:0; transform:translateY(16px) scale(.98)} to{opacity:1; transform:none} }
 
-.wr-head { display:flex; align-items:center; justify-content:space-between; gap:18px; margin:2px 0 26px; }
-.wr-kicker { font-size:.72rem; letter-spacing:.32em; color:var(--ash); margin-bottom:2px; }
-.wr-title { font-size:2rem; line-height:1.1; color:var(--cream); text-shadow:0 2px 0 #000, 0 0 22px rgba(255,120,30,0.45); }
-.wr-title b { color:var(--flame); font-weight:inherit; }
+.wr-head { display:flex; align-items:center; justify-content:space-between; gap:18px; margin:2px 0 16px; padding-left:8px; }
+.wr-title, .wd-title { font-size:2rem; line-height:1.15; letter-spacing:.06em; color:var(--paper); transform:rotate(-2deg);
+  text-shadow: 2px 2px 0 var(--ink), -2px 2px 0 var(--ink), 2px -2px 0 var(--ink), -2px -2px 0 var(--ink), 0 3px 0 var(--ink), 3px 0 0 var(--ink), -3px 0 0 var(--ink), 0 -3px 0 var(--ink), 3px 6px 0 #c2380a; }
+.wr-title b, .wd-title b { color:#ffcf4a; font-weight:inherit; }
 
-/* 邀請連結（朋友點開就進房）+ 號碼牌 */
-.wr-invite-wrap { display:flex; align-items:center; gap:22px; }
-.wr-invite { font-family:inherit; cursor:pointer; padding:9px 16px 8px; border-radius:12px; border:2px solid var(--ember); background:rgba(255,106,26,0.14); color:var(--cream);
-  font-size:.95rem; line-height:1.2; white-space:nowrap; box-shadow:0 4px 0 rgba(0,0,0,0.45); transition:transform .15s, background .15s, border-color .15s; }
-.wr-invite small { display:block; font-size:.66rem; color:var(--ash); margin-top:3px; letter-spacing:.06em; }
-.wr-invite:hover { background:rgba(255,106,26,0.3); transform:translateY(-2px); }
-.wr-invite:active { transform:translateY(2px); box-shadow:0 1px 0 rgba(0,0,0,0.45); }
-.wr-invite.ok { border-color:#7dff9a; background:rgba(60,200,110,0.18); } .wr-invite.ok small { color:#b8ffc8; }
-.wr-seat .wins { font-family:'Bungee','Consolas',monospace; font-size:.78rem; color:#ffd84a; flex-shrink:0; text-shadow:0 1px 0 #000; white-space:nowrap; }
-@media (max-width: 720px) { .wr-invite-wrap { flex-wrap:wrap; gap:14px; } }
-.wr-ticket { position:relative; display:flex; align-items:center; gap:12px; cursor:pointer; user-select:none; margin-right:8px;
-  padding:8px 20px 8px 18px; background:linear-gradient(180deg,#fff6e2,#f6dfb4); color:#3a1606; border-radius:6px;
-  transform:rotate(-2deg); box-shadow:0 5px 0 #9a5a24, 0 10px 24px rgba(0,0,0,0.5); transition:transform .18s, box-shadow .18s; }
-.wr-ticket::before, .wr-ticket > .wr-notch { content:''; position:absolute; top:50%; left:-7px; width:14px; height:14px; margin-top:-7px; border-radius:50%; background:#1a0c06; }
+/* 邀請連結（朋友點開就進房）+ 號碼牌 + 離開 */
+.wr-invite-wrap { display:flex; align-items:center; gap:16px; }
+.wr-invite { font-family:inherit; cursor:pointer; padding:9px 16px; border-radius:12px; border:3px solid var(--ink); color:var(--ink); font-size:1rem; line-height:1.2; white-space:nowrap;
+  background:linear-gradient(180deg,#ffe26a,#ffc22a); box-shadow:0 5px 0 #8a5a00; transition:transform .12s, box-shadow .12s, filter .12s; }
+.wr-invite:hover { transform:translateY(-2px); filter:brightness(1.06); }
+.wr-invite:active { transform:translateY(4px); box-shadow:0 1px 0 #8a5a00; }
+.wr-invite.ok { background:linear-gradient(180deg,#c9f59a,#86d94e); box-shadow:0 5px 0 #3f7a1e; }
+.wr-ticket { position:relative; display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none;
+  padding:7px 14px 7px 18px; background:linear-gradient(180deg,#fff8e6,#f6dfb4); color:var(--ink); border-radius:6px;
+  transform:rotate(-2deg); box-shadow:0 5px 0 var(--ink), 0 10px 20px rgba(0,0,0,0.35); transition:transform .18s, box-shadow .18s; }
+.wr-ticket::before { content:''; position:absolute; top:50%; left:-7px; width:14px; height:14px; margin-top:-7px; border-radius:50%; background:#6a4020; box-shadow:inset -2px 0 0 rgba(0,0,0,0.25); }
 .wr-ticket:hover { transform:rotate(-1deg) translateY(-2px); }
-.wr-ticket:active { transform:rotate(-1deg) translateY(3px); box-shadow:0 2px 0 #9a5a24, 0 6px 14px rgba(0,0,0,0.5); }
-.wr-ticket-lbl { writing-mode:vertical-rl; font-size:.72rem; letter-spacing:.2em; padding-right:10px; border-right:2px dashed rgba(90,40,10,0.35); color:#8a4a1c; }
-#screen-waiting .wr-code { all:unset; font-family:'Bungee','Consolas',monospace; font-size:1.75rem; letter-spacing:.14em; color:#c2380a;
-  min-width:7.2em; text-align:center; text-shadow:0 1px 0 rgba(255,255,255,0.6); }
-.wr-ticket-hint { position:absolute; left:0; right:0; bottom:-26px; text-align:center; font-size:.7rem; color:var(--ash); transform:rotate(2deg); transition:color .2s; white-space:nowrap; }
-.wr-ticket.copied .wr-ticket-hint { color:#7dff9a; }
+.wr-ticket:active { transform:rotate(-1deg) translateY(3px); box-shadow:0 2px 0 var(--ink), 0 6px 12px rgba(0,0,0,0.35); }
+.wr-ticket-lbl { writing-mode:vertical-rl; font-size:.72rem; letter-spacing:.2em; padding-right:9px; border-right:2px dashed rgba(90,40,10,0.35); color:#8a4a1c; }
+#screen-waiting .wr-code { all:unset; font-family:'Bungee','Consolas',monospace; font-size:1.7rem; letter-spacing:.14em; color:#c2380a; min-width:7em; text-align:center; text-shadow:0 1px 0 rgba(255,255,255,0.6); }
+.wr-ticket-cp { font-size:.95rem; opacity:.6; transition:opacity .15s; } .wr-ticket:hover .wr-ticket-cp { opacity:1; }
 .wr-ticket.copied::after { content:'已複製'; position:absolute; right:-10px; top:-12px; padding:2px 8px; border:2px solid #d22; color:#d22; border-radius:4px;
-  font-size:.8rem; transform:rotate(12deg); background:rgba(255,246,226,0.92); animation:stamp .25s cubic-bezier(.3,1.6,.5,1) both; }
+  font-size:.8rem; transform:rotate(12deg); background:rgba(255,246,226,0.94); animation:stamp .25s cubic-bezier(.3,1.6,.5,1) both; }
 @keyframes stamp { from{transform:rotate(12deg) scale(2.2); opacity:0} to{transform:rotate(12deg) scale(1); opacity:1} }
+.wr-leave { all:unset; box-sizing:border-box; cursor:pointer; min-width:32px; height:32px; padding:0 9px; display:grid; place-items:center; border-radius:999px; font-size:.86rem; white-space:nowrap;
+  color:var(--paper); background:var(--well); border:2px solid var(--ink); transition:background .15s; }
+.wr-leave:hover { background:rgba(38,13,2,0.75); } .wr-leave.ask { background:#c4260f; }
+.wr-leave:focus-visible, .wr-invite:focus-visible, .wr-ticket:focus-visible { outline:3px solid #fff; outline-offset:2px; }
 
-#screen-waiting .lobby-label { font-size:.74rem; letter-spacing:.22em; color:var(--ash); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
-#screen-waiting .lobby-label::after { content:''; flex:1; height:1px; background:linear-gradient(90deg, rgba(255,130,50,0.3), transparent); }
-#screen-waiting .wr-waiting-layout { grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:16px; }
+#screen-waiting .lobby-label { font-size:.8rem; letter-spacing:.2em; color:#ffe2a8; margin-bottom:7px; display:flex; align-items:center; gap:10px; text-shadow:0 1px 0 var(--ink); }
+#screen-waiting .lobby-label::after { content:''; flex:1; border-top:2px dashed rgba(58,20,6,0.5); }
+#wr-seat-count { order:2; color:var(--sun); letter-spacing:.04em; }
+#screen-waiting .wr-waiting-layout { grid-template-columns: 1fr 1fr; gap:18px; margin-bottom:14px; }
 
-/* 角色格：小烤架 */
-#screen-waiting .wr-char-grid { gap:7px; }
-#screen-waiting .wr-char-cell { position:relative; padding:8px 2px 6px; border-radius:12px; border:1px solid rgba(255,140,60,0.12);
-  background: radial-gradient(circle at 50% 40%, rgba(255,140,60,0.10), transparent 62%), repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0 2px, transparent 2px 9px), #1b0d06;
-  color:#d9bf98; font-size:.74rem; transition: transform .15s, border-color .15s, box-shadow .15s, background .15s; }
-.wr-char-cell img { width:52px; height:52px; object-fit:contain; margin-bottom:3px; filter: drop-shadow(0 4px 3px rgba(0,0,0,0.6)); transition: transform .2s cubic-bezier(.3,1.6,.5,1); pointer-events:none; }
-#screen-waiting .wr-char-cell:hover { transform:translateY(-2px); border-color:rgba(255,140,60,0.45); background-color:#241108; }
+/* 角色格（凹進木板的小格子，選中的變黃牌子） */
+#screen-waiting .wr-char-grid { gap:7px; margin-bottom:0; }
+#screen-waiting .wr-char-cell { position:relative; padding:7px 2px 5px; border-radius:12px; border:2px solid var(--rim); background:var(--well);
+  color:#f3dfbb; font-size:.76rem; transition: transform .15s, background .15s, box-shadow .15s; }
+.wr-char-cell img { width:52px; height:52px; object-fit:contain; margin-bottom:3px; filter: drop-shadow(0 3px 0 rgba(30,10,0,0.45)); transition: transform .2s cubic-bezier(.3,1.6,.5,1); pointer-events:none; }
+#screen-waiting .wr-char-cell:hover { transform:translateY(-2px); background:rgba(38,13,2,0.22); border-color:var(--ink); }
 .wr-char-cell:hover img { transform: scale(1.08) rotate(-4deg); }
-#screen-waiting .wr-char-cell.selected { border-color:var(--ember); color:var(--cream);
-  background: radial-gradient(circle at 50% 110%, rgba(255,110,30,0.55), transparent 65%), repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0 2px, transparent 2px 9px), #2a1006;
-  box-shadow: 0 0 0 1px rgba(255,106,26,0.6), 0 0 18px rgba(255,106,26,0.45), inset 0 -10px 18px rgba(255,90,20,0.25); }
+#screen-waiting .wr-char-cell.selected { color:var(--ink); border-color:var(--ink); background:linear-gradient(180deg,#ffe26a,#ffc22a); box-shadow:0 4px 0 #8a5a00; transform:translateY(-2px); }
 .wr-char-cell.selected img { animation: hop .9s ease-in-out infinite; }
 @keyframes hop { 0%,100%{transform:translateY(0) scale(1.06)} 50%{transform:translateY(-4px) scale(1.06,1.1)} }
 
-/* 角色介紹 */
-#screen-waiting .wr-char-detail { position:relative; display:grid; grid-template-columns: 104px 1fr; gap:14px; align-items:start;
-  background: linear-gradient(160deg, rgba(255,140,60,0.07), rgba(0,0,0,0.25)); border:1px solid rgba(255,140,60,0.18); border-radius:14px; padding:14px; margin-bottom:16px; min-height:0; }
-.wr-portrait { position:relative; width:104px; height:104px; border-radius:50%; display:grid; place-items:center;
-  background: radial-gradient(circle at 50% 60%, color-mix(in srgb, var(--cc) 45%, transparent), transparent 68%), radial-gradient(circle, #2a1308 55%, #160904 56%, #160904 60%, rgba(255,130,50,0.35) 61%, transparent 63%); }
-.wr-portrait img { width:92px; height:92px; object-fit:contain; filter: drop-shadow(0 6px 6px rgba(0,0,0,0.6)); animation: wrPop .35s cubic-bezier(.3,1.6,.5,1) both; }
+/* 右欄：角色介紹（貼在木板上的奶油色菜單卡） */
+#screen-waiting .wr-char-detail { position:relative; flex:1; display:grid; grid-template-columns:1fr; justify-items:center; align-content:center; text-align:center; gap:8px;
+  padding:16px 16px 14px; margin:4px 2px 5px; min-height:0; color:var(--ink);
+  background:linear-gradient(180deg,#fff8e6,#f3e0b8); border:3px solid var(--ink); border-radius:14px; box-shadow:0 5px 0 #2a0f04; transform:rotate(.5deg); }
+#screen-waiting .wr-char-detail::before { content:''; position:absolute; top:-9px; left:50%; width:74px; height:16px; margin-left:-37px; background:rgba(255,210,63,0.9); border:1px solid rgba(58,20,6,0.35); transform:rotate(-3deg); }
+#screen-waiting .wr-char-detail > div:nth-child(2) { width:100%; }
+.wr-portrait { position:relative; width:120px; height:120px; border-radius:50%; display:grid; place-items:center; box-sizing:border-box;
+  background: color-mix(in srgb, var(--cc, #ffcc44) 42%, #fff4d6); border:3px solid var(--ink); box-shadow: inset 0 -9px 0 rgba(58,20,6,0.12); }
+.wr-portrait img { width:108px; height:108px; object-fit:contain; filter: drop-shadow(0 4px 0 rgba(58,20,6,0.28)); animation: wrPop .35s cubic-bezier(.3,1.6,.5,1) both; }
 @keyframes wrPop { from{transform:scale(.6) rotate(-10deg); opacity:0} to{transform:none; opacity:1} }
-.wr-dname { font-size:1.45rem; color:var(--cream); line-height:1.1; margin-bottom:8px; display:flex; align-items:baseline; gap:8px; }
-.wr-dname small { font-size:.7rem; color:var(--ash); letter-spacing:.15em; }
-.wr-move { display:grid; grid-template-columns:auto 1fr; gap:2px 9px; margin-bottom:8px; }
-.wr-move kbd { grid-row: span 2; align-self:start; min-width:24px; height:24px; display:grid; place-items:center; border-radius:6px; font-family:'Bungee',monospace; font-size:.8rem;
-  background:linear-gradient(180deg,#ffe7b8,#f0c27a); color:#3a1606; box-shadow:0 3px 0 #8a4a1c; }
-.wr-move kbd.ult { background:linear-gradient(180deg,#ffd166,#ff7a2a); box-shadow:0 3px 0 #8a2a0a, 0 0 12px rgba(255,120,30,0.55); }
-.wr-move b { font-weight:normal; font-size:.86rem; color:var(--flame); }
-.wr-move span { font-size:.76rem; color:#c9a882; line-height:1.4; }
-.wr-bars { grid-column: 1 / -1; display:grid; grid-template-columns: repeat(3,1fr); gap:10px; padding-top:10px; border-top:1px dashed rgba(255,140,60,0.18); }
-.wr-bar { font-size:.68rem; color:var(--ash); }
-.wr-bar div { display:grid; grid-template-columns:repeat(3,1fr); gap:3px; margin-top:4px; }
-.wr-bar i { height:6px; border-radius:3px; background:rgba(255,255,255,0.08); }
-.wr-bar i.on { background:linear-gradient(90deg,var(--flame),var(--ember)); box-shadow:0 0 6px rgba(255,120,30,0.5); }
+.wr-dname { font-size:1.6rem; line-height:1.1; margin-bottom:8px; color:var(--ink); }
+.wr-move { display:grid; grid-template-columns:auto 1fr; gap:1px 10px; text-align:left; padding:7px 10px; border-radius:10px; background:rgba(58,20,6,0.08); margin-bottom:6px; }
+.wr-move kbd { grid-row: span 2; align-self:center; min-width:26px; height:26px; box-sizing:border-box; display:grid; place-items:center; border-radius:7px; font-family:'Bungee',monospace; font-size:.8rem; color:var(--ink);
+  background:linear-gradient(180deg,#fff,#f0dcb4); border:2px solid var(--ink); box-shadow:0 3px 0 var(--ink); }
+.wr-move kbd.ult { background:linear-gradient(180deg,#ffe26a,#ffb52a); }
+.wr-move b { font-weight:normal; font-size:.92rem; color:#a8290c; }
+.wr-move span { font-size:.78rem; color:#6b4526; line-height:1.35; }
+.wr-bars { grid-column: 1 / -1; width:100%; display:grid; grid-template-columns: repeat(3,1fr); gap:10px; padding-top:8px; border-top:2px dashed rgba(58,20,6,0.25); text-align:left; }
+.wr-bar { font-size:.7rem; color:#7a5636; }
+.wr-bar div { display:grid; grid-template-columns:repeat(3,1fr); gap:3px; margin-top:3px; }
+.wr-bar i { height:8px; border-radius:4px; background:rgba(58,20,6,0.14); }
+.wr-bar i.on { background:linear-gradient(180deg,#ffb43a,#f0701a); box-shadow:inset 0 0 0 1.5px var(--ink); }
 
 /* 座位 */
 .wr-seats { display:grid; grid-template-columns:repeat(2,1fr); gap:7px; }
-.wr-seat { display:flex; align-items:center; gap:8px; padding:6px 10px 6px 6px; border-radius:12px; min-height:46px; box-sizing:border-box;
-  background:rgba(255,130,50,0.08); border:1px solid rgba(255,140,60,0.25); animation: wrPop .3s both; }
-.wr-seat img { width:34px; height:34px; object-fit:contain; flex-shrink:0; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.6)); }
-.wr-seat .nm { font-size:.88rem; color:var(--cream); line-height:1.15; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.wr-seat .ch { font-size:.68rem; color:var(--ash); }
-.wr-seat .tm { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-.wr-seat.me { border-color:var(--ember); box-shadow: inset 0 0 0 1px rgba(255,106,26,0.35); }
-.wr-seat.empty { background:transparent; border:1px dashed rgba(255,140,60,0.18); color:rgba(200,160,120,0.45); font-size:.76rem; justify-content:center; animation:none; }
-#wr-seat-count { order:2; color:var(--flame); letter-spacing:0; }
+.wr-seat { display:flex; align-items:center; gap:8px; padding:5px 10px 5px 6px; border-radius:12px; min-height:46px; box-sizing:border-box;
+  background:var(--well); border:2px solid var(--rim); animation: wrPop .3s both; }
+.wr-seat img { width:34px; height:34px; object-fit:contain; flex-shrink:0; filter: drop-shadow(0 2px 0 rgba(30,10,0,0.45)); }
+.wr-seat .nm { font-size:.9rem; color:var(--paper); line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.wr-seat .hb { display:inline-block; margin-right:5px; padding:0 6px; border-radius:999px; font-size:.66rem; line-height:1.5; color:var(--ink); background:var(--sun); vertical-align:1px; }
+.wr-seat .ch { font-size:.7rem; color:#e3c69c; }
+.wr-seat .tm { width:11px; height:11px; border-radius:50%; flex-shrink:0; border:2px solid var(--ink); box-sizing:border-box; }
+.wr-seat .wins { font-family:'Bungee','Consolas',monospace; font-size:.78rem; color:#ffd84a; flex-shrink:0; text-shadow:0 1px 0 var(--ink); white-space:nowrap; }
+.wr-seat.me { border-color:var(--sun); background:rgba(38,13,2,0.62); }
+.wr-seat.empty { background:transparent; border:2px dashed rgba(255,236,200,0.28); color:rgba(255,236,200,0.62); font-size:.78rem; justify-content:center; animation:none; }
 
-/* 設定 */
-#screen-waiting .wr-settings { border-top:none; padding-top:0; transition:opacity .2s; }
-.wr-set-grid { display:grid; grid-template-columns: repeat(3,1fr); gap:10px; }
-.wr-set.wr-map { grid-column: 1 / -1; }
-.wr-set.wr-map > span small { color:#ffb070; }
-.wr-set { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-radius:12px; background:rgba(0,0,0,0.28); border:1px solid rgba(255,140,60,0.14); }
-.wr-set > span { font-size:.82rem; color:#e6cba4; line-height:1.25; }
-.wr-set > span small { display:block; font-size:.66rem; color:var(--ash); }
-#screen-waiting .wr-toggle { font-family:inherit; border-radius:999px; padding:5px 14px; border:1px solid rgba(255,140,60,0.35); background:#241108; color:var(--cream); font-size:.82rem; transition:all .15s; }
-#screen-waiting .wr-toggle:hover { border-color:var(--ember); }
-#screen-waiting .wr-toggle.on { background:linear-gradient(180deg,#ff8a3a,#e0500e); border-color:#ffb070; color:#fff; box-shadow:0 0 12px rgba(255,106,26,0.45); }
+/* 設定：一排四格 */
+#screen-waiting .wr-settings { border-top:none; padding-top:0; }
+.wr-set-grid { display:grid; grid-template-columns: 1.5fr 1fr 1.15fr 1.15fr; gap:8px; }
+.wr-set { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px 8px 12px; border-radius:12px; background:var(--well); border:2px solid var(--rim); }
+.wr-set > span { font-size:.86rem; color:#f3dfbb; white-space:nowrap; }
+#screen-waiting .wr-toggle { font-family:inherit; cursor:pointer; border-radius:999px; padding:4px 13px; border:2px solid var(--ink); color:var(--ink); font-size:.86rem; white-space:nowrap;
+  background:linear-gradient(180deg,#fff8e6,#f1dcb0); box-shadow:0 3px 0 #2a0f04; transition:transform .1s, box-shadow .1s, filter .1s; }
+#screen-waiting .wr-toggle:hover { filter:brightness(1.06); transform:translateY(-1px); }
+#screen-waiting .wr-toggle:active { transform:translateY(3px); box-shadow:0 0 0 #2a0f04; }
+#screen-waiting .wr-toggle.on { background:linear-gradient(180deg,#ffe26a,#ffc22a); }
 #screen-waiting .wr-step { width:28px; height:28px; padding:0; display:grid; place-items:center; font-size:1rem; }
-#screen-waiting .wr-setting-val { min-width:22px; text-align:center; font-family:'Bungee',monospace; font-size:1.05rem; color:var(--flame); }
+#screen-waiting .wr-setting-val { min-width:22px; text-align:center; font-family:'Bungee',monospace; font-size:1.1rem; color:var(--sun); text-shadow:0 2px 0 var(--ink); }
 .wr-stepper { display:flex; align-items:center; gap:6px; }
-#screen-waiting .wr-switch { position:relative; width:52px; height:28px; padding:0; font-size:0; flex-shrink:0; }
-#screen-waiting .wr-switch::before { content:''; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#cdb79a; transition:transform .2s cubic-bezier(.3,1.6,.5,1), background .2s; }
-#screen-waiting .wr-switch.on::before { transform:translateX(24px); background:#fff; }
+#screen-waiting .wr-switch { position:relative; box-sizing:border-box; width:52px; height:28px; padding:0; font-size:0; flex-shrink:0; background:#9a7a58; }
+#screen-waiting .wr-switch::before { content:''; position:absolute; top:1px; left:1px; width:22px; height:22px; box-sizing:border-box; border-radius:50%; background:var(--paper); border:2px solid var(--ink); transition:transform .2s cubic-bezier(.3,1.6,.5,1); }
+#screen-waiting .wr-switch.on { background:linear-gradient(180deg,#b4ec74,#72c93e); }
+#screen-waiting .wr-switch.on::before { transform:translateX(24px); }
+.wr-map-desc { margin:7px 4px 0; font-size:.78rem; color:#ffe2a8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-shadow:0 1px 0 var(--ink); }
+/* 不是房主：設定只能看（不變灰，照樣看得清楚這局打哪張圖） */
+#screen-waiting .wr-settings.ro { pointer-events:none; }
+#screen-waiting .wr-settings.ro .wr-toggle { background:none; box-shadow:none; border-color:transparent; color:var(--sun); padding:4px 2px; }
+#wr-map-btn::after { content:' ▸'; }
+#screen-waiting .wr-settings.ro #wr-map-btn::after { content:none; }
+#screen-waiting .wr-settings.ro .wr-step { display:none; }
+#screen-waiting .wr-settings.ro .wr-switch { width:auto; height:auto; font-size:.86rem; }
+#screen-waiting .wr-settings.ro .wr-switch::before { display:none; }
 
-/* 開烤按鈕 */
-#screen-waiting .wr-go { position:relative; overflow:hidden; margin:18px 0 0; padding:13px; border:none; border-radius:14px; font-family:inherit; font-size:1.35rem; letter-spacing:.12em; color:#fff;
-  background:linear-gradient(180deg,#ff9a3c 0%,#ff5a14 55%,#d63a06 100%); box-shadow:0 6px 0 #7a2004, 0 12px 30px rgba(255,80,10,0.45), inset 0 1px 0 rgba(255,255,255,0.4);
-  text-shadow:0 2px 0 rgba(120,30,0,0.6); transition: transform .12s, box-shadow .12s, filter .15s; }
-#screen-waiting .wr-go:hover { filter:brightness(1.08); transform:translateY(-1px); }
-#screen-waiting .wr-go:active { transform:translateY(4px); box-shadow:0 2px 0 #7a2004, 0 6px 16px rgba(255,80,10,0.4), inset 0 1px 0 rgba(255,255,255,0.4); }
+/* 開烤按鈕（跟首頁的大紅按鈕同一顆） */
+#screen-waiting .wr-go { position:relative; overflow:hidden; box-sizing:border-box; margin:14px 0 7px; padding:11px; border-radius:14px; font-family:inherit; font-size:1.5rem; font-weight:400; letter-spacing:.14em; color:#fff; cursor:pointer;
+  background:linear-gradient(180deg,#ff5a2a 0%,#e0331b 55%,#c4260f 100%); border:3px solid var(--sun); box-shadow:0 6px 0 #7a1608, inset 0 2px 0 rgba(255,255,255,0.35);
+  text-shadow:0 3px 0 #7a1608; transition: transform .12s, box-shadow .12s, filter .15s; }
+#screen-waiting .wr-go:hover { filter:brightness(1.08); transform:translateY(-1px); background:linear-gradient(180deg,#ff5a2a 0%,#e0331b 55%,#c4260f 100%); }
+#screen-waiting .wr-go:active { transform:translateY(4px); box-shadow:0 2px 0 #7a1608, inset 0 2px 0 rgba(255,255,255,0.35); }
 #screen-waiting .wr-go::after { content:''; position:absolute; top:0; bottom:0; width:40%; left:-50%; background:linear-gradient(100deg, transparent, rgba(255,255,255,0.35), transparent); animation: shine 2.8s ease-in-out infinite; }
 @keyframes shine { 0%,55%{left:-50%} 100%{left:130%} }
-.wr-go small { display:block; font-size:.7rem; letter-spacing:.2em; opacity:.85; margin-top:2px; }
-#wr-waiting-msg { margin-top:18px; padding:14px; border-radius:14px; border:1px dashed rgba(255,140,60,0.3); color:#d9bf98; font-size:.95rem; }
+#wr-error:empty { display:none; }
+#wr-waiting-msg { margin-top:14px; padding:11px; border-radius:14px; border:2px dashed rgba(255,236,200,0.35); color:#f3dfbb; font-size:1rem; }
 #wr-waiting-msg .dots i { display:inline-block; font-style:normal; animation: dotB 1.2s infinite; } #wr-waiting-msg .dots i:nth-child(2){animation-delay:.15s} #wr-waiting-msg .dots i:nth-child(3){animation-delay:.3s}
 @keyframes dotB { 0%,60%,100%{transform:none; opacity:.4} 30%{transform:translateY(-4px); opacity:1} }
-#screen-waiting .wr-team-bar { border-top:none; padding:0 0 12px; }
-/* 右欄：角色大卡（直式） */
-#screen-waiting .wr-char-detail { flex:1; margin-bottom:0; grid-template-columns:1fr; justify-items:center; text-align:center; align-content:center; gap:10px; padding:16px 18px; }
-#screen-waiting .wr-char-detail > div:nth-child(2) { width:100%; }
-.wr-char-detail .wr-portrait { width:128px; height:128px; }
-.wr-char-detail .wr-portrait img { width:116px; height:116px; }
-#screen-waiting .wr-dname { justify-content:center; font-size:1.6rem; }
-#screen-waiting .wr-move { text-align:left; padding:8px 10px; border-radius:10px; background:rgba(0,0,0,0.22); margin-bottom:6px; }
-#screen-waiting .wr-bars { width:100%; text-align:left; }
-@media (max-height: 800px) { #screen-waiting.lobby-card-wide { padding:16px 24px !important; } .wr-head { margin-bottom:20px; } .wr-title { font-size:1.7rem; }
-  .wr-char-detail .wr-portrait { width:96px; height:96px; } .wr-char-detail .wr-portrait img { width:86px; height:86px; } #screen-waiting .wr-char-detail { gap:6px; padding:12px 16px; }
-  #screen-waiting .wr-char-cell { padding:5px 2px 4px; } .wr-char-cell img { width:44px; height:44px; } .wr-seat { min-height:40px; padding-top:4px; padding-bottom:4px; } .wr-seat img { width:30px; height:30px; }
-  #screen-waiting .wr-waiting-layout { margin-bottom:12px; } .wr-set { padding:7px 12px; } #screen-waiting .wr-go { margin-top:14px; padding:10px; font-size:1.2rem; } }
-@media (max-width: 720px) { .wr-set-grid { grid-template-columns:1fr; } #screen-waiting .wr-char-detail { grid-template-columns:72px 1fr; } .wr-portrait,.wr-portrait img{width:72px;height:72px} .wr-head{flex-wrap:wrap} }
+#screen-waiting .wr-team-bar { border-top:none; padding:0 0 12px; gap:12px; }
+#screen-waiting .wr-team-bar .lobby-label { margin-bottom:0; } #screen-waiting .wr-team-bar .lobby-label::after { display:none; }
+#screen-waiting .team-bar-btn { font-family:inherit; cursor:pointer; padding:4px 18px; border-radius:999px; border:2px solid var(--ink); color:var(--ink); font-size:.9rem; font-weight:400;
+  background:linear-gradient(180deg,#fff8e6,#f1dcb0); box-shadow:0 3px 0 #2a0f04; opacity:.7; transition:opacity .15s, transform .1s; }
+#screen-waiting .team-bar-btn:hover { opacity:1; }
+#screen-waiting .team-bar-btn.active-red  { background:linear-gradient(180deg,#ff6a4a,#d9331b); color:#fff; opacity:1; }
+#screen-waiting .team-bar-btn.active-blue { background:linear-gradient(180deg,#6aa6ff,#2f6fe0); color:#fff; opacity:1; }
+
+/* 開房間 / 加入房間：小木牌 */
+.wd-form { box-sizing:border-box; min-width:0; max-width:420px; width:88vw; padding:26px 30px 20px; text-align:center; }
+.wd-title { display:inline-block; font-size:2.4rem; margin:0 0 22px; }
+.wd-form .lobby-input { box-sizing:border-box; font-family:inherit; text-align:center; padding:11px 14px; margin-bottom:12px; font-size:1.15rem; color:var(--ink);
+  background:linear-gradient(180deg,#fff8e6,#f6e6c2); border:3px solid var(--ink); border-radius:12px; box-shadow:inset 0 3px 0 rgba(58,20,6,0.12); }
+.wd-form .lobby-input:focus { border-color:var(--ink); box-shadow:inset 0 3px 0 rgba(58,20,6,0.12), 0 0 0 3px var(--sun); }
+.wd-form .lobby-input::placeholder { color:#a98c66; font-family:'Huninn','Microsoft JhengHei',sans-serif; font-size:1.05rem; letter-spacing:.04em; }
+.wd-form .wd-code { font-family:'Bungee','Consolas',monospace; font-size:1.5rem; letter-spacing:.18em; text-transform:uppercase; color:#c2380a; }
+.wd-form .lobby-error { color:#ffd9cc; font-size:.9rem; min-height:20px; text-shadow:0 1px 0 var(--ink); }
+.wd-form .lobby-error.wait { color:#ffe9a8; }
+.wd-form .lobby-invite { margin:0 0 14px; background:rgba(255,244,214,0.94); border:2px dashed var(--ink); color:var(--ink); }
+.wd-form .lobby-invite b { color:#c2380a; }
+.wd-btn { all:unset; box-sizing:border-box; display:block; width:100%; cursor:pointer; text-align:center; border-radius:14px; font-family:inherit; user-select:none; padding:11px 10px; font-size:1.4rem; letter-spacing:.1em; color:#fff;
+  background:linear-gradient(180deg,#ff5a2a 0%,#e0331b 55%,#c4260f 100%); border:3px solid var(--sun); box-shadow:0 6px 0 #7a1608, inset 0 2px 0 rgba(255,255,255,0.35); text-shadow:0 3px 0 #7a1608;
+  transition:transform .12s, box-shadow .12s, filter .12s; }
+.wd-btn:hover { transform:translateY(-2px); filter:brightness(1.08); }
+.wd-btn:active { transform:translateY(4px); box-shadow:0 2px 0 #7a1608, inset 0 2px 0 rgba(255,255,255,0.35); }
+.wd-btn:focus-visible, .wd-back:focus-visible { outline:3px solid #fff; outline-offset:3px; }
+.wd-back { all:unset; cursor:pointer; display:inline-block; margin-top:18px; padding:5px 16px; border-radius:999px; font-size:.92rem; color:#ffe9c4; background:var(--well); border:2px solid var(--ink); transition:background .15s, color .15s; }
+.wd-back:hover { background:rgba(38,13,2,0.75); color:#fff; }
+
+@media (max-height: 800px) { #screen-waiting.lobby-card-wide { padding:14px 24px 12px !important; } .wr-head { margin-bottom:12px; } .wr-title { font-size:1.75rem; }
+  .wr-char-detail .wr-portrait { width:96px; height:96px; } .wr-char-detail .wr-portrait img { width:86px; height:86px; } #screen-waiting .wr-char-detail { gap:6px; padding:14px 16px 12px; }
+  #screen-waiting .wr-char-cell { padding:5px 2px 4px; } .wr-char-cell img { width:44px; height:44px; } .wr-seat { min-height:40px; padding-top:3px; padding-bottom:3px; } .wr-seat img { width:30px; height:30px; }
+  #screen-waiting .wr-waiting-layout { margin-bottom:12px; } .wr-set { padding:6px 10px 6px 12px; } #screen-waiting .wr-go { margin-top:12px; padding:8px; font-size:1.3rem; } }
+@media (max-width: 720px) { .wr-set-grid { grid-template-columns:1fr 1fr; } .wr-head { flex-wrap:wrap; } .wr-invite-wrap { flex-wrap:wrap; gap:12px; } #screen-waiting .wr-waiting-layout { grid-template-columns:1fr; } }
 @media (prefers-reduced-motion: reduce) { #lobby-overlay *, #lobby-overlay *::before, #lobby-overlay *::after { animation:none !important; } }
   </style>
 </head>
@@ -475,90 +508,80 @@ const TITLE_BG = "data:image/webp;base64,UklGRtxRAgBXRUJQVlA4INBRAgBwLgqdASoABgA
   </div>
 
   <!-- Screen: Create Room -->
-  <div id="screen-create" class="lobby-card" style="display:none">
-    <div class="lobby-title">開房間</div>
-    <label class="lobby-label">你的暱稱</label>
-    <input class="lobby-input" id="create-nickname" placeholder="輸入暱稱" maxlength="12">
+  <div id="screen-create" class="lobby-card wd-form" style="display:none">
+    <div class="wd-title">開<b>房間</b></div>
+    <input class="lobby-input" id="create-nickname" placeholder="你的暱稱" aria-label="你的暱稱" maxlength="12">
     <div class="lobby-error" id="create-error"></div>
-    <button class="lobby-btn" onclick="Lobby.createRoom()">建立房間</button>
-    <button class="lobby-btn secondary" onclick="Lobby.showLanding()">← 返回</button>
+    <button class="wd-btn" onclick="Lobby.createRoom()">🏠 開房</button>
+    <button class="wd-back" onclick="Lobby.showLanding()">← 返回</button>
   </div>
 
   <!-- Screen: Join Room -->
-  <div id="screen-join" class="lobby-card" style="display:none">
-    <div class="lobby-title">加入房間</div>
+  <div id="screen-join" class="lobby-card wd-form" style="display:none">
+    <div class="wd-title">加入<b>房間</b></div>
     <div class="lobby-invite" id="join-invite" style="display:none"></div>
-    <label class="lobby-label">房間代碼（6碼）</label>
-    <input class="lobby-input" id="join-code" placeholder="例：BBQ42K" maxlength="6"
-      style="text-transform:uppercase;letter-spacing:0.15em;font-size:1.3rem">
-    <label class="lobby-label">你的暱稱</label>
-    <input class="lobby-input" id="join-nickname" placeholder="輸入暱稱" maxlength="12">
+    <input class="lobby-input wd-code" id="join-code" placeholder="房號 6 碼" aria-label="房號（6 碼）" maxlength="6" autocomplete="off">
+    <input class="lobby-input" id="join-nickname" placeholder="你的暱稱" aria-label="你的暱稱" maxlength="12">
     <div class="lobby-error" id="join-error"></div>
-    <button class="lobby-btn" onclick="Lobby.joinRoom()">加入房間</button>
-    <button class="lobby-btn secondary" onclick="Lobby.showLanding()">← 返回</button>
+    <button class="wd-btn" onclick="Lobby.joinRoom()">🚪 進房</button>
+    <button class="wd-back" onclick="Lobby.showLanding()">← 返回</button>
   </div>
 
-  <!-- Screen: Waiting Room -->
+  <!-- Screen: Waiting Room（v3 後院木牌）-->
   <div id="screen-waiting" class="lobby-card lobby-card-wide" style="display:none">
-    <!-- Header -->
     <div class="wr-head">
-      <div><div class="wr-kicker">炭火已點・等人入座</div><div class="wr-title">等待<b>室</b></div></div>
+      <div class="wr-title">等待<b>室</b></div>
       <div class="wr-invite-wrap">
-        <button class="wr-invite" id="wr-invite-btn" onclick="Lobby.copyInvite()">🔗 複製邀請連結<small>朋友點開就進房</small></button>
-        <div class="wr-ticket" id="wr-ticket" title="點擊複製房號" onclick="Lobby.copyCode()">
-          <span class="wr-ticket-lbl">房號</span><span class="wr-code" id="wr-room-code">------</span>
-          <span class="wr-ticket-hint" id="wr-copy-hint">點一下複製房號</span>
+        <button class="wr-invite" id="wr-invite-btn" onclick="Lobby.copyInvite()">🔗 複製邀請連結</button>
+        <div class="wr-ticket" id="wr-ticket" title="點一下複製房號" onclick="Lobby.copyCode()">
+          <span class="wr-ticket-lbl">房號</span><span class="wr-code" id="wr-room-code">------</span><span class="wr-ticket-cp" aria-hidden="true">📋</span>
         </div>
+        <button class="wr-leave" id="wr-leave-btn" title="離開房間" aria-label="離開房間" onclick="Lobby.leaveRoom(this)">✕</button>
       </div>
     </div>
 
-    <!-- Two-column layout: char grid | detail + players -->
+    <!-- 左：選角色 + 座位｜右：角色介紹卡 -->
     <div class="wr-waiting-layout">
-      <!-- Left: character selection -->
       <div>
-        <label class="lobby-label">選擇角色</label>
+        <label class="lobby-label">選角色</label>
         <div class="wr-char-grid" id="wr-char-grid"></div>
-        <label class="lobby-label" style="margin-top:16px">入座玩家 <span id="wr-seat-count"></span></label>
+        <label class="lobby-label" style="margin-top:14px">座位 <span id="wr-seat-count"></span></label>
         <div class="wr-seats" id="wr-player-list"></div>
       </div>
-      <!-- Right: char detail -->
       <div style="display:flex;flex-direction:column">
-        <label class="lobby-label">我的角色</label>
-        <div class="wr-char-detail" id="wr-char-detail">
-          <div style="color:#664422;font-size:0.85rem;line-height:1.6">點選左側角色<br>查看技能與大絕</div>
-        </div>
+        <div class="wr-char-detail" id="wr-char-detail"></div>
       </div>
     </div>
 
     <!-- Team toggle (shown only in team mode) -->
     <div class="wr-team-bar" id="wr-team-bar" style="display:none">
-      <label class="lobby-label">我的隊伍：</label>
+      <label class="lobby-label">我的隊伍</label>
       <div class="wr-team-btns">
-        <button class="team-bar-btn" id="wr-team-top" onclick="Lobby.selectTeam('red')">上隊</button>
-        <button class="team-bar-btn" id="wr-team-bot" onclick="Lobby.selectTeam('blue')">下隊</button>
+        <button class="team-bar-btn" id="wr-team-top" onclick="Lobby.selectTeam('red')">🟥 紅隊</button>
+        <button class="team-bar-btn" id="wr-team-bot" onclick="Lobby.selectTeam('blue')">🟦 藍隊</button>
       </div>
     </div>
 
-    <!-- Settings (host only, dims for non-host) -->
+    <!-- 設定（房主才能改；其他人只能看）-->
     <div class="wr-settings" id="wr-settings">
-      <label class="lobby-label">遊戲設定</label>
       <div class="wr-set-grid">
-        <div class="wr-set wr-map"><span>地圖<small id="wr-map-desc">🧱 外圈剝落：邊緣一圈圈掉下去</small></span>
-          <button class="wr-toggle" id="wr-map-btn" onclick="Lobby.cycleMap()">家庭烤肉架 ▸</button></div>
-        <div class="wr-set"><span>遊戲模式</span>
+        <div class="wr-set wr-map"><span>地圖</span>
+          <button class="wr-toggle" id="wr-map-btn" onclick="Lobby.cycleMap()">家庭烤肉架</button></div>
+        <div class="wr-set"><span>模式</span>
           <button class="wr-toggle" id="wr-mode-btn" onclick="Lobby.toggleMode()">個人制</button></div>
-        <div class="wr-set"><span>開局送大絕<small>一開始就能放</small></span>
+        <div class="wr-set"><span>開局大絕</span>
           <button class="wr-toggle wr-switch" id="wr-ult-btn" onclick="Lobby.toggleUlt()">關</button></div>
-        <div class="wr-set"><span>人數<small>空位 AI 補上</small></span>
+        <div class="wr-set"><span>人數</span>
           <div class="wr-stepper"><button class="wr-toggle wr-step" onclick="Lobby.adjMax(-1)">−</button>
           <span class="wr-setting-val" id="wr-max-val">4</span>
           <button class="wr-toggle wr-step" onclick="Lobby.adjMax(+1)">+</button></div></div>
       </div>
+      <div class="wr-map-desc" id="wr-map-desc"></div>
     </div>
 
     <div class="lobby-error" id="wr-error"></div>
-    <button class="lobby-btn wr-go" id="wr-start-btn" onclick="Lobby.startGame()" style="display:none">🔥 開烤！<small>你是主機・按下就開始</small></button>
-    <div id="wr-waiting-msg" style="text-align:center">等主機開烤<span class="dots"><i>.</i><i>.</i><i>.</i></span></div>
+    <button class="lobby-btn wr-go" id="wr-start-btn" onclick="Lobby.startGame()" style="display:none">🔥 開烤！</button>
+    <div id="wr-waiting-msg" style="text-align:center">等房主開烤<span class="dots"><i>.</i><i>.</i><i>.</i></span></div>
   </div>
 </div>
 <!-- ── / Lobby Overlay ─────────────────────────────── -->
@@ -9059,16 +9082,16 @@ const Lobby = {
     wing:'旋風疾飛',shrimp:'衝擊浪潮',tofu:'冷卻護盾',bacon:'煙燻覆蓋',
     pepper:'辣椒震波',saury:'魚骨連射'},
   _UD: {
-    pork:'持續5秒向四方亂噴豬油，落地形成油漬，敵人踩到即失控滑行',
-    beef:'蓄力3秒後沿方向高速衝鋒，撞到敵人大幅往旁邊彈出',
-    mushroom:'孢子向外噴散，霧氣逐層擴張，1.1秒後暈眩全場敵人',
-    corn:'5 秒狂射約 60 顆爆米花，會追著最近的人打；射中就彈飛、定住、+3% 熟度',
-    wing:'速度爆升1.8倍、衝撞推力大增，持續5秒',
-    shrimp:'蓄力3秒後釋放寬幅海浪，可邊倒數邊調整方向，沿路敵人強力推出',
-    tofu:'瞬間降低熱度70%，展開護盾抵擋後續傷害',
-    bacon:'全場煙霧瀰漫，所有敵人速度減半，持續5秒',
-    pepper:'強力衝擊圓環向外爆發，暈眩全場敵人2.5秒',
-    saury:'高速彈珠模式！在場內瘋狂亂彈，碰到即飛出！'
+    pork:'5 秒往四面噴油，踩到就打滑',
+    beef:'蓄力 3 秒後衝鋒，撞到的人彈飛',
+    mushroom:'孢子霧一圈圈擴散，暈眩全場',
+    corn:'5 秒狂射爆米花，射中彈飛＋定住',
+    wing:'5 秒內速度 ×1.8、推力大增',
+    shrimp:'蓄力 3 秒放出海浪，沿路的人全推走',
+    tofu:'熱度 -70%，再開護盾擋傷害',
+    bacon:'全場煙霧，對手速度減半',
+    pepper:'衝擊波向外爆開，暈眩全場 2.5 秒',
+    saury:'彈珠模式：滿場亂彈，碰到就飛'
   },
 
   _show(id) {
@@ -9091,8 +9114,8 @@ const Lobby = {
   },
   copyInvite() {
     const b = document.getElementById('wr-invite-btn'), url = this._inviteUrl();
-    const done = () => { if (!b) return; b.classList.add('ok'); b.innerHTML = '✓ 連結已複製<small>貼到 LINE / Discord 給朋友</small>';
-      clearTimeout(this._invT); this._invT = setTimeout(() => { b.classList.remove('ok'); b.innerHTML = '🔗 複製邀請連結<small>朋友點開就進房</small>'; }, 2200); };
+    const done = () => { if (!b) return; b.classList.add('ok'); b.textContent = '✓ 已複製，貼給朋友';
+      clearTimeout(this._invT); this._invT = setTimeout(() => { b.classList.remove('ok'); b.textContent = '🔗 複製邀請連結'; }, 2200); };
     const fail = () => { try { window.prompt('複製這個連結傳給朋友：', url); } catch (e) {} };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, fail); else fail();
   },
@@ -9198,12 +9221,14 @@ const Lobby = {
     }).join('');
     const src = this._charImg(c.key);
     panel.style.setProperty('--cc', col);
+    const gen = !!this._roomCode && !this._isHost; // 連線時只有房主放得出角色專屬大絕
+    const ultN = gen ? '炭火爆炸' : (this._UN[charKey] || '—'), ultD = gen ? '集滿 3 格能量，炸飛身邊一圈人' : (this._UD[charKey] || '—');
     panel.innerHTML = `
       <div class="wr-portrait">${src ? `<img src="${src}" alt="">` : ''}</div>
       <div>
         <div class="wr-dname">${c.name}</div>
         <div class="wr-move"><kbd>S</kbd><b>${c.ability}</b><span>${c.abilityDesc}</span></div>
-        <div class="wr-move"><kbd class="ult">D</kbd><b>大絕・${this._UN[charKey] || '—'}</b><span>${this._UD[charKey] || '—'}</span></div>
+        <div class="wr-move"><kbd class="ult">D</kbd><b>大絕・${ultN}</b><span>${ultD}</span></div>
       </div>
       <div class="wr-bars">${statsHTML}</div>`;
   },
@@ -9327,15 +9352,17 @@ const Lobby = {
     const myId = window.MP.myId;
     const tally = (window.MP.tally && window.MP.tally.p) || {}, rounds = (window.MP.tally && window.MP.tally.n) || 0;
     const max = Math.max(players.length, (this._settings && this._settings.maxPlayers) || players.length);
+    const mine = myId && players.find(p => p.id === myId);
+    if (mine && mine.team && mine.team !== this._myTeam) { this._myTeam = mine.team; window.MP.myTeam = mine.team; this._renderTeamBtns(); }
     let html = players.map(p => {
       const dot = isTeam ? `<span class="tm" style="background:${p.team === 'blue' ? '#4488ff' : '#ff4444'}"></span>` : '';
       const name = this._getChars().find(c => c.key === p.charKey)?.name || p.charKey || '';
       const src = this._charImg(p.charKey);
       const me = myId && p.id === myId;
       const tw = tally[p.id] && tally[p.id].w;
-      return `<div class="wr-seat${me ? ' me' : ''}">${src ? `<img src="${src}" alt="">` : ''}<div style="min-width:0;flex:1"><div class="nm">${p.isHost ? '👑 ' : ''}${esc(p.nickname)}</div><div class="ch">${esc(name)}${me ? '・你' : ''}</div></div>${tw ? `<span class="wins" title="這個房間累計贏了 ${tw} 局">🏆×${tw}</span>` : ''}${dot}</div>`;
+      return `<div class="wr-seat${me ? ' me' : ''}">${src ? `<img src="${src}" alt="">` : ''}<div style="min-width:0;flex:1"><div class="nm">${p.isHost ? '<span class="hb">房主</span>' : ''}${esc(p.nickname)}</div><div class="ch">${esc(name)}${me ? '・你' : ''}</div></div>${tw ? `<span class="wins" title="這個房間累計贏了 ${tw} 局">🏆×${tw}</span>` : ''}${dot}</div>`;
     }).join('');
-    for (let k = players.length; k < max; k++) html += `<div class="wr-seat empty">空位・AI 補上</div>`;
+    for (let k = players.length; k < max; k++) html += `<div class="wr-seat empty">🤖 AI 補上</div>`;
     el.innerHTML = html;
     const cnt = document.getElementById('wr-seat-count'); if (cnt) cnt.textContent = players.length + ' / ' + max + (rounds ? '　·　已打 ' + rounds + ' 局' : '');
   },
@@ -9343,7 +9370,7 @@ const Lobby = {
   _renderSettings() {
     document.getElementById('wr-max-val').textContent = this._settings.maxPlayers;
     if (typeof LEVELS !== 'undefined') { const lv = LEVELS[(this._settings.level | 0)] || LEVELS[0];
-      document.getElementById('wr-map-btn').textContent = lv.name + ' ▸';
+      document.getElementById('wr-map-btn').textContent = lv.name;
       document.getElementById('wr-map-desc').textContent = lv.mech || lv.sub; }
     const isTeam = this._settings.gameMode === 'team';
     const modeBtn = document.getElementById('wr-mode-btn');
@@ -9371,12 +9398,13 @@ const Lobby = {
     const startBtn = document.getElementById('wr-start-btn');
     const waitMsg = document.getElementById('wr-waiting-msg');
     if (this._isHost) {
-      settingsEl.style.opacity = '1'; settingsEl.style.pointerEvents = 'auto';
+      settingsEl.classList.remove('ro');
       startBtn.style.display = ''; waitMsg.style.display = 'none';
     } else {
-      settingsEl.style.opacity = '0.5'; settingsEl.style.pointerEvents = 'none';
+      settingsEl.classList.add('ro');
       startBtn.style.display = 'none'; waitMsg.style.display = '';
     }
+    if (this._ultGen !== !this._isHost) { this._ultGen = !this._isHost; this._showCharDetail(this._myChar); } // 換房主 → 大絕說明跟著換
   },
 
   adjMax(delta) {
@@ -9419,11 +9447,22 @@ const Lobby = {
     if (this._socket) this._socket.emit('update_team', { team });
   },
 
+  leaveRoom(btn) { // 第一次按變「離開？」，2 秒內再按一次才真的離開（免得按錯）
+    if (btn && !btn.classList.contains('ask')) { btn.classList.add('ask'); btn.textContent = '離開？';
+      clearTimeout(this._leaveT); this._leaveT = setTimeout(() => { btn.classList.remove('ask'); btn.textContent = '✕'; }, 2200); return; }
+    if (btn) { clearTimeout(this._leaveT); btn.classList.remove('ask'); btn.textContent = '✕'; }
+    const s = this._socket; this._socket = null; window.MP.socket = null; this._pendingCb = null;
+    if (s) { try { s.offAny(); s.removeAllListeners(); s.disconnect(); } catch (e) { console.error('[leave]', e); } } // 斷線 → 伺服器把我移出房間（房主會換人）
+    this._roomCode = ''; window.MP.roomCode = null; this._isHost = false; window.MP.isHost = false; window.MP.enabled = false;
+    window.MP.players = []; window.MP.tally = { n: 0, p: {} }; window.MP._lastSetup = null; this._lastPC = 0; this._myTeam = 'red'; window.MP.myTeam = 'red';
+    this.showLanding();
+  },
+
   copyCode() {
     // 不改房號文字（以前會變「已複製！」→ 框變寬、連點兩下房號就不見了）：改成蓋一個「已複製」章
-    const t = document.getElementById('wr-ticket'), h = document.getElementById('wr-copy-hint');
-    const done = () => { if (!t) return; t.classList.remove('copied'); void t.offsetWidth; t.classList.add('copied'); if (h) h.textContent = '✓ 已複製，貼給朋友就能加入';
-      clearTimeout(this._copyT); this._copyT = setTimeout(() => { t.classList.remove('copied'); if (h) h.textContent = '點一下複製房號'; }, 1600); };
+    const t = document.getElementById('wr-ticket');
+    const done = () => { if (!t) return; t.classList.remove('copied'); void t.offsetWidth; t.classList.add('copied');
+      clearTimeout(this._copyT); this._copyT = setTimeout(() => t.classList.remove('copied'), 1600); };
     if (navigator.clipboard) navigator.clipboard.writeText(this._roomCode).then(done, done); else done();
   },
 
