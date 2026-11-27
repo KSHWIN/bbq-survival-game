@@ -394,7 +394,7 @@ const FX_LIST=[
   {k:'iceDrop', n:'🧊 冰塊空投', d:'搶到大降溫、會爆開', t:'大冰塊從天而降，先踩到的人大幅降溫，但冰塊會爆開把旁邊的人彈飛。'},
   {k:'flare',   n:'💥 火柱爆發', d:'紅圈噴火柱炸飛人',   t:'紅圈預警 3 秒後噴出火柱，把圈裡的人炸飛。'},
   {k:'holes',   n:'🕳 烤盤破洞', d:'踩進去直接出局',     t:'烤盤隨機出現預警圈，之後破成洞，踩進去直接掉下去出局。'},
-  {k:'shrink',  n:'⚠ 外圈崩塌',  d:'邊緣一圈圈剝落',     t:'開局 12 秒後開始，邊緣每約 10 秒剝落一圈，貼著邊站會掉下去。'},
+  {k:'shrink',  n:'⚠ 外圈崩塌',  d:'邊緣剝落、邊緣很燙',     t:'開局 12 秒後開始，邊緣每約 10 秒剝落一圈，貼著邊站會掉下去。剝落後的邊緣很燙（有一條橘紅發燙帶）：站在帶子上熟度每秒 +10%。'},
   {k:'tilt',    n:'↔ 廚師翻面',  d:'急停、整片往一邊滑', t:'廚師把烤盤往一邊翻：翻的瞬間所有人急停，接著 3 秒一直往箭頭方向滑。按反方向鍵才撐得住（快的角色能慢慢往上爬），往旁邊幾乎走不動。站在高處的人往下衝刺，很容易把低處的人撞出去。'},
   {k:'fork',    n:'🍴 廚師叉子', d:'黃色區域會被亂刺',   t:'巨大廚師出現，黃色 5×5 區域被瘋狂亂刺（被刺到 +20% 熟度），最後全區重擊直接出局。'},
   // 規則（實驗）：可關掉跟舊規則比較
@@ -5527,14 +5527,16 @@ class GameScene extends Phaser.Scene {
     // 視野限制（被 AI 胡椒打到）
     this.visionLayer.clear();
     if(ae2.pepperVision>0){
-      const vcx=this.p.x, vcy=this.p.y, vr=90;
-      for(let _vi=0;_vi<20;_vi++){
-        const _r=vr+_vi*18;
-        const _a=Math.min(0.88,_vi/20*0.9);
-        this.visionLayer.lineStyle(22,0x000000,_a);
-        this.visionLayer.strokeCircle(vcx,vcy,_r);
-      }
+      // 平滑暗角：一張放射漸層圖（中間清楚 → 外面變黑），外面再整片蓋暗。以前是 20 圈粗黑線，看起來一圈一圈的
+      const vcx=this.p.x, vcy=this.p.y, D=420, vl=this.visionLayer, fade=Math.min(1,ae2.pepperVision/0.6);
+      if(!this.textures.exists('pepVig')){ const c=this.textures.createCanvas('pepVig',256,256), cx2=c.getContext(), gr=cx2.createRadialGradient(128,128,0,128,128,128);
+        gr.addColorStop(0,'rgba(0,0,0,0)'); gr.addColorStop(0.28,'rgba(0,0,0,0)'); gr.addColorStop(0.7,'rgba(0,0,0,0.6)'); gr.addColorStop(1,'rgba(0,0,0,0.88)');
+        cx2.fillStyle=gr; cx2.fillRect(0,0,256,256); c.refresh(); }
+      if(!this._pepVig||!this._pepVig.scene) this._pepVig=this.add.image(0,0,'pepVig').setDepth(vl.depth);
+      this._pepVig.setPosition(vcx,vcy).setDisplaySize(D*2,D*2).setAlpha(fade).setVisible(true);
+      vl.lineStyle(2400,0x000000,0.88*fade); vl.strokeCircle(vcx,vcy,D+1199);
     }
+    else if(this._pepVig&&this._pepVig.scene) this._pepVig.setVisible(false);
     // 效果指示器
     const eff2=[];
     // 鋁箔盔甲：免疫負面效果
@@ -6103,7 +6105,7 @@ class GameScene extends Phaser.Scene {
     this.shrinkTimer-=dt;
     if(this.shrinkTimer<=0&&!this.shrinkWarning){
       this.shrinkWarning=true; this.shrinkWarnTimer=2.5;
-      if(!this._shrinkCount) this._evt('shrink',G.x+G.w/2,G.y+this.shrinkPad+24,'⚠ 外圈開始剝落','邊緣每隔幾秒會掉一小圈，別貼著邊站');
+      if(!this._shrinkCount) this._evt('shrink',G.x+G.w/2,G.y+this.shrinkPad+24,'⚠ 外圈開始剝落','邊緣會一圈圈掉下去，而且邊緣很燙（每秒 +10%），別貼著邊站');
     }
     if(this.shrinkWarning){
       this.shrinkWarnTimer-=dt;
@@ -6211,6 +6213,9 @@ class GameScene extends Phaser.Scene {
       const glow=0.5+0.3*Math.sin(ph*3.5);
       g.lineStyle(3,0xffffff,0.95); g.strokeRect(G.x+pad,G.y+pad,G.w-pad*2,G.h-pad*2);
       g.lineStyle(5,0xff2200,glow*0.65); g.strokeRect(G.x+pad-1,G.y+pad-1,G.w-pad*2+2,G.h-pad*2+2);
+      // 邊緣很燙（22px 內每秒 +10%）：內側一條橘紅發燙帶，越靠邊越紅
+      for(let k=0;k<4;k++){ const w=22-k*5.5, a=(0.10+k*0.07)*(0.75+0.25*Math.sin(ph*5+k)), x0=G.x+pad, y0=G.y+pad, W2=G.w-pad*2, H2=G.h-pad*2;
+        g.fillStyle(k<2?0xff7a1a:0xff3a10,a); g.fillRect(x0,y0,W2,w); g.fillRect(x0,y0+H2-w,W2,w); g.fillRect(x0,y0+w,w,H2-w*2); g.fillRect(x0+W2-w,y0+w,w,H2-w*2); }
     }
     if(this.shrinkWarning){
       const np=pad+step;
