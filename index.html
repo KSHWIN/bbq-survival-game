@@ -4163,7 +4163,7 @@ class GameScene extends Phaser.Scene {
 
   useAbility(){
     const c=this.charData;
-    const CDs={pork:6,beef:6,mushroom:5,corn:6,wing:6,shrimp:5,tofu:7,bacon:6,pepper:7,saury:7};
+    const CDs={pork:6,beef:6,mushroom:5,corn:6,wing:6,shrimp:5,tofu:7,bacon:6,pepper:7,saury:5};
     this.abilityCDMax=CDs[c.key]||6;
     switch(c.key){
       case 'pork':{
@@ -4336,8 +4336,10 @@ class GameScene extends Phaser.Scene {
         const perpx=-saurdy,perpy=saurdx;
         this.enemies.forEach((e,i)=>{
           const d=Math.hypot(this.p.x-e.x,this.p.y-e.y);
-          if(d<70){ const sd=((e.x-this.p.x)*perpx+(e.y-this.p.y)*perpy)>=0?1:-1; this._skillHit(e,i,perpx*sd,perpy*sd,105,200); }
+          if(!e.alive||e.isGhost||e._ghostT>0) return;
+          if(d<90){ e._lastHitBy='player'; e._lastHitT=this.time.now; e.x+=perpx*150;e.y+=perpy*150;this.checkEnemyFall(e,i);}
         });
+        this.cameras.main.shake(180,0.008);
         this.showPop('🐟 刀型衝刺！橫向擊飛！');break;}
     }
     this.fireAbilityFx(c.key);
