@@ -830,7 +830,7 @@ const FX_LIST=[
   {k:'heatKnock',   n:'💥 越熟飛越遠', d:'越熟被推得越遠',     t:'被推飛的距離看自己的熟度：0% 只飛 0.55 倍，100% 飛 2.55 倍。'},
   {k:'heatPower',   n:'🔥 越熟推越大力', d:'自己越熟推力越大', t:'自己熟度越高，推別人的力量越大（最多 2 倍）。跟「撞人傳熱」會互相抵銷，預設關閉。'},
   {k:'clash',       n:'⚔ 對撞比推力', d:'正面互撞：推力大的贏', t:'你衝刺撞上正在衝過來的對手時比推力（💪 數字）：大的把對方撞飛，小的被彈開，差不多就兩邊一起彈開。'},
-  {k:'respawn',     n:'❤ 三條命計分賽', d:'每人 3 條命、比分數', t:'出局掉 1 條命，3 秒後回場（2 秒無敵）。命用完變鬼魂：沿著烤盤外圈走、按 A 丟炭火彈；炸下去一個人就復活一次。把人往外撞 +0.5（往中間撞、3 秒內連撞同一人不算）、撞出去 +3（🎯 快熟的人再 +2、復仇 +2）、活到最後 +3，分數最高的人贏。衝刺撲空會露出破綻。'},
+  {k:'respawn',     n:'❤ 三條命計分賽', d:'每人 3 條命、比分數', t:'出局掉 1 條命，3 秒後回場（2 秒無敵）。命用完變鬼魂：沿外圈走、按住 A 蓄力丟炭火彈（越久越遠，整個烤盤都丟得到；炸中 +0.5、炸出去 +1）；炸下去一個人就復活一次。把人往外撞 +0.5（往中間撞、3 秒內連撞同一人不算）、撞出去 +3（🎯 快熟的人再 +2、復仇 +2）、活到最後 +3，分數最高的人贏。衝刺撲空會露出破綻。'},
   {k:'stillBurn',   n:'🥩 站著不動會焦', d:'停著不動越烤越快', t:'肉貼在烤盤上不動就會一直被烤：停下超過 1.5 秒，熟度上升明顯變快（不在火裡時約 3 倍）、頭上冒煙。動一動就恢復。'},
   {k:'ultOrb',      n:'⚡ 大絕能量球', d:'吃 3 顆才能放大絕', t:'開局大絕是空的。場上每 7 秒冒出一顆能量球，吃 1 顆 +1 格，集滿 3 格才能按 D 發動。AI 也會搶，而且 AI 集滿會放大絕（紫色光環 → 紅圈蓄力 → 範圍爆炸），看到紅圈快閃開。'},
   {k:'ultStart',    n:'⚡ 開局送一發大絕', d:'開局大絕就是滿的', t:'勾選：開局大絕就是滿的，可以馬上按 D；用掉之後再靠能量球集滿。不勾：開局是空的，要先吃能量球集滿 3 格。'},
@@ -3244,7 +3244,7 @@ class GameScene extends Phaser.Scene {
   // ══ 三條命 + 鬼魂炭火彈 ══════════════════════════════════════
   _refreshScoreTxt(){
     if(!this.scoreTxt||!this.scoreTxt.scene) return;
-    this.scoreTxt.setText('🏆 '+(this.score||0)+' 分'+(this.fx&&this.fx.respawn?'　'+(this._pOut?'👻 鬼魂（A 丟炭火彈）':'❤'.repeat(Math.max(0,this.lives??3))):''));
+    this.scoreTxt.setText('🏆 '+(this.score||0)+' 分'+(this.fx&&this.fx.respawn?'　'+(this._pOut?'👻 鬼魂（按住 A 蓄力丟）'+((this._bd&&this._bd.ghPts)?'　👻 炸人 +'+(Math.round(this._bd.ghPts*10)/10):''):'❤'.repeat(Math.max(0,this.lives??3))):''));
   }
   // 烤盤外圈：把任意點投影到外框（距離烤盤邊 24px 的長方形）上
   _rimProject(x,y){
@@ -3254,20 +3254,70 @@ class GameScene extends Phaser.Scene {
     if(m===dl){ px=x0; side='l'; } else if(m===dr){ px=x1; side='r'; } else if(m===du){ py=y0; side='t'; } else { py=y1; side='b'; }
     return {x:px,y:py,side};
   }
-  // 炭火彈落點：從所在的邊往烤盤裡面 120px
-  _rimAim(gp){
-    const n={l:[1,0],r:[-1,0],t:[0,1],b:[0,-1]}[gp.side]||[0,1], D=24+120, pad=(this.shrinkPad||0)+30;
+  // 炭火彈落點：從所在的邊往烤盤裡面丟，ch = 蓄力 0~1（0 = 進烤盤 60px，1 = 丟到對面）
+  _rimAim(gp,ch){
+    const n={l:[1,0],r:[-1,0],t:[0,1],b:[0,-1]}[gp.side]||[0,1], span=(gp.side==='l'||gp.side==='r')?G.w:G.h;
+    const D=24+60+Math.max(0,Math.min(1,ch||0))*(span-90), pad=(this.shrinkPad||0)+30;
     return {x:Phaser.Math.Clamp(gp.x+n[0]*D,G.x+pad,G.x+G.w-pad), y:Phaser.Math.Clamp(gp.y+n[1]*D,G.y+pad,G.y+G.h-pad)};
+  }
+  // AI 鬼魂沿外框周長走（會轉彎、走近的那一邊）到最適合丟 (tx,ty) 的位置；準心沒有明顯比較靠近別的邊就留在原本那一邊
+  _rimWalk(gp,tx,ty,step){
+    const O=24, x0=G.x-O, y0=G.y-O, w=G.w+2*O, h=G.h+2*O, P=2*(w+h);
+    const tOf=q=>q.side==='t'?q.x-x0:q.side==='r'?w+(q.y-y0):q.side==='b'?w+h+(x0+w-q.x):2*w+h+(y0+h-q.y);
+    const at=t=>{ t=((t%P)+P)%P; if(t<w) return {x:x0+t,y:y0,side:'t'}; t-=w; if(t<h) return {x:x0+w,y:y0+t,side:'r'}; t-=h; if(t<w) return {x:x0+w-t,y:y0+h,side:'b'}; t-=w; return {x:x0,y:y0+h-t,side:'l'}; };
+    const cp=this._rimProject(gp.x,gp.y), dist={l:tx-x0,r:x0+w-tx,t:ty-y0,b:y0+h-ty}, mn=Math.min(dist.l,dist.r,dist.t,dist.b);
+    let wp=this._rimProject(tx,ty);
+    if(dist[cp.side]-mn<120) wp=cp.side==='l'||cp.side==='r'?{x:cp.x,y:Phaser.Math.Clamp(ty,y0,y0+h),side:cp.side}:{x:Phaser.Math.Clamp(tx,x0,x0+w),y:cp.y,side:cp.side};
+    let d=tOf(wp)-tOf(cp); if(d>P/2) d-=P; if(d<-P/2) d+=P;
+    return {gp:Math.abs(d)<2?cp:at(tOf(cp)+Math.sign(d)*Math.min(Math.abs(d),step)), left:Math.abs(d)};
+  }
+  // 要丟到 (x,y) 需要蓄力多少（AI 用）
+  _rimNeed(gp,x,y){ const span=(gp.side==='l'||gp.side==='r')?G.w:G.h, D=gp.side==='l'?x-gp.x:gp.side==='r'?gp.x-x:gp.side==='t'?y-gp.y:gp.y-y;
+    return Math.max(0,Math.min(1,(D-84)/(span-90))); }
+  // 鬼魂蓄力（2026-11）：按住 A 準心往裡面跑，越久丟越遠（約 1.3 秒丟到對面），放開就丟；快速點一下 = 丟近的
+  // o = 狀態（_gChg 蓄力中、_gCh 蓄力值），held = A 有沒有按著，press = 這一幀剛按下，cd = 剩下的冷卻
+  // 回傳 'start' / 'throw' / 'cd' / null
+  _ghostChargeStep(o,held,press,cd,dt){
+    if(!o._gChg&&(held||press)){ if(cd>0) return press?'cd':null; o._gChg=true; o._gCh=0; }
+    if(!o._gChg) return null;
+    if(held){ o._gCh=Math.min(1,(o._gCh||0)+dt/1.3); return null; }
+    o._gChg=false; return 'throw';
+  }
+  // 畫準心：me=自己（大、亮、冷卻弧、蓄力條），否則是別的鬼魂正在蓄力（小、淡，讓大家知道誰在瞄你）
+  _drawGhostAim(g,gx,gy,ax,ay,ready,cdFrac,me,ch){
+    const t=this.time.now*0.001, R=me?70:44, charging=ch!=null;
+    if(me||charging){ // 拋物線虛線
+      const mx=(gx+ax)/2, my=(gy+ay)/2-Math.min(120,Math.hypot(ax-gx,ay-gy)*0.3);
+      g.fillStyle(0xffffff,me?(ready?0.55:0.22):0.3);
+      for(let k=1;k<14;k++){ const u=((k+t*3)%14)/14, x=(1-u)*(1-u)*gx+2*(1-u)*u*mx+u*u*ax, y=(1-u)*(1-u)*gy+2*(1-u)*u*my+u*u*ay; g.fillCircle(x,y,me?2.4:1.8); } }
+    const col=charging?0xff5522:(ready?0xff9955:0x8899aa), a=me?(charging?1:0.7):0.5;
+    g.fillStyle(col,(me?0.10:0.07)+(charging?0.10*Math.sin(t*14):0)); g.fillCircle(ax,ay,R);
+    g.lineStyle(me?3:2,col,a); g.strokeCircle(ax,ay,R);
+    const c=me?16:9; g.lineStyle(2,0xffffff,a); g.lineBetween(ax-c,ay,ax-c*0.35,ay); g.lineBetween(ax+c*0.35,ay,ax+c,ay); g.lineBetween(ax,ay-c,ax,ay-c*0.35); g.lineBetween(ax,ay+c*0.35,ax,ay+c);
+    if(me&&!ready){ g.lineStyle(4,0xffffff,0.85); g.beginPath(); g.arc(ax,ay,R+6,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-cdFrac),false); g.strokePath(); }
+    if(me&&charging){ // 蓄力條（鬼魂頭上）
+      g.fillStyle(0x000000,0.55); g.fillRoundedRect(gx-30,gy-56,60,9,4);
+      g.fillStyle(ch>=1?0xffee55:0xff7733,1); g.fillRoundedRect(gx-29,gy-55,58*ch,7,3); }
+  }
+  // 鬼魂炸人的分數（不多）：炸中 +0.5、炸出去 +1。走自己的路，不經過 _addScore（那邊鬼魂不能得分）
+  _ghostPts(own,n,kind,x,y){
+    if(!(this.fx&&this.fx.respawn)||!own) return;
+    const bd=own==='P'?(this._bd=this._bd||{}):(own._bd=own._bd||{});
+    if(kind==='ko') bd.gko=(bd.gko||0)+1; else bd.gh=(bd.gh||0)+1;
+    bd.ghPts=(bd.ghPts||0)+n;
+    if(own==='P'){ this.score=(this.score||0)+n; this._refreshScoreTxt();
+      if(x!=null) this._floatTxt(x,y-50,(kind==='ko'?'👻 炸出去 +':'👻 炸中 +')+n,'#bcd8ff',kind==='ko'); }
+    else own.score=(own.score||0)+n;
   }
   _becomeGhostPlayer(){
     this._pOut=true; this._ghostT=999; this.heat=0; this.dashState=null; this.abilityActive=null; this._stillT=0;
     if(this.ultState){ Object.values(this.ultState).forEach(v=>{ if(v&&v.destroy&&v.scene) v.destroy(); }); this.ultState=null; }
-    this._gp=this._rimProject(this.p.x,this.p.y); this.p.x=this._gp.x; this.p.y=this._gp.y; this._ghostCD=2;
-    this._banner('👻 你變成鬼魂了','沿著烤盤外圈走，按 A 丟炭火彈；炸下去一個人就能復活一次');
+    this._gp=this._rimProject(this.p.x,this.p.y); this.p.x=this._gp.x; this.p.y=this._gp.y; this._ghostCD=2; this._gChg=false; this._gCh=0;
+    this._banner('👻 你變成鬼魂了','方向鍵沿外圈走，按住 A 蓄力（越久丟越遠）；炸中 +0.5、炸出去 +1 還能復活');
     this._refreshScoreTxt(); this._checkLivesEnd();
   }
   _revivePlayer(){
-    this._revived=true; this._pOut=false; this.lives=1; this._gp=null;
+    this._revived=true; this._pOut=false; this.lives=1; this._gp=null; this._gChg=false; this._gCh=0;
     const _ox=this.p.x, _oy=this.p.y;
     const pos=this._pickSafeSpot(); this.p.x=pos.x; this.p.y=pos.y; this.pv={x:0,y:0}; this.heat=30; this._heatLog={'復活時就有':30}; this._ghostT=2.0;
     if(this.playerSprite) this.playerSprite.clearTint(); this._respawnBeacon(_ox,_oy,pos.x,pos.y);
@@ -3280,9 +3330,10 @@ class GameScene extends Phaser.Scene {
     this._gp=this._rimProject(this._gp.x+dx*230*dt,this._gp.y+dy*230*dt);
     this.p.x=this._gp.x; this.p.y=this._gp.y; this.heat=0; this._ghostT=999; this.pv={x:0,y:0};
     this._ghostCD=Math.max(0,(this._ghostCD||0)-dt);
-    const pn=k.push.isDown;
-    if((pn&&!this.pushWas)||this._bufPush){ this._bufPush=false;
-      if(this._ghostCD<=0){ this._throwBomb('P',this._gp); this._ghostCD=6; } else this._notice('炭火彈冷卻中，還要 '+this._ghostCD.toFixed(1)+' 秒','#aaaaaa'); }
+    const pn=k.push.isDown, press=(pn&&!this.pushWas)||this._bufPush; this._bufPush=false;
+    const r=this._ghostChargeStep(this,pn,press,this._ghostCD,dt);
+    if(r==='throw'){ this._throwBomb('P',this._gp,this._gCh); this._ghostCD=6; this._gCh=0; }
+    else if(r==='cd') this._notice('炭火彈冷卻中，還要 '+this._ghostCD.toFixed(1)+' 秒','#aaaaaa');
     this.pushWas=pn;
     if(this.shadowLayer&&this.shadowLayer.scene) this.shadowLayer.clear(); // 一般移動區被跳過 → 陰影層要在這裡清
     if(this.playerSprite){ this.playerSprite.setVisible(true);
@@ -3294,20 +3345,21 @@ class GameScene extends Phaser.Scene {
     if(!e._gp) e._gp=this._rimProject(e.x,e.y);
     e._gcd=Math.max(0,(e._gcd??3)-dt);
     let dx=0;
-    if(e.remote){ // 遠端真人鬼魂：方向鍵沿外圈走、A 丟
+    if(e.remote){ // 遠端真人鬼魂：方向鍵沿外圈走、按住 A 蓄力、放開丟（ah = A 按著；舊版客戶端沒有 ah → 點一下就丟近的）
       const inp=e.inp||{}; dx=(inp.r?1:0)-(inp.l?1:0); const dy=(inp.d?1:0)-(inp.u?1:0);
       e._gp=this._rimProject(e._gp.x+dx*230*dt,e._gp.y+dy*230*dt);
-      if(inp.push){ inp.push=false; if(e._gcd<=0){ this._throwBomb(e,e._gp); e._gcd=6; } }
-    } else { // AI 鬼魂：找最靠邊、最熟的人，沿外圈走過去丟
+      const press=!!inp.push; inp.push=false;
+      if(this._ghostChargeStep(e,!!inp.ah,press,e._gcd,dt)==='throw'){ this._throwBomb(e,e._gp,e._gCh); e._gcd=6; e._gCh=0; }
+    } else { // AI 鬼魂：挑最熟 / 最靠邊的人，沿外圈走到對面，蓄力到剛好的距離再丟
       const tg=[...(this.alive&&!this._pOut&&!(this._ghostT>0)?[{x:this.p.x,y:this.p.y,h:this.heat}]:[]),...this.enemies.filter(o=>o.alive&&!(o._ghostT>0)).map(o=>({x:o.x,y:o.y,h:o.heat||0}))];
       if(tg.length){
         const edge=t=>Math.min(t.x-G.x,G.x+G.w-t.x,t.y-G.y,G.y+G.h-t.y);
-        const best=tg.reduce((a,b)=>(edge(a)-a.h)<=(edge(b)-b.h)?a:b);
-        const want=this._rimProject(best.x,best.y), ddx=want.x-e._gp.x, ddy=want.y-e._gp.y, dd=Math.hypot(ddx,ddy);
-        if(dd>4){ const st=Math.min(dd,170*dt); e._gp=this._rimProject(e._gp.x+ddx/dd*st,e._gp.y+ddy/dd*st); dx=ddx; }
-        const a=this._rimAim(e._gp);
-        if(e._gcd<=0&&Math.hypot(a.x-best.x,a.y-best.y)<55){ this._throwBomb(e,e._gp); e._gcd=7+Math.random()*2; }
-      }
+        const best=tg.reduce((a,b)=>(Math.min(edge(a),150)*0.6-a.h)<=(Math.min(edge(b),150)*0.6-b.h)?a:b);
+        const ox=e._gp.x, wk=this._rimWalk(e._gp,best.x,best.y,(e._gChg?60:200)*dt); e._gp=wk.gp; dx=e._gp.x-ox; const dd=wk.left;
+        if(!e._gChg&&e._gcd<=0&&dd<40){ e._gChg=true; e._gCh=0; e._gNeed=Math.max(0,Math.min(1,this._rimNeed(e._gp,best.x,best.y)+(Math.random()-0.5)*0.12)); } // 不會算得超準
+        if(e._gChg){ e._gCh=Math.min(1,(e._gCh||0)+dt/1.3);
+          if(e._gCh>=e._gNeed){ e._gChg=false; this._throwBomb(e,e._gp,e._gCh); e._gcd=7+Math.random()*2; e._gCh=0; } }
+      } else e._gChg=false;
     }
     e.x=e._gp.x; e.y=e._gp.y; e.vx=0; e.vy=0; e.heat=0;
     if(sp){ sp.setVisible(true); this._animChar(sp,e.anim,e.x,e.y,dt,{base:(sp.baseScale||0.23)*0.85,heat:0,faceX:dx}); sp.setAlpha(0.65).setTint(0xaaccff); }
@@ -3318,16 +3370,17 @@ class GameScene extends Phaser.Scene {
     this._bombCredit(e._bombBy,e._bombT); e._bombBy=null;
     { const pushed=e._koByT&&this.time.now-e._koByT<300; this._soyCredit(e._soyBy,e._soyT,pushed?(e._lastHitBy==='player'?'player':e._lastHitBy):null,e.heat,e.label); e._soyBy=null; e._koByT=0; }
     if(e.lives>0){ e._respawnAt=this.time.now+3000; return; }
-    e.isGhost=true; e._gp=this._rimProject(e.x,e.y); e._gcd=2; e._respawnAt=0;
+    e.isGhost=true; e._gp=this._rimProject(e.x,e.y); e._gChg=false; e._gCh=0; e._gcd=2; e._respawnAt=0;
     this._pushFeed('👻 '+e.label+'　命用完，變成鬼魂','#aac8ff');
     this._checkLivesEnd();
   }
   // 炭火彈炸下去一個人 → 丟的鬼魂復活一次（1 條命）
   _bombCredit(owner,t){
     if(!owner||this.time.now-(t||0)>3000) return;
+    this._ghostPts(owner,1,'ko',owner==='P'?this.p.x:null,owner==='P'?this.p.y:null); // 炸出去 +1
     if(owner==='P'){ if(this._pOut&&!this._revived) this._revivePlayer(); return; }
     if(owner.isGhost&&!owner._revived){
-      owner._revived=true; owner.isGhost=false; owner.lives=1; owner._gp=null;
+      owner._revived=true; owner.isGhost=false; owner.lives=1; owner._gp=null; owner._gChg=false;
       const k=this.enemies.indexOf(owner); if(k>=0) this._respawnEnemy(owner,k);
       if(this.enemySprites[k]) this.enemySprites[k].clearTint();
       this._banner('✨ '+owner.label+' 復活了！','鬼魂的炭火彈炸下去一個人 → 回到場上（1 條命）');
@@ -3339,8 +3392,8 @@ class GameScene extends Phaser.Scene {
     if(n<=1){ this._finishing=true; this._banner('🏁 只剩一個人了！','比分數決定名次');
       this.time.delayedCall(1200,()=>{ if(this.alive) this.endGame(!this._pOut,true); }); }
   }
-  _throwBomb(owner,gp){
-    const a=this._rimAim(gp);
+  _throwBomb(owner,gp,ch){
+    const a=this._rimAim(gp,ch);
     this.bombs.push({x:a.x,y:a.y,t:1.0,owner,fx:gp.x,fy:gp.y});
     this.playSound('push');
   }
@@ -3379,7 +3432,7 @@ class GameScene extends Phaser.Scene {
     if(own!=='P'&&this.alive&&!this._pOut&&!(this._ghostT>0)){
       const [nx,ny,d]=dirOf(this.p.x,this.p.y);
       if(d<R){ const f=120*(1-d/R*0.4)*(0.7+this.heat/100*0.9);
-        this._hAdd('被炭火彈炸到',15); this._lastHeatSrc='被'+ownLbl+'炸到';
+        this._hAdd('被炭火彈炸到',15); this._lastHeatSrc='被'+ownLbl+'炸到'; this._ghostPts(own,0.5,'hit');
         this._pBombBy=own; this._pBombT=now; this._pHitBy=null;
         this._hitFeel({x:this.p.x,y:this.p.y,dx:nx,dy:ny,power:1.2,anim:this.pAnim});
         this.tweens.add({targets:this.p,x:this.p.x+nx*f,y:this.p.y+ny*f,duration:240,ease:'Cubic.easeOut',
@@ -3390,7 +3443,7 @@ class GameScene extends Phaser.Scene {
       if(!e.alive||e===own||e._ghostT>0) return;
       const [nx,ny,d]=dirOf(e.x,e.y); if(d>=R) return;
       const f=120*(1-d/R*0.4)*(0.7+(e.heat||0)/100*0.9);
-      e.heat=Math.min(100,(e.heat||0)+15); e._lastHitBy=ownLbl; e._lastHitT=now; e._bombBy=own; e._bombT=now;
+      e.heat=Math.min(100,(e.heat||0)+15); e._lastHitBy=ownLbl; e._lastHitT=now; e._bombBy=own; e._bombT=now; this._ghostPts(own,0.5,'hit',e.x,e.y);
       try{ this._charImpact(e.anim,nx,ny,1); }catch(err){}
       this.tweens.add({targets:e,x:e.x+nx*f,y:e.y+ny*f,duration:240,ease:'Cubic.easeOut',onComplete:()=>this.checkEnemyFall(e,i)});
     });
@@ -3444,11 +3497,10 @@ class GameScene extends Phaser.Scene {
       this._drawPepAura(g,o.x,o.y,blink);
       const ic=this._pepIcons[o.k]; if(ic) ic.setVisible(true).setPosition(o.x-34,o.y-36).setAlpha(blink);
     });
-    if(this._pOut){ // 鬼魂瞄準圈 + 冷卻
-      const a=this._rimAim(this._gp||this._rimProject(this.p.x,this.p.y)), ready=(this._ghostCD||0)<=0;
-      g.lineStyle(2,ready?0xff7744:0x777777,0.85); g.strokeCircle(a.x,a.y,70);
-      g.lineStyle(2,0xffffff,0.25); g.lineBetween(this.p.x,this.p.y,a.x,a.y);
-      if(!ready){ g.lineStyle(4,0xffffff,0.85); g.beginPath(); g.arc(this.p.x,this.p.y,26,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-this._ghostCD/6),false); g.strokePath(); }
+    this.enemies.forEach(e=>{ if(e.isGhost&&e._gChg&&e._gp){ const a=this._rimAim(e._gp,e._gCh); this._drawGhostAim(g,e._gp.x,e._gp.y,a.x,a.y,true,0,false,e._gCh); } }); // 別的鬼魂正在蓄力瞄哪
+    if(this._pOut){ // 自己的鬼魂準心 + 冷卻 + 蓄力
+      const gp=this._gp||this._rimProject(this.p.x,this.p.y), a=this._rimAim(gp,this._gChg?this._gCh:0), ready=(this._ghostCD||0)<=0;
+      this._drawGhostAim(g,this.p.x,this.p.y,a.x,a.y,ready,(this._ghostCD||0)/6,true,this._gChg?this._gCh:null);
     }
   }
 
@@ -3813,8 +3865,8 @@ class GameScene extends Phaser.Scene {
     this._netT-=dt; this._netZT-=dt;
     if(this._netT>0) return; this._netT=1/15;
     const R=v=>Math.round(v), st=this.stats||{};
-    const ents=[{id:'H',k:this.charData.key,n:window.MP.myNickname||'房主',x:R(this.p.x),y:R(this.p.y),h:R(this.heat),a:this.alive?1:0,g:(this._ghostT>0&&!this._pOut)?1:0,gh:this._pOut?1:0,lv:this.lives,pp:this.activeEffects.pepBoost>0?1:0,fo:(this.alive&&!this._pOut&&this.activeEffects.foil>0)?+this.activeEffects.foil.toFixed(1):0,sk:this._inHotSoy?1:0,s:this.score||0,u:Math.floor(this.ultCharge||0)}];
-    this.enemies.forEach((e,i)=>ents.push({id:e.pid||('a'+i),k:e.ck,n:e.label,x:R(e.x),y:R(e.y),h:R(e.heat||0),a:(e.alive||e.isGhost)?1:0,g:e._ghostT>0?1:0,gh:e.isGhost?1:0,lv:e.lives??0,pp:(e.activeEffects&&e.activeEffects.pepBoost>0)?1:0,fo:(e.alive&&!e.isGhost&&e.activeEffects&&e.activeEffects.foil>0)?+e.activeEffects.foil.toFixed(1):0,sk:e._inHot?1:0,s:e.score||0,u:(e.ultCharge||0),pc:e.remote?+(e._pushCD||0).toFixed(2):0,...(e.remote?{q:e._ack||0,qa:+((performance.now()-(e._ackAt||0))/1000).toFixed(3)}:{})}));
+    const ents=[{id:'H',k:this.charData.key,n:window.MP.myNickname||'房主',x:R(this.p.x),y:R(this.p.y),h:R(this.heat),a:this.alive?1:0,g:(this._ghostT>0&&!this._pOut)?1:0,gh:this._pOut?1:0,lv:this.lives,pp:this.activeEffects.pepBoost>0?1:0,fo:(this.alive&&!this._pOut&&this.activeEffects.foil>0)?+this.activeEffects.foil.toFixed(1):0,...(this._pOut&&this._gp?(()=>{ const a=this._rimAim(this._gp,this._gChg?this._gCh:0); return {ga:[R(a.x),R(a.y),(this._ghostCD||0)<=0?1:0,0,this._gChg?+this._gCh.toFixed(2):-1]}; })():{}),sk:this._inHotSoy?1:0,s:this.score||0,u:Math.floor(this.ultCharge||0)}];
+    this.enemies.forEach((e,i)=>ents.push({id:e.pid||('a'+i),k:e.ck,n:e.label,x:R(e.x),y:R(e.y),h:R(e.heat||0),a:(e.alive||e.isGhost)?1:0,g:e._ghostT>0?1:0,gh:e.isGhost?1:0,lv:e.lives??0,pp:(e.activeEffects&&e.activeEffects.pepBoost>0)?1:0,fo:(e.alive&&!e.isGhost&&e.activeEffects&&e.activeEffects.foil>0)?+e.activeEffects.foil.toFixed(1):0,...(e.isGhost&&e._gp?(()=>{ const a=this._rimAim(e._gp,e._gChg?e._gCh:0); return {ga:[R(a.x),R(a.y),(e._gcd||0)<=0?1:0,+((e._gcd||0)/6).toFixed(2),e._gChg?+e._gCh.toFixed(2):-1]}; })():{}),sk:e._inHot?1:0,s:e.score||0,u:(e.ultCharge||0),pc:e.remote?+(e._pushCD||0).toFixed(2):0,...(e.remote?{q:e._ack||0,qa:+((performance.now()-(e._ackAt||0))/1000).toFixed(3)}:{})}));
     const sn={tl:this.timeLeft,e:ents,lm:this.fx.respawn?1:0,bm:(this.bombs||[]).map(b=>[R(b.x),R(b.y),+b.t.toFixed(2)]),hm:this.heatMode,fm:this._fireMul||1,sp:this.shrinkPad||0,sw:this.shrinkWarning?1:0,wd:this.wind&&this.wind.on?[Math.round(this.wind.x*100),Math.round(this.wind.y*100),this.wind.warn?1:0,Math.round(this.wind.nx*100),Math.round(this.wind.ny*100),this.wind.str||0]:0,co:this.core&&this.core.on?[R(this.core.R),R(this.core.next||0),this.core.warn?1:0,+(this.core.warnT||0).toFixed(2)]:0,uw:this.enemies.filter(e=>e._ultWind>0).map(e=>[R(e.x),R(e.y),+(1-e._ultWind/(e._ultWindMax||1)).toFixed(2)]),cz:this.heatMode==='crowd'?(this.crowdZones||[]).map(z=>[R(z.x),R(z.y),R(z.r),z.st==='warn'?0:z.st==='hot'?1:2,+(z.p||0).toFixed(2)]):null,ti:this.tilt?[this.tilt.x,this.tilt.y,this.tilt.state==='active'?1:0,+this.tilt.timer.toFixed(2),this.tilt.force,this.tilt.rot,this.tilt.hold,this.tilt.lbl]:null,
       f:this.firePts.filter(f=>f.state!=='cooldown').map(f=>({x:R(f.x),y:R(f.y),tx:R(f.tx||f.x),ty:R(f.ty||f.y),st:f.state,al:+(f.alpha||0).toFixed(2),c:f.collision?1:0,sd:f.spd||1,ph:+(f.ph||0).toFixed(2)})),
       o:(this.ultOrbs||[]).map(o=>[R(o.x),R(o.y),o.preSpawn?1:0]),
@@ -3854,9 +3906,9 @@ class GameScene extends Phaser.Scene {
     // 按鍵：每秒送 20 次（A/S/D 的「按一下」記住到送出為止，不會漏）
     const L=this.keys.left.isDown||GKEYS['ArrowLeft'], Rt=this.keys.right.isDown||GKEYS['ArrowRight'], U=this.keys.up.isDown||GKEYS['ArrowUp'], Dn=this.keys.down.isDown||GKEYS['ArrowDown'];
     // 方向一改變就立刻送（不用等下一個 0.05 秒）；每個按鍵有編號 q，房主回報做到第幾個，用來對位置
-    this._inT=(this._inT||0)-dt; const _kb=(L?1:0)|(Rt?2:0)|(U?4:0)|(Dn?8:0);
+    this._inT=(this._inT||0)-dt; const _ah=this.keys.push.isDown, _kb=(L?1:0)|(Rt?2:0)|(U?4:0)|(Dn?8:0)|(_ah?16:0);
     if(this._inT<=0||_kb!==this._lastKb||this._netPush||this._netSkill||this._netUlt){ this._inT=0.05; this._lastKb=_kb; const q=++this._inSeq; this._seqT[q]=performance.now(); delete this._seqT[q-80];
-      window.MP.socket.emit('input',{l:!!L,r:!!Rt,u:!!U,d:!!Dn,push:this._netPush,skill:this._netSkill,ult:this._netUlt,q}); this._netPush=false; this._netSkill=false; this._netUlt=false; }
+      window.MP.socket.emit('input',{l:!!L,r:!!Rt,u:!!U,d:!!Dn,ah:!!_ah,push:this._netPush,skill:this._netSkill,ult:this._netUlt,q}); this._netPush=false; this._netSkill=false; this._netUlt=false; }
     if(!sn) return;
     if(this._netEnding) return;
     this.firePhase=(this.firePhase||0)+dt;
@@ -3926,7 +3978,7 @@ class GameScene extends Phaser.Scene {
     if(this.wind&&this.wind.on&&this.wind.str>0&&!this._netGhost&&!((this._localDash||0)>0)){ const _w=this.wind, _wx=_w.x*_w.str*dt, _wy=_w.y*_w.str*dt; if(inGrill(this.p.x+_wx,this.p.y+_wy,14)){ this.p.x+=_wx; this.p.y+=_wy; } }
     if(this.wind&&this.wind.on){ this._windParts(dt); this.drawWind(); }
     if(_gCore>0&&!this._netGhost){ const _cx=G.x+G.w/2,_cy=G.y+G.h/2,_dx=this.p.x-_cx,_dy=this.p.y-_cy,_d=Math.hypot(_dx,_dy)||1; if(_d<_gCore+4){ this.p.x=_cx+_dx/_d*(_gCore+4); this.p.y=_cy+_dy/_d*(_gCore+4); } }
-    this._netStuck=!!en.sk; if(en.gh&&!this._netGhost) this._banner('👻 你變成鬼魂了','沿著烤盤外圈走，按 A 丟炭火彈；炸下去一個人就能復活一次'); this._netGhost=!!en.gh;
+    this._netStuck=!!en.sk; if(en.gh&&!this._netGhost) this._banner('👻 你變成鬼魂了','方向鍵沿外圈走，按住 A 蓄力（越久丟越遠）；炸中 +0.5、炸出去 +1 還能復活'); this._netGhost=!!en.gh;
     if(en.pc>0.05) this._dashLock=Math.max(this._dashLock||0,this.time.now+en.pc*1000-150);
     // 對位置：跟「自己送出第 q 個按鍵、再過 qa 秒」那時的位置比（不是跟現在比）。
     // 以前直接拉向房主的位置 → 房主的位置一定比你慢（網路延遲）→ 一直被往回拉，角色很難動。
@@ -3947,12 +3999,18 @@ class GameScene extends Phaser.Scene {
     if(en.pp&&en.a&&this._netLayer&&this._netLayer.scene) this._drawPepAura(this._netLayer,this.p.x,this.p.y);
     if(this._netLayer&&this._netLayer.scene) this._netFoil(this._netLayer,en,this.p.x,this.p.y,true);
     if(en.sk&&this.time.now-(this._stuckMsgT||0)>1500){ this._stuckMsgT=this.time.now; this._notice('🍶 腳被醬油黏住了，不能衝刺！','#e0a868'); }
-    if(en.gh&&this._netLayer&&this._netLayer.scene){ const gg=this._netLayer, a=this._rimAim(this._rimProject(this.p.x,this.p.y)); gg.lineStyle(2,0xff7744,0.85); gg.strokeCircle(a.x,a.y,70); gg.lineStyle(2,0xffffff,0.25); gg.lineBetween(this.p.x,this.p.y,a.x,a.y); } // 鬼魂瞄準圈
+    if(en.gh&&this._netLayer&&this._netLayer.scene){ // 鬼魂準心：蓄力在本地先算（不等房主），按著 A 越久丟越遠
+      const ga=en.ga||[0,0,1,0,-1], ready=!!ga[2], A=this.keys.push.isDown;
+      if(A&&(this._netChg||ready)){ this._netChg=true; this._netCh=Math.min(1,(this._netCh||0)+dt/1.3); } else { this._netChg=false; this._netCh=0; }
+      const gp=this._rimProject(this.p.x,this.p.y), a=this._rimAim(gp,this._netChg?this._netCh:0);
+      this._drawGhostAim(this._netLayer,this.p.x,this.p.y,a.x,a.y,ready,ga[3]||0,true,this._netChg?this._netCh:null);
+    } else { this._netChg=false; this._netCh=0; }
+    if(this._netLayer&&this._netLayer.scene) ((this._snap&&this._snap.e)||[]).forEach(o=>{ if(o.id!==window.MP.myId&&o.gh&&o.ga&&o.ga[4]>=0) this._drawGhostAim(this._netLayer,o.x,o.y,o.ga[0],o.ga[1],true,0,false,o.ga[4]); });
     else if(!en.a){ this.p.x=en.x; this.p.y=en.y; }
     this.heat=en.h; this.ultCharge=en.u; this.score=en.s; this.pushCD=en.pc||0;
     if(this.playerSprite){ this.playerSprite.setVisible(!!en.a); if(en.a){ this._animChar(this.playerSprite,this.pAnim,this.p.x,this.p.y,dt,{base:this.playerSprite.baseScale||0.26,heat:en.h,faceX:this.lastDir.x,moving:!!(dx||dy),shadow:this.shadowLayer}); if(!en.gh) this.updateHeatFx(this.playerSprite,en.h,this.sweatTxt); this.playerSprite.setAlpha(en.gh?0.5:(en.g?0.35+0.35*Math.sin(this.time.now*0.03):1)); if(en.gh) this.playerSprite.setTint(0xaaccff); } }
     this.heatBarFg.width=Math.min(220,en.h*2.2); this.heatTxt.setText(Math.floor(en.h)+'%');
-    if(this.scoreTxt) this.scoreTxt.setText('🏆 '+en.s+' 分'+(this._snap&&this._snap.lm?'　'+(en.gh?'👻 鬼魂（A 丟炭火彈）':'❤'.repeat(Math.max(0,en.lv||0))):''));
+    if(this.scoreTxt) this.scoreTxt.setText('🏆 '+en.s+' 分'+(this._snap&&this._snap.lm?'　'+(en.gh?'👻 鬼魂（按住 A 蓄力丟）':'❤'.repeat(Math.max(0,en.lv||0))):''));
     this.updateUltUI(); if(en.a&&!en.gh) this._drawOverheadHUD(); else if(this.ovLayer&&this.ovLayer.scene){ this.ovLayer.clear(); (this.ovTxt||[]).forEach(t=>t.setVisible(false)); if(this.ovPow) this.ovPow.setVisible(false); }
   }
 
@@ -5224,7 +5282,7 @@ class GameScene extends Phaser.Scene {
     this.add.text(PX,PY-PH/2+88,(title||'')+(reason?'　'+reason:''),{fontSize:'18px',color:win?'#88ffaa':'#ffb0a0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1);
     // 計分規則（加權）
     const _lm=!!(this.fx&&this.fx.respawn);
-    this.add.text(PX,PY-PH/2+118,_lm?'計分：往外撞中 ×0.5　擊落 ×3　🎯 快熟的人 +2　⚔ 復仇 +2　🍶 助攻 +1　活到最後 +3':'計分：撞中 ×1　擊落 ×3　活到最後 +3',
+    this.add.text(PX,PY-PH/2+118,_lm?'計分：往外撞中 ×0.5　擊落 ×3　🎯 快熟 +2　⚔ 復仇 +2　🍶 助攻 +1　👻 鬼魂炸中 +0.5 / 炸出 +1　活到最後 +3':'計分：撞中 ×1　擊落 ×3　活到最後 +3',
       {fontSize:'13px',color:'#ffcf8a',fontFamily:'sans-serif',backgroundColor:'#2a1608',padding:{x:8,y:3}}).setOrigin(0.5).setDepth(D+1);
     const fmt=v=>Math.round(v*10)/10;
     const formula=(r)=>{ const b=r.bd||{}, parts=[];
@@ -5233,6 +5291,8 @@ class GameScene extends Phaser.Scene {
       if(b.tgt) parts.push('🎯 '+b.tgt+'×2='+(b.tgt*2));
       if(b.rev) parts.push('⚔ 復仇 '+b.rev+'×2='+(b.rev*2));
       if(b.ast) parts.push('🍶 助攻 '+fmt(b.ast));
+      if(b.gh) parts.push('👻 炸中 '+b.gh+'×0.5='+fmt(b.gh*0.5));
+      if(b.gko) parts.push('👻 炸出去 '+b.gko+'×1='+b.gko);
       if(b.surv) parts.push('存活 +'+b.surv);
       return parts.length?parts.join('　+　')+'　=　'+fmt(r.score):'沒有得分'; };
     // 排行榜（前 5 名；你不在前 5 就多列一行）
