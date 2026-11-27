@@ -387,7 +387,7 @@ function inGrill(x,y,m=0){ return x>=G.x+m&&x<=G.x+G.w-m&&y>=G.y+m&&y<=G.y+G.h-m
 // ── 場地效果開關（開戰前設定畫面可勾選；存在瀏覽器裡，下次還在）─────
 const FX_LIST=[
   {k:'fire',    n:'🔥 火焰圈',   d:'站在火裡會變熟',     t:'地上隨機冒出火圈，站在圈裡熟度每秒 +26%；最後 20 秒火會變大。（選「中心熱區」模式時不會出現）'},
-  {k:'oilFire', n:'💧 撞到出油', d:'互撞噴油、會起火',   t:'角色互撞會噴出油漬，踩到會滑；約 1.5 秒後點燃成青色油火。'},
+  {k:'oilFire', n:'💧 撞到出油', d:'互撞噴油、地上油漬', t:'角色互撞會噴出油漬，踩到會滑；約 1.5 秒後點燃成青色油火。地上也會隨機冒出油漬。'},
   {k:'items',   n:'🎁 道具',     d:'走過去就能撿',       t:'場上出現道具，走過去就撿：冰塊降溫、鋁箔反彈、大蒜推力、醬油陷阱、胡椒噴辣。'},
   {k:'soy',     n:'🍶 灑醬油',   d:'踩到會變慢',         t:'醬油瓶飛過烤盤，沿路灑下一片醬油，踩到速度 ×0.45。'},
   {k:'lemon',   n:'🍋 灑檸檬汁', d:'踩到會變快',         t:'檸檬飛過烤盤噴汁，踩到後 1.5 秒內速度 ×1.5。'},
@@ -405,15 +405,15 @@ const FX_LIST=[
   {k:'heatKnock',   n:'💥 越熟飛越遠', d:'越熟被推得越遠',     t:'被推飛的距離看自己的熟度：0% 只飛 0.55 倍，100% 飛 2.55 倍。'},
   {k:'heatPower',   n:'🔥 越熟推越大力', d:'自己越熟推力越大', t:'自己熟度越高，推別人的力量越大（最多 2 倍）。跟「撞人傳熱」會互相抵銷，預設關閉。'},
   {k:'clash',       n:'⚔ 對撞比推力', d:'正面互撞：推力大的贏', t:'你衝刺撞上正在衝過來的對手時比推力（💪 數字）：大的把對方撞飛，小的被彈開，差不多就兩邊一起彈開。'},
-  {k:'respawn',     n:'❤ 三條命計分賽', d:'每人 3 條命、比分數', t:'出局掉 1 條命，3 秒後回場（2 秒無敵）。命用完變鬼魂：沿著烤盤外圈走、按 A 丟炭火彈；炸下去一個人就復活一次。撞到人 +0.5、撞出去 +3（🎯 快熟的人再 +2）、活到最後 +3，分數最高的人贏。'},
+  {k:'respawn',     n:'❤ 三條命計分賽', d:'每人 3 條命、比分數', t:'出局掉 1 條命，3 秒後回場（2 秒無敵）。命用完變鬼魂：沿著烤盤外圈走、按 A 丟炭火彈；炸下去一個人就復活一次。把人往外撞 +0.5（往中間撞、3 秒內連撞同一人不算）、撞出去 +3（🎯 快熟的人再 +2、復仇 +2）、活到最後 +3，分數最高的人贏。衝刺撲空會露出破綻。'},
   {k:'stillBurn',   n:'🥩 站著不動會焦', d:'停著不動越烤越快', t:'肉貼在烤盤上不動就會一直被烤：停下超過 1.5 秒，熟度上升明顯變快（不在火裡時約 3 倍）、頭上冒煙。動一動就恢復。'},
   {k:'ultOrb',      n:'⚡ 大絕能量球', d:'吃 3 顆才能放大絕', t:'開局大絕是空的。場上每 7 秒冒出一顆能量球，吃 1 顆 +1 格，集滿 3 格才能按 D 發動。AI 也會搶，而且 AI 集滿會放大絕（紫色光環 → 紅圈蓄力 → 範圍爆炸），看到紅圈快閃開。'},
   {k:'ultStart',    n:'⚡ 開局送一發大絕', d:'開局大絕就是滿的', t:'勾選：開局大絕就是滿的，可以馬上按 D；用掉之後再靠能量球集滿。不勾：開局是空的，要先吃能量球集滿 3 格。'},
 ];
-const FX_OFF_DEFAULT=['oilFire','heatPower','ultStart']; // 出局復活改為預設開（模擬：一定打滿 60 秒、領先換手變 2 倍） // 預設關閉：撞到出油（畫面容易亂）、越熟推越大力（跟傳熱規則互相打架）
+const FX_OFF_DEFAULT=['oilFire','heatPower','ultStart','soy','lemon','skewer']; // 出局復活改為預設開（模擬：一定打滿 60 秒、領先換手變 2 倍） // 預設關閉：撞到出油（畫面容易亂）、越熟推越大力（跟傳熱規則互相打架）
 function bbqFx(){
   const d={}; FX_LIST.forEach(f=>d[f.k]=!FX_OFF_DEFAULT.includes(f.k));
-  try{ return Object.assign(d, JSON.parse(localStorage.getItem('bbq_fx_v3')||'{}')); }catch(e){ return d; }
+  try{ const sv=JSON.parse(localStorage.getItem('bbq_fx_v3')||'{}'); if(!sv._ev2){ ['soy','lemon','skewer','oilFire'].forEach(k=>delete sv[k]); } return Object.assign(d, sv, {_ev2:1}); }catch(e){ return d; }
 }
 const BBQ_SHAKE_LV=[['mid','📳 畫面震動：中',1],['strong','📳 畫面震動：強',1.5],['off','📴 畫面震動：關',0]];
 function bbqShakeLv(){ try{ return localStorage.getItem('bbq_shake')||'mid'; }catch(e){ return 'mid'; } }
@@ -1799,7 +1799,7 @@ class GameScene extends Phaser.Scene {
     this.fork=null; this.bigChef=null; this._forkDim=null; this.forkFx=null; this.ovLayer=null; this.ovPow=null;
     this.burnLayer=null; this.vignette=null; this.zoneLayer=null; this.pourLayer=null; this.ringLayer=null; this.ringLbl=null; this._aePrev=null;
     this.tweens.timeScale=1; this.time.paused=false; this._introOpen=false; this._hitStop=0; this.pAnim=this._mkAnim(); this.pv={x:0,y:0}; // 頓幀重置 + 玩家動態狀態
-    this.forkTimer=4; this.fork=null;
+    this.forkTimer=1e9; this.fork=null; // 叉子改由事件導演觸發（_dirTick）
     this.activeEffects={foil:0,garlic:0,slowpow:0,pepBoost:0,stun:0,toxic:0,oilSlick:0,slip:0,sauceCharge:0,pepperVision:0,soySlow:0,lemonFast:0,
       goldenZone:0,   // 黃金熟度 50-80% buff 計時
       juicy:0,        // 擊殺排熱 buff 計時
@@ -1824,11 +1824,11 @@ class GameScene extends Phaser.Scene {
     this.visionLayer=this.add.graphics().setDepth(48);
     this.oilLayer=this.add.graphics().setDepth(3);
     this.randOilTimer=12+Math.random()*6;
-    this.flares=[]; this.flareTimer=15+Math.random()*5;
+    this.flares=[]; this.flareTimer=1e9;
     this.heatZones=[];
     this.runPhase=0; this.bgmEvent=null;
-    this.tilt=null; this.tiltTimer=14;
-    this.tiltInterval=()=>(11+Math.random()*8)/this.levelData.tiltMod;
+    this.tilt=null; this.tiltTimer=1e9;
+    this.tiltInterval=()=>1e9; // 由事件導演觸發
     this.abilityCD=0; this.abilityCDMax=6; this.abilityActive=null; this.abilityWas=false;
     this.ultCharge=(this.fx&&this.fx.ultOrb&&!this.fx.ultStart)?0:3; this.ultMax=3; this._ultCallN=0; this.ultReadyTxt=null; this.ultWas=false; this.ultCinema=false; // 能量球模式：大絕從 0 開始
     this.ultSpeedTimer=0; this.ultOrbs=[]; this.ultOrbTimer=2;
@@ -1851,7 +1851,7 @@ class GameScene extends Phaser.Scene {
     this.otherLayer=this.add.graphics().setDepth(18);
     this.teamRingLayer=this.add.graphics().setDepth(22);
     if(this.netRole) this._netInit(); else if(this.multiplay) this._initMultiplayer();
-    this.forkInterval=()=>(10+Math.random()*5)/this.levelData.forkMod; // 事件變大變長，間隔拉開
+    this.forkInterval=()=>1e9; // 由事件導演觸發
 
     // 火焰：動態出現/消失循環（cooldown→warning→active→dying→cooldown）
     const rndPos=()=>({ x:G.x+80+Math.random()*(G.w-160), y:G.y+80+Math.random()*(G.h-160) });
@@ -1870,8 +1870,9 @@ class GameScene extends Phaser.Scene {
     this.FIRE_R_BASE=46; this.FIRE_R_AMP=12;
     this.shrinkPad=0; this.shrinkStep=18; this.shrinkMax=165; // 一次剝 18px（原本 55px），慢慢剝
     this.shrinkTimer=12; this.shrinkWarning=false; this.shrinkWarnTimer=0; this._shrinkCount=0; // 12 秒後開始
-    this.evtTimer=12+Math.random()*5; this.evtQueue=[];
-    this.holes=[]; this.holeTimer=10+Math.random()*5;
+    this.evtTimer=1e9; this.evtQueue=[];
+    this.holes=[]; this.holeTimer=1e9;
+    this._dirT=8+Math.random()*2; this._dirLast=null; this._dirLog=[]; this._dirGap=false; this._dirRand=null; this._nem={}; this._koPair={}; this._openUntil=0; // 事件導演：第一個大事件約 8–10 秒
 
     // 圖層
     this.trailLayer=this.add.graphics().setDepth(9);
@@ -2594,7 +2595,7 @@ class GameScene extends Phaser.Scene {
     if(pusher===owner) return; // 自己丟醬油又自己推：已經拿過擊落
     if(pusher){ this._addScore(who,1,null,null,false,0,true); this._pushFeed('🍶 '+name+' 的醬油助攻 +1（'+victimName+'）',owner==='player'?'#ffe066':'#e0a868');
       if(who===null) this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'🍶 助攻 +1','#e0a868'); }
-    else { this._addScore(who,3,null,null,true,vh); if(who===null&&this.stats) this.stats.kos++; this._pushFeed('🍶 '+name+' 的醬油擊落 '+victimName+((vh||0)>=70?' +5':' +3'),owner==='player'?'#ffe066':'#e0a868'); }
+    else { this._addScore(who,3,null,null,true,vh,false,victimName==='你'?'P':victimName); if(who===null&&this.stats) this.stats.kos++; this._pushFeed('🍶 '+name+' 的醬油擊落 '+victimName+((vh||0)>=70?' +5':' +3'),owner==='player'?'#ffe066':'#e0a868'); }
   }
   // ══ 三條命 + 鬼魂炭火彈 ══════════════════════════════════════
   _refreshScoreTxt(){
@@ -2755,13 +2756,14 @@ class GameScene extends Phaser.Scene {
     const on=!!(this.fx&&this.fx.respawn);
     const g=this._lfLayer&&this._lfLayer.scene?this._lfLayer:(this._lfLayer=this.add.graphics().setDepth(8));
     g.clear();
-    const ents=[{x:this.p.x,y:this.p.y,h:this.heat,ok:this.alive&&!this._pOut,lv:this.lives,st:this._stillT||0,gh:this._pOut,n:'你',sk:this._inHotSoy},
-      ...this.enemies.map(e=>({x:e.x,y:e.y,h:e.heat||0,ok:e.alive,lv:e.lives,st:e._stillT||0,gh:e.isGhost,n:e.label,sk:e._inHot,br:(e._brittleT||0)>this.time.now,smk:(e._smokeT||0)>this.time.now}))];
+    const ents=[{x:this.p.x,y:this.p.y,h:this.heat,ok:this.alive&&!this._pOut,lv:this.lives,st:this._stillT||0,gh:this._pOut,n:'你',sk:this._inHotSoy,op:(this._openUntil||0)>this.time.now},
+      ...this.enemies.map(e=>({x:e.x,y:e.y,h:e.heat||0,ok:e.alive,lv:e.lives,st:e._stillT||0,gh:e.isGhost,n:e.label,sk:e._inHot,br:(e._brittleT||0)>this.time.now,smk:(e._smokeT||0)>this.time.now,op:(e._openUntil||0)>this.time.now}))];
     if(!this._lfTxt||!this._lfTxt[0]||!this._lfTxt[0].tg.scene){
       this._lfTxt=ents.map(()=>({tg:this.add.text(0,0,'🎯',{fontSize:'18px'}).setOrigin(0.5).setDepth(31),
         hp:this.add.text(0,0,'',{fontSize:'11px',color:'#ff5a6a',stroke:'#000000',strokeThickness:3}).setOrigin(0.5).setDepth(31),
         sm:this.add.text(0,0,'💨滋滋…',{fontSize:'12px',color:'#dddddd',fontFamily:'sans-serif',stroke:'#000000',strokeThickness:3}).setOrigin(0.5).setDepth(31),
-        sk:this.add.text(0,0,'🍶 黏住了！+8%/秒',{fontSize:'12px',color:'#f0c080',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#3a1a0a',strokeThickness:4}).setOrigin(0.5).setDepth(31)}));
+        sk:this.add.text(0,0,'🍶 黏住了！+8%/秒',{fontSize:'12px',color:'#f0c080',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#3a1a0a',strokeThickness:4}).setOrigin(0.5).setDepth(31),
+        rv:this.add.text(0,0,'⚔ 仇人',{fontSize:'12px',color:'#ff9a8a',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#2a0a0a',strokeThickness:4}).setOrigin(0.5).setDepth(31)}));
     }
     const pulse=0.5+0.5*Math.sin(this.time.now*0.012);
     ents.forEach((en,k)=>{ const T=this._lfTxt[k]; if(!T) return;
@@ -2770,6 +2772,8 @@ class GameScene extends Phaser.Scene {
       if(en.ok&&en.br){ g.fillStyle(0x88eeff,0.18); g.fillCircle(en.x,en.y+4,30); g.lineStyle(3,0xaaf4ff,0.6+0.4*pulse); g.strokeCircle(en.x,en.y+4,30); } // 凍脆
       else if(en.ok&&en.smk){ g.lineStyle(3,0xbb88ff,0.4+0.4*pulse); g.strokeCircle(en.x,en.y+4,33+pulse*3); } // 易飛
       T.tg.setVisible(hot).setPosition(en.x+28,en.y-30).setAlpha(0.55+0.45*pulse);
+      if(T.rv) T.rv.setVisible(!!(k>0&&en.ok&&!en.gh&&this._nem&&this._nem.P===en.n&&!this._pOut)).setPosition(en.x-30,en.y-34);
+      if(en.ok&&en.op){ g.lineStyle(3,0xfff066,0.45+0.55*pulse); g.strokeCircle(en.x,en.y+4,25); } // 破綻（剛衝完 / 撲空）
       if(en.gh) T.hp.setVisible(true).setText('👻 '+en.n).setColor('#bcd8ff').setFontSize(13).setPosition(en.x,en.y-38);
       else T.hp.setVisible(on&&en.ok).setText('❤'.repeat(Math.max(0,en.lv||0))).setColor('#ff5a6a').setFontSize(11).setPosition(en.x,en.y+32);
       T.sm.setVisible(!!(en.ok&&this.fx.stillBurn&&en.st>1.5&&!en.sk)).setPosition(en.x-40,en.y-14).setAlpha(0.6+0.4*pulse);
@@ -2846,9 +2850,18 @@ class GameScene extends Phaser.Scene {
 
   // ══ 計分 ══════════════════════════════════════════════════
   // who = null 代表玩家，否則是 AI 物件；ko = 是否為擊落
-  _addScore(who,n,x,y,ko,vh,raw){
+  _addScore(who,n,x,y,ko,vh,raw,vic){
     if(ko) this._koT=this.time.now;
     if(who===null&&this._pOut) return; if(who&&who.isGhost) return; // 鬼魂不能得分
+    let _rev=false;
+    if(ko&&vic&&this.fx&&this.fx.respawn){ // 復仇：擊落「上一個擊落你的人」+2；記下誰是誰的仇人、互相擊落幾次（結算列冤家）
+      const kk=who===null?'P':who.label; this._nem=this._nem||{}; this._koPair=this._koPair||{};
+      if(kk!==vic){
+        if(this._nem[kk]===vic){ _rev=true; this._nem[kk]=null; }
+        this._nem[vic]=kk; this._koPair[kk+'>'+vic]=(this._koPair[kk+'>'+vic]||0)+1;
+        if(vic==='P'&&who) this.time.delayedCall(3300,()=>{ if(this.alive&&!this._pOut&&this._nem&&this._nem.P===kk) this._notice('⚔ 撞飛 '+kk+' 可以復仇 +2','#ff9a8a'); });
+      }
+    }
     if(!ko&&!raw&&n===1&&this.fx&&this.fx.respawn) n=0.5; // 三條命：撞到人 +0.5（亂撞不會比挑時機好）
     if(ko&&this.fx&&this.fx.respawn){ // 擊落獎勵：🎯 快熟的人 +2、自己熟度 -30%、大絕 +1
       const tgtBonus=(vh||0)>=70; if(tgtBonus) n+=2;
@@ -2859,9 +2872,12 @@ class GameScene extends Phaser.Scene {
       } else { who.heat=Math.max(0,(who.heat||0)-30); if(who.remote) who.ultCharge=Math.min(3,(who.ultCharge||0)+1); }
     }
     { const bd=who===null?(this._bd=this._bd||{}):(who._bd=who._bd||{}); // 分數明細（結算時列出算式）
-      if(ko){ bd.ko=(bd.ko||0)+1; if(this.fx&&this.fx.respawn&&(vh||0)>=70) bd.tgt=(bd.tgt||0)+1; }
+      if(ko){ bd.ko=(bd.ko||0)+1; if(this.fx&&this.fx.respawn&&(vh||0)>=70) bd.tgt=(bd.tgt||0)+1; if(_rev) bd.rev=(bd.rev||0)+1; }
       else if(raw) bd.ast=(bd.ast||0)+n;
       else { bd.hit=(bd.hit||0)+1; bd.hitPts=(bd.hitPts||0)+n; } }
+    if(_rev){ n+=2; const nm=who===null?'你':who.label, vn=vic==='P'?(who===null?'':'你'):vic;
+      this._pushFeed('⚔ '+nm+' 復仇成功！撞飛 '+vn+' +2',who===null?'#ffe066':'#ff9a8a');
+      if(who===null) this._floatTxt(this.p.x,this.p.y-this._ovTop()-58,'⚔ 復仇 +2','#ff9a8a',true); }
     if(who===null){
       this.score=(this.score||0)+n;
       if(this.scoreTxt&&this.scoreTxt.scene){ this._refreshScoreTxt(); this.tweens.add({targets:this.scoreTxt,scaleX:1.3,scaleY:1.3,duration:90,yoyo:true}); }
@@ -3057,7 +3073,7 @@ class GameScene extends Phaser.Scene {
     const hkP=(this.fx&&this.fx.heatKnock)?(0.55+this.heat/100*2.0):1;
     const knockPlayer=(dist,who)=>{ this._charImpact(this.pAnim,-mx,-my,1.2);
       this.tweens.add({targets:this.p,x:this.p.x-mx*dist,y:this.p.y-my*dist,duration:240,ease:'Cubic.easeOut',
-        onComplete:()=>{ if(!inGrill(this.p.x,this.p.y)){ if(who){ this._addScore(who,3,null,null,true,this.heat); this.subTxt.setText('對撞輸給 '+who.label+'，被彈出場！'); } else this.subTxt.setText('對撞彈出場！'); this.endGame(false); } }}); };
+        onComplete:()=>{ if(!inGrill(this.p.x,this.p.y)){ if(who){ this._addScore(who,3,null,null,true,this.heat,false,'P'); this.subTxt.setText('對撞輸給 '+who.label+'，被彈出場！'); } else this.subTxt.setText('對撞彈出場！'); this.endGame(false); } }}); };
     const knockEnemy=(dist)=>{ e._lastHitBy='player'; e._lastHitT=this.time.now; this._charImpact(e.anim,mx,my,1.3); if(e.anim) e.anim.flash=0.1;
       this.tweens.add({targets:e,x:e.x+mx*dist,y:e.y+my*dist,duration:260,ease:'Cubic.easeOut',onComplete:()=>this.checkEnemyFall(e,i)}); };
     if(r>1.2){        // 贏：對方被撞飛得更遠
@@ -3108,7 +3124,7 @@ class GameScene extends Phaser.Scene {
     e.chargeTimer=99; e._pushCD=Math.max(0,(e._pushCD||0)-dt);
     if(inp.push){ inp.push=false; if(e._pushCD<=0&&!(e._ghostT>0)&&!e._inHot){ e._pushCD=1.2; e._dashT=0.22; const l=Math.hypot(e._ldx||1,e._ldy||0)||1; e._ddx=(e._ldx||1)/l; e._ddy=(e._ldy||0)/l; e.pushTimer=0; } }
     if(inp.ult){ inp.ult=false; if((e.ultCharge||0)>=3&&!(e._ultWind>0)&&!(e._ghostT>0)&&!e.isGhost) this._aiUltStart(e,0.6); }
-    if(e._dashT>0){ e._dashT-=dt; e.charging=true; e.vx=e._ddx*9; e.vy=e._ddy*9; if(e._dashT<=0){ e.charging=false; e.vx*=0.3; e.vy*=0.3; } }
+    if(e._dashT>0){ e._dashT-=dt; e.charging=true; e.vx=e._ddx*9; e.vy=e._ddy*9; if(e._dashT<=0){ e.charging=false; e.vx*=0.3; e.vy*=0.3; e._openUntil=this.time.now+700; } }
     else { e.charging=false; e.pushTimer=Math.max(e.pushTimer,0.5); const k=1-Math.exp(-dt*22); e.vx+=(dx*sp-e.vx)*k; e.vy+=(dy*sp-e.vy)*k; }
   }
   // ── 房主：送快照 ──
@@ -3132,10 +3148,19 @@ class GameScene extends Phaser.Scene {
   }
   _netSendEnd(win){
     if(this._netEndSent) return; this._netEndSent=true;
-    const board=this._finalScores(win);
-    window.MP.socket.emit('game_over',{board:board.map(r=>({id:r.id,name:r.name,score:r.score,hits:r.hits,kos:r.kos,deaths:r.deaths,alive:r.alive,bd:r.bd||{}}))});
+    const board=this._finalScores(win), rv=this._rivalText();
+    window.MP.socket.emit('game_over',{board:board.map(r=>({id:r.id,name:r.name,score:r.score,hits:r.hits,kos:r.kos,deaths:r.deaths,alive:r.alive,bd:r.bd||{},rv}))});
   }
   // 連線中按 ESC：房主 → 直接結算給大家；客戶端 → 自己回等待室
+  _rivalText(){
+    const P=this._koPair||{}, nm=k=>k==='P'?(this.netRole?(window.MP.myNickname||'房主'):'你'):k;
+    let best=null;
+    Object.keys(P).forEach(pk=>{ const [a,b]=pk.split('>'); if(a>b&&P[b+'>'+a]) return; const ab=P[pk], ba=P[b+'>'+a]||0, tot=ab+ba;
+      const sc=tot+(ba?1:0); if(tot>=2&&(!best||sc>best.sc)) best={a,b,ab,ba,tot,sc}; });
+    if(!best) return '';
+    if(best.ba) return '⚔ 冤家：'+nm(best.a)+' ⇄ '+nm(best.b)+'（互相擊落 '+best.tot+' 次）';
+    return '⚔ 剋星：'+nm(best.a)+' 擊落 '+nm(best.b)+' '+best.ab+' 次';
+  }
   _netLeave(){
     if(this.netRole==='host') this._netSendEnd(false);
     const ov=document.getElementById('lobby-overlay');
@@ -4349,7 +4374,7 @@ class GameScene extends Phaser.Scene {
       const _byAI=e._lastHitBy&&e._lastHitBy!=='player'&&this.time.now-(e._lastHitT||0)<3000;
       if(_byAI){
         this.showPop(e.label+' 被 '+e._lastHitBy+' 推下去了！');
-        { const _k=this.enemies.find(x=>x.label===e._lastHitBy); if(_k){ this._addScore(_k,3,null,null,true,e.heat); e._koByT=this.time.now; } }
+        { const _k=this.enemies.find(x=>x.label===e._lastHitBy); if(_k){ this._addScore(_k,3,null,null,true,e.heat,false,e.label); e._koByT=this.time.now; } }
         if(this._checkWinCondition()) this.time.delayedCall(600,()=>this.endGame(true));
         return;
       }
@@ -4360,7 +4385,7 @@ class GameScene extends Phaser.Scene {
       }
       this.showPop(e.label+' 掉落！');
       if(this.stats) this.stats.kos++;
-      this._addScore(null,3,null,null,true,e.heat); e._koByT=this.time.now; e._lastHitBy='player';
+      this._addScore(null,3,null,null,true,e.heat,false,e.label); e._koByT=this.time.now; e._lastHitBy='player';
       const _lv=this.fx&&this.fx.respawn;
       this._notice(_lv?'🏆 擊落！+3 分'+((e.heat||0)>=70?'（🎯 +2）':'')+'　熟度 -30%　⚡ 大絕 +1':'🏆 擊落！+3 分　熟度 -25% 🧊','#8fe8ff');
       if(!_lv) this._floatTxt(this.p.x,this.p.y-this._ovTop()-34,'-25%','#8fe8ff');
@@ -4468,13 +4493,14 @@ class GameScene extends Phaser.Scene {
     this.add.text(PX,PY-PH/2+88,(title||'')+(reason?'　'+reason:''),{fontSize:'18px',color:win?'#88ffaa':'#ffb0a0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1);
     // 計分規則（加權）
     const _lm=!!(this.fx&&this.fx.respawn);
-    this.add.text(PX,PY-PH/2+118,_lm?'計分：撞中 ×0.5　擊落 ×3　🎯 擊落快熟的人 再 +2　🍶 醬油助攻 +1　活到最後 +3':'計分：撞中 ×1　擊落 ×3　活到最後 +3',
+    this.add.text(PX,PY-PH/2+118,_lm?'計分：往外撞中 ×0.5　擊落 ×3　🎯 快熟的人 +2　⚔ 復仇 +2　🍶 助攻 +1　活到最後 +3':'計分：撞中 ×1　擊落 ×3　活到最後 +3',
       {fontSize:'13px',color:'#ffcf8a',fontFamily:'sans-serif',backgroundColor:'#2a1608',padding:{x:8,y:3}}).setOrigin(0.5).setDepth(D+1);
     const fmt=v=>Math.round(v*10)/10;
     const formula=(r)=>{ const b=r.bd||{}, parts=[];
       if(b.hit) parts.push('撞中 '+b.hit+(_lm?'×0.5':'')+'='+fmt(b.hitPts||0));
       if(b.ko) parts.push('擊落 '+b.ko+'×3='+(b.ko*3));
       if(b.tgt) parts.push('🎯 '+b.tgt+'×2='+(b.tgt*2));
+      if(b.rev) parts.push('⚔ 復仇 '+b.rev+'×2='+(b.rev*2));
       if(b.ast) parts.push('🍶 助攻 '+fmt(b.ast));
       if(b.surv) parts.push('存活 +'+b.surv);
       return parts.length?parts.join('　+　')+'　=　'+fmt(r.score):'沒有得分'; };
@@ -4490,6 +4516,8 @@ class GameScene extends Phaser.Scene {
       this.add.text(PX+PW/2-36,y,fmt(r.score)+' 分',{fontSize:'20px',color:col,fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(1,0.5).setDepth(D+1);
       this.add.text(PX-PW/2+68,y+19,formula(r),{fontSize:'13px',color:r.me?'#ffe9b0':'#c9b8a0',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1);
     });
+    { const rv=boardIn?(boardIn[0]&&boardIn[0].rv):this._rivalText(); // 冤家：互相擊落最多次的一對
+      if(rv) this.add.text(PX,PY+PH/2-140,rv,{fontSize:'15px',color:'#ff9a8a',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+1); }
     const st=this.stats||{pushes:0,hits:0,kos:0,pushed:0};
     this.add.text(PX,PY+PH/2-112,'你：推擊 '+st.pushes+' 次（撞中 '+st.hits+'）　擊落 '+st.kos+'　被推 '+st.pushed+' 次',
       {fontSize:'15px',color:'#ffe9c4',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1);
@@ -4716,7 +4744,7 @@ class GameScene extends Phaser.Scene {
       this.enemies.forEach((e,i)=>{
         if(!e.alive||dHit||e._ghostT>0)return;
         if(Math.hypot(this.p.x-e.x,this.p.y-e.y)<(this.activeEffects.garlic>0?54:42)){ /* 命中距離要大於碰撞分離距離 38（2×CR），否則撞不到 */
-          dHit=true;
+          dHit=true; this.dashState.hit=true;
           const _hk=this.fx&&this.fx.heatKnock; // 越熟飛越遠：拿掉低熟度的減傷，熟度直接決定飛多遠（最多 3 倍）
           const resist=_hk?1.0:((e.heat||0)<50?0.65:1.0);
           const charBst=_hk?(0.55+(e.heat||0)/100*2.0):Math.min(2.2,1+(e.heat||0)/100*1.2); // 越熟飛越遠：0% 熟只飛 0.55 倍，100% 飛 2.55 倍
@@ -4732,12 +4760,15 @@ class GameScene extends Phaser.Scene {
             this._clash(e,i,mx,my,resist,charBst);
           } else {
           this._hitFeel({x:(this.p.x+e.x)/2,y:(this.p.y+e.y)/2,dx:mx,dy:my,power:charBst*resist,anim:e.anim});
-          this._xferHeat(null,e); e._lastHitBy='player'; e._lastHitT=this.time.now; if(this.stats) this.stats.hits++;
-          this._addScore(null,1,e.x,e.y);
+          const _rep=(e._pHitT||0)>this.time.now-3000; e._pHitT=this.time.now; // 3 秒內連撞同一個人：不加分、不傳熱
+          if(!_rep) this._xferHeat(null,e); e._lastHitBy='player'; e._lastHitT=this.time.now; if(this.stats) this.stats.hits++;
+          if(!_rep&&this._outHit(e.x,e.y,mx,my)) this._addScore(null,1,e.x,e.y);
+          else if(!_rep) this._tip('inhit',e.x,e.y,'往中間撞不加分','把人往烤盤邊緣撞才 +0.5 分；往中間撞只是推開他。');
           this._charImpact(this.pAnim,mx,my,0.45); this.pAnim.flash=0; // 攻擊方也小震一下（不閃白）
           if(charBst>1.8)this.showPop('🔥 脆了！飛出去！');
           else if(resist<1)this.showPop('💪 撐住了！');
           else this.showPop('💥 撞飛！');
+          if((e._openUntil||0)>this.time.now){ this.showPop('⏱ 抓到破綻！飛更遠'); this._tip('opening',e.x,e.y,'⏱ 抓破綻','對手剛衝完有 0.7 秒空檔（黃圈），這時撞他會飛 1.35 倍。先閃開他的衝刺，再撞回去！'); }
           this.tweens.add({targets:e,
             x:e.x+mx*this.dashState.force*resist*charBst*this._ultKnockMul(e),
             y:e.y+my*this.dashState.force*resist*charBst*this._ultKnockMul(e),
@@ -4770,7 +4801,7 @@ class GameScene extends Phaser.Scene {
           } // end else (no foil reflect)
         }
       });
-      if(this.dashState.dist>=this.dashState.maxDist)this.dashState.active=false;
+      if(this.dashState.dist>=this.dashState.maxDist){ this.dashState.active=false; if(!this.dashState.hit) this._dashWhiff(); }
     }
     let tfx=0, tfy=0; // 傾斜：往下滑的力；按反方向才撐得住，往旁邊幾乎走不動
     { const _TF=this._tiltF(); if(_TF>0){ const tv=this._tiltVel(mx,my,SPD,isDash,_TF); if(!isDash){ mx=tv.mx; my=tv.my; } tfx=tv.tx; tfy=tv.ty; } }
@@ -4789,7 +4820,7 @@ class GameScene extends Phaser.Scene {
         const txo=this.p.x+tfx*dt, tyo=this.p.y+tfy*dt;
         if(!inGrill(txo,tyo)){
           const _pb=this._pHitBy&&this.time.now-(this._pHitT||0)<1500?this._pHitBy:null; // 剛被 AI 推 → 算那隻 AI 的擊落
-          if(_pb){ this._addScore(_pb,3,null,null,true,this.heat); this.subTxt.setText('被 '+_pb.label+' 推落！'); } else this.subTxt.setText('掉落烤盤！');
+          if(_pb){ this._addScore(_pb,3,null,null,true,this.heat,false,'P'); this.subTxt.setText('被 '+_pb.label+' 推落！'); } else this.subTxt.setText('掉落烤盤！');
           this.endGame(false);return;
         }
         // 鍵盤在安全範圍頂牆：夾緊座標
@@ -5161,7 +5192,7 @@ class GameScene extends Phaser.Scene {
       else if(e.charging){
         e.chargeTime-=dt;
         e.vx=e.chDx*4.5; e.vy=e.chDy*4.5;
-        if(e.chargeTime<=0){e.charging=false; e.vx*=0.25; e.vy*=0.25;}
+        if(e.chargeTime<=0){e.charging=false; e.vx*=0.25; e.vy*=0.25; e._openUntil=this.time.now+700;}
       } else if(edist>52&&!onOil&&!e.remote){
         let gx=tgt.x, gy=tgt.y;
         if(tac==='pack'&&edist>90){ // 圍剿：從「中心那一側」分散包抄，推的方向是往外
@@ -5221,18 +5252,18 @@ class GameScene extends Phaser.Scene {
               }
             } else {
             const _kRes=(this.ultState&&this.ultState.knockRes)?this.ultState.knockRes:1;
-            const _juicyRes=this.activeEffects.juicy>0?0.5:1.0; // 多汁狀態：被推距離減半
+            const _juicyRes=(this.activeEffects.juicy>0?0.5:1.0)*((this._openUntil||0)>this.time.now?1.35:1); // 多汁狀態：被推距離減半；撲空破綻 ×1.35
             const cBst=(this.fx&&this.fx.heatKnock)?(0.55+this.heat/100*2.0):Math.min(1.5,1+this.heat/100*0.8);
             // AI 有胡椒推玩家 → 散出胡椒（玩家視野受限）
             if(e.activeEffects&&e.activeEffects.pepBoost>0) this._scatterPepper(this.p.x,this.p.y,true);
             this.tweens.add({targets:this.p,
               x:this.p.x+pnx*pForce*cBst*_kRes*_juicyRes,y:this.p.y+pny*pForce*cBst*_kRes*_juicyRes,
               duration:240,ease:'Cubic.easeOut',
-              onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this._addScore(e,3,null,null,true,this.heat);this.subTxt.setText('被 '+e.label+' 推落！');this.endGame(false);}else{this._spawnCollisionOil(this.p.x,this.p.y);
+              onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this._addScore(e,3,null,null,true,this.heat,false,'P');this.subTxt.setText('被 '+e.label+' 推落！');this.endGame(false);}else{this._spawnCollisionOil(this.p.x,this.p.y);
                 if(this.onFire(this.p.x,this.p.y)){ this._hAdd('被推進火裡',15); this._notice('🔥 被推進火裡！熟度 +15%','#ff6a3a'); this._addTrauma(0.4); }}}});
             this._hitFeel({x:(this.p.x+e.x)/2,y:(this.p.y+e.y)/2,dx:pnx,dy:pny,power:cBst*_juicyRes,anim:this.pAnim});
             this._xferHeat(e,null); if(this.stats) this.stats.pushed++;
-            this._addScore(e,1); this._pHitBy=e; this._pHitT=this.time.now;
+            if(!e.remote||this._outHit(this.p.x,this.p.y,pnx,pny)) this._addScore(e,1); this._pHitBy=e; this._pHitT=this.time.now;
             this._charImpact(e.anim,pnx,pny,0.4); e.anim.flash=0;
             if(this.activeEffects.juicy>0) this.showPop('💧 多汁彈開！');
             else if(cBst>1.8) this.showPop('🔥 脆了！被 '+e.label+' 推飛！');
@@ -5244,7 +5275,7 @@ class GameScene extends Phaser.Scene {
             // AI 互推：碰撞點也噴油
             this._spawnCollisionOil((e.x+eRef.x)/2,(e.y+eRef.y)/2);
             this._hitFeel({x:(e.x+eRef.x)/2,y:(e.y+eRef.y)/2,dx:pnx,dy:pny,power:0.5,anim:eRef.anim,freeze:0,shake:false});
-            this._xferHeat(e,eRef); eRef._lastHitBy=e.label; eRef._lastHitT=this.time.now; this._addScore(e,1);
+            this._xferHeat(e,eRef); eRef._lastHitBy=e.label; eRef._lastHitT=this.time.now; if(!e.remote||this._outHit(eRef.x,eRef.y,pnx,pny)) this._addScore(e,1);
             this.tweens.add({targets:eRef,
               x:eRef.x+pnx*pForce*cBst,y:eRef.y+pny*pForce*cBst,
               duration:240,ease:'Cubic.easeOut',
@@ -5370,11 +5401,11 @@ class GameScene extends Phaser.Scene {
     this.updateCenterOrb(dt);
     if(this.ultState)this.updateUltState(dt);
     this.randOilTimer-=dt;
-    if(this.randOilTimer<=0){this.spawnRandOilSlick();this.randOilTimer=12+Math.random()*6;}
+    if(this.randOilTimer<=0){if(this.fx.oilFire)this.spawnRandOilSlick();this.randOilTimer=12+Math.random()*6;}
     this.updateOilSlicks(dt);
     this.updateHeatZones(dt);
     this.flareTimer-=dt;
-    if(this.flareTimer<=0){this.spawnFlareZone();this.flareTimer=15+Math.random()*6;}
+    if(this.flareTimer<=0){this.spawnFlareZone();this.flareTimer=1e9;}
     this.updateFlares(dt);
     // 技能倒計時
     if(this.abilityActive){
@@ -5393,7 +5424,8 @@ class GameScene extends Phaser.Scene {
       this.itemTimer=_ir===0?(10+Math.random()*6):_ir===2?(1+Math.random()):(4+Math.random()*3);
     }
     this.evtTimer-=dt;
-    if(this.evtTimer<=0){this.spawnRandEvent();this.evtTimer=11+Math.random()*5;}
+    if(this.evtTimer<=0){this.spawnRandEvent(this._dirRand);this._dirRand=null;this.evtTimer=1e9;}
+    this._dirTick(dt);
     this._updatePours(dt);
     this._updateCool(dt);
     this._updateCrowdHeat(dt);
@@ -5718,8 +5750,8 @@ class GameScene extends Phaser.Scene {
     }catch(_ue){console.error('[game update crash]',_ue);}
   }
 
-  spawnRandEvent(){
-    const types=['soy','soy','lemon','lemon','skewer','ice','ice'];
+  spawnRandEvent(force){
+    const types=force?[force]:['soy','soy','lemon','lemon','skewer','ice','ice'];
     const _ok=types.filter(t=>this.fx[t==='ice'?'iceDrop':t]!==false); // 只抽有開啟的事件
     if(!_ok.length) return;
     const type=_ok[Math.floor(Math.random()*_ok.length)];
@@ -6264,7 +6296,7 @@ class GameScene extends Phaser.Scene {
     // 生成計時
     this.holeTimer-=dt;
     if(this.holeTimer<=0){
-      this.holeTimer=7+Math.random()*6;
+      this.holeTimer=1e9;
       const pad=this.shrinkPad+40;
       const sx=G.w-pad*2-100, sy=G.h-pad*2-100;
       if(sx>0&&sy>0){
@@ -7205,7 +7237,7 @@ class GameScene extends Phaser.Scene {
         this._hAdd('被 '+e.label+' 的大絕炸到',10);
         this._pHitBy=e; this._pHitT=now; if(this.dashState) this.dashState.active=false;
         this.tweens.add({targets:this.p,x:this.p.x+nx*F,y:this.p.y+ny*F,duration:300,ease:'Cubic.easeOut',
-          onComplete:()=>{ if(this.alive&&!inGrill(this.p.x,this.p.y)){ this._addScore(e,3,null,null,true,this.heat); this.subTxt.setText('被 '+e.label+' 的大絕炸飛！'); this.endGame(false); } }});
+          onComplete:()=>{ if(this.alive&&!inGrill(this.p.x,this.p.y)){ this._addScore(e,3,null,null,true,this.heat,false,'P'); this.subTxt.setText('被 '+e.label+' 的大絕炸飛！'); this.endGame(false); } }});
         this._hitFeel({x:this.p.x,y:this.p.y,dx:nx,dy:ny,power:1.8,anim:this.pAnim,freeze:90});
       }
     }
@@ -7255,7 +7287,17 @@ class GameScene extends Phaser.Scene {
     if(show) this._hwTxt.setText('🔥 +'+Math.round(this._hwRate)+'%/秒　'+this._lastHeatSrc).setPosition(this.p.x,this.p.y+(this.fx&&this.fx.respawn?50:38));
   }
   // 大絕的「易飛」加成：被豆腐凍脆 ×2.5、在培根煙 / 香菇霧 / 辣椒裡 ×1.6
-  _ultKnockMul(e){ const now=this.time.now; let m=1; if((e._brittleT||0)>now) m*=2.5; if((e._smokeT||0)>now) m*=1.6; return m; }
+  _ultKnockMul(e){ const now=this.time.now; let m=1; if((e._brittleT||0)>now) m*=2.5; if((e._smokeT||0)>now) m*=1.6; if((e._openUntil||0)>now) m*=1.35; return m; }
+  // 撞中算分：要把人往外撞（推的方向跟「中心→他」同向）才 +0.5；往中間撞不算（模擬：亂衝不再比挑時機好）
+  _outHit(x,y,dx,dy){ const cx=G.x+G.w/2, cy=G.y+G.h/2, od=Math.hypot(x-cx,y-cy); return od<40||(dx*(x-cx)+dy*(y-cy))/od>0.2; }
+  // 衝刺撲空：冷卻多 0.5 秒、0.7 秒破綻（被撞飛 1.35 倍，附近 AI 會趁機衝過來）。亂衝不再比挑時機划算
+  _dashWhiff(){
+    const now=this.time.now; this.pushCD+=0.5; this._openUntil=now+700;
+    this._floatTxt(this.p.x,this.p.y-this._ovTop()-30,'💨 撲空','#fff066');
+    this._tip('whiff',this.p.x,this.p.y,'💨 撲空','衝刺沒撞到人：要多等一下才能再衝，而且 0.7 秒內被撞會飛更遠（黃圈）。看準了再衝！');
+    const diff=this.aiDiff??1;
+    this.enemies.forEach(e=>{ if(e.alive&&!e.remote&&!e.isGhost&&Math.hypot(e.x-this.p.x,e.y-this.p.y)<220&&Math.random()<[0.3,0.6,0.85][diff]) e.chargeTimer=Math.min(e.chargeTimer||0,0.12); });
+  }
 
   // 玩家加熱一律走這裡：記下這條命每種來源加了多少（死掉時、HUD 都看得到）
   // quiet=true：不改「最近的加熱原因」（像每秒 +0.7% 這種背景加熱，不要蓋掉真正的原因）
@@ -7506,6 +7548,29 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({targets:ro,v:1,duration:900,ease:'Quad.easeOut',
       onUpdate:()=>{rg.clear();rg.lineStyle(3*(1-ro.v),0xffffff,0.6*(1-ro.v));rg.strokeCircle(x,y,r*(0.25+ro.v*0.85));},
       onComplete:()=>rg.destroy()});
+  }
+
+  // ══ 事件導演 ══════════════════════════════════════════
+  // 以前每種事件各跑各的計時器，一分鐘冒 20 個左右、常常疊在一起，很亂。
+  // 現在：同一時間只有一個大事件；上一個結束後隔 6–9 秒（最後 20 秒 4–6 秒）才來下一個，不連續抽到同一種。
+  _dirBusy(){
+    return !!(this.fork||this.tilt||(this.pours&&this.pours.length)||this.flares.some(f=>f.state!=='done')||this.holes.some(h=>h.state==='warn')
+      ||this.evtQueue.some(ev=>ev.state==='warn'||ev.state==='announce'));
+  }
+  _dirTick(dt){
+    if(this._dirBusy()){ this._dirGap=true; return; }
+    if(this._dirGap){ this._dirGap=false; this._dirT=Math.max(this._dirT,this.timeLeft<=20?4+Math.random()*2:6+Math.random()*3); }
+    this._dirT-=dt; if(this._dirT>0) return;
+    const fx=this.fx, lv=this.levelData||{}, pool=[];
+    const add=(k,w,on)=>{ if(on&&k!==this._dirLast) pool.push([k,w]); };
+    add('holes',3,fx.holes); add('tilt',2*(lv.tiltMod||1),fx.tilt); add('ice',2,fx.iceDrop); add('fork',2*(lv.forkMod||1),fx.fork);
+    add('flare',1,fx.flare); add('skewer',1,fx.skewer); add('soy',1,fx.soy); add('lemon',1,fx.lemon);
+    this._dirT=2; if(!pool.length) return;
+    let r=Math.random()*pool.reduce((a,b)=>a+b[1],0), k=pool[0][0];
+    for(const [kk,w] of pool){ r-=w; if(r<=0){ k=kk; break; } }
+    this._dirLast=k; this._dirLog.push(k);
+    if(k==='holes') this.holeTimer=0; else if(k==='tilt') this.tiltTimer=0; else if(k==='fork') this.forkTimer=0; else if(k==='flare') this.flareTimer=0;
+    else { this._dirRand=k; this.evtTimer=0; }
   }
 
   spawnFlareZone(){
