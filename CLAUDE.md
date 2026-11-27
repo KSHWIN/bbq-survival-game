@@ -19,6 +19,7 @@
 - **預設模式：三條命計分賽**（場地效果 `respawn`，預設開）。一局 60 秒，或只剩一人時結束；**比分數**。
   - 出局 -1 ❤，3 秒後回場（2 秒無敵，有「⬇ 你在這裡」光柱）。命用完 → **鬼魂**：沿烤盤外圈走、**按住 A 蓄力**丟**炭火彈**（越久越遠，約 1.3 秒丟到對面，放開才丟；`_ghostChargeStep` / `_rimAim(gp,ch)`；別的鬼魂蓄力時大家看得到小準心；遠端用 input 的 `ah`、快照 `ga`；AI 用 `_rimWalk` 沿周長走 + `_rimNeed` 算蓄力；測試 `ghostaim.js`。**鬼魂也有少量分數**：炸中 +0.5、炸出去 +1（`_ghostPts`，明細 `gh`/`gko`）。1 秒預告、炸飛 + 熟度 +15%、冷卻 6 秒）；炸彈炸下一個人 → 復活一次（1 條命）。鬼魂不能得分。
   - 計分：**往外撞中** +0.5（`_outHit`：推的方向跟「中心→他」同向，或他離中心 <40px；往中間撞不算，跳 `_tip('inhit')`；3 秒內連撞同一人不加分也不傳熱 `e._pHitT`）、擊落 +3、擊落 🎯（熟度 ≥70%）再 +2、**⚔ 復仇 +2**（擊落「上次撞飛你的人」，`_nem` / `_koPair`，`_addScore` 第 8 參數 vic='P' 或 label；頭上「⚔ 仇人」；結算畫面一行冤家/剋星 `_rivalText()`，連線經 board 的 `rv`）、🍶 醬油助攻 +1、活到最後 +3。遠端真人也套往外撞規則，AI 不套。
+  - **👑 皇冠 + ⚡ 最後 10 秒 ×2（2026-11）**：分數 ≥3 且「唯一最高」的人戴皇冠（`_crown` = 'P' 或敵人物件；`_crownTick` 每 0.2 秒看一次；要「超過」才換人，平手不換；鬼魂不戴）。**擊落戴皇冠的人再 +2**（`_addScore` 裡 `_crn`，明細 `bd.crn`；AI、遠端真人都適用）。第一次出現有橫幅，換人進動態列；頭上 👑 是一個共用文字 `_crownTxt`（`_crownDraw`），戴的人名牌往上移（y-66）。`_ptMul()`：`timeLeft<=10` 回 2 → `_addScore` / `_ghostPts` 得分全部 ×2（多出來的記 `bd.dbl`；**存活 +3 不加倍**）；計時器變金色「⚡×2　10s」（`_timerShow`，房主客戶端共用）、10 秒時橫幅。`_addScore` 回傳實際加的分數。算式恆等式：`hitPts + ko*3 + tgt*2 + rev*2 + crn*2 + ast + gh*0.5 + gko + dbl + surv = score`；結算算式超過 5 項改短版。連線：快照 `cr`（`_crownId()`：'H' / pid / 'a'+i / 0），客戶端照畫（以前客戶端房主名牌前面固定寫 👑 = 房主，已拿掉）。測試 `crowntest.js`、`mpcrown.js`、`helpshot.js`。
   - **撲空**（`_dashWhiff`）：衝刺沒撞到人 → 冷卻 +0.5 秒、0.7 秒破綻（`_openUntil`，黃圈），這時被撞 ×1.35；附近 AI 可能趁機衝。AI / 遠端衝刺結束也有破綻。模擬（fire、16 局）：亂衝 18.4 分 / 挑時機 22.6 分（以前亂衝 > 挑時機）。擊落另給：熟度 -30%、大絕 +1。結算畫面會列出每人的算式（`_bd` 分數明細）。
 - 撞人傳熱：對方 +10%、自己 -5%。站著不動 1.5 秒會焦（`stillBurn`）。熟度 ≥70% 頭上出現 🎯，AI 會圍攻。
 - 道具：冰塊（-42% 熟度、5 秒加速 ×1.9）、鋁箔（10 秒反彈）、大蒜（7 秒身體 ×1.6、推力 ×2、撞得到的距離 54px；**沒有範圍爆發**，一次只撞一個人）、**滾燙醬油**（按 A 往前丟 150px；踩到的人變慢、每秒 +8%、**不能衝刺**；4 秒內出局算丟的人擊落，被別人推下去則丟的人拿助攻）、**胡椒粉**（15 秒內有效；身上有火紅光環；**第一次**撞到人 → 撞擊點 140px 內所有人（含被撞的、不含自己）定住 **3 秒** +8%，胡椒用掉。`_scatterPepper(cx,cy,fromAI,tgt,att)`，測試 `peptest.js`）。
@@ -53,7 +54,7 @@
 
 ## 重要函式位置（用 Grep 找）
 - 三條命 / 鬼魂：`_respawnPlayer`、`_becomeGhostPlayer`、`_ghostPlayerTick`、`_ghostEnemyTick`、`_onEnemyOut`、`_bombCredit`、`_checkLivesEnd`、`_throwBomb` / `_bombBoom`
-- 計分：`_addScore(who,n,x,y,ko,vh,raw)`（who=null 是玩家）、`_finalScores`、`_soyCredit`、`_showResult`
+- 計分：`_addScore(who,n,x,y,ko,vh,raw,vic)`（who=null 是玩家；回傳實際加的分）、`_ptMul`、`_crownTick`、`_finalScores`、`_soyCredit`、`_showResult`
 - 頭上標記（🎯、❤、💨、🍶黏住、胡椒光環）：`_updateLivesFx`；`endGame(win,final)`：三條命模式只有 `final=true` 才真的結束
 
 ## 工作流程
