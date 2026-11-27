@@ -855,6 +855,151 @@ function bbqFxPreset(id){ const o={_ev2:1};
   FX_LIST.forEach(f=>{ o[f.k]= id==='chaos'? f.k!=='heatPower' : FX_PRESET_ON[id]? FX_PRESET_ON[id].includes(f.k) : !FX_OFF_DEFAULT.includes(f.k); });
   return o; }
 function bbqFxWhich(fx){ const p=FX_PRESETS.find(([id])=>{ const o=bbqFxPreset(id); return FX_LIST.every(f=>!!fx[f.k]===o[f.k]); }); return p?p[0]:null; }
+// ══ 第 2–4 張地圖的烤盤圖：開局用 canvas 畫一次（2 倍解析度），之後當成圖片用（2026-11，免費版，之後可換 AI 圖）══
+const GRILL_TEX_M=40; // 烤盤圖比 G 外擴的邊框寬度
+function bbqMakeGrillTex(scene,lk){
+  const key='grilltex_'+lk; if(scene.textures.exists(key)) return key;
+  const M=GRILL_TEX_M, LW=G.w+2*M, LH=G.h+2*M, S=2;
+  const tex=scene.textures.createCanvas(key,LW*S,LH*S); if(!tex) return null;
+  const cv=tex.getSourceImage(), c=cv.getContext('2d');
+  c.setTransform(S,0,0,S,0,0);
+  let seed={lv2:11,lv3:23,lv4:37}[lk]||5; const R=()=>{ seed=(seed*16807)%2147483647; return seed/2147483647; };
+  const X0=M, Y0=M, X1=M+G.w, Y1=M+G.h, PW=G.w, PH=G.h, CX=M+G.w/2, CY=M+G.h/2;
+  const rr=(x,y,w,h,r)=>{ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); };
+  const rad=(x,y,r,stops)=>{ const g=c.createRadialGradient(x,y,0,x,y,r); stops.forEach(([o,col])=>g.addColorStop(o,col)); return g; };
+  const lin=(x0,y0,x1,y1,stops)=>{ const g=c.createLinearGradient(x0,y0,x1,y1); stops.forEach(([o,col])=>g.addColorStop(o,col)); return g; };
+  const noise=(x,y,w,h,amt)=>{ const id=c.getImageData(x*S,y*S,w*S,h*S), d=id.data;
+    for(let i=0;i<d.length;i+=4){ if(!d[i+3]) continue; const n=(R()-0.5)*amt; d[i]+=n; d[i+1]+=n; d[i+2]+=n; } c.putImageData(id,x*S,y*S); };
+  const bolt=(x,y,r)=>{ c.fillStyle='rgba(0,0,0,0.55)'; c.beginPath(); c.arc(x+1.5,y+2,r,0,7); c.fill();
+    c.fillStyle=rad(x-r*0.35,y-r*0.35,r*1.4,[[0,'#e4eaf0'],[0.45,'#8a939c'],[1,'#3a4048']]); c.beginPath(); c.arc(x,y,r,0,7); c.fill();
+    c.strokeStyle='rgba(20,24,28,0.8)'; c.lineWidth=1.4; c.beginPath(); c.moveTo(x-r*0.6,y-r*0.2); c.lineTo(x+r*0.6,y+r*0.2); c.stroke(); };
+
+  if(lk==='lv2'){
+    // ── 餐廳鐵板燒：不鏽鋼台面 + 拉絲鐵板 + 中間的回火色（燒穿的地方） ──
+    rr(4,4,LW-8,LH-8,24); c.fillStyle=lin(0,0,0,LH,[[0,'#3a3f47'],[0.5,'#23272d'],[1,'#121418']]); c.fill();
+    c.strokeStyle='rgba(200,215,230,0.45)'; c.lineWidth=2; rr(5,5,LW-10,LH-10,23); c.stroke();
+    c.strokeStyle='rgba(0,0,0,0.6)'; c.lineWidth=2; rr(9,9,LW-18,LH-18,20); c.stroke();
+    noise(4,4,LW-8,LH-8,14);
+    // 鐵板四周的集油溝
+    rr(X0-13,Y0-13,PW+26,PH+26,10); c.fillStyle='#0b0d10'; c.fill();
+    c.strokeStyle='rgba(255,255,255,0.12)'; c.lineWidth=1.5; rr(X0-13,Y0-13,PW+26,PH+26,10); c.stroke();
+    // 鐵板本體
+    c.fillStyle=lin(X0,Y0,X0,Y1,[[0,'#626973'],[0.45,'#4c525a'],[1,'#3a3f46']]); c.fillRect(X0,Y0,PW,PH);
+    // 回火色：外圈淡金 → 銅 → 紫 → 中心藍（越中間越燙）
+    c.fillStyle=rad(CX,CY,PH*0.62,[[0,'rgba(50,80,170,0.5)'],[0.22,'rgba(110,70,150,0.38)'],[0.4,'rgba(170,110,60,0.3)'],[0.58,'rgba(200,170,100,0.16)'],[1,'rgba(200,170,100,0)']]);
+    c.fillRect(X0,Y0,PW,PH);
+    // 拉絲紋
+    for(let i=0;i<1800;i++){ const y=Y0+R()*PH, x=X0+R()*PW, l=30+R()*260;
+      c.strokeStyle=R()<0.6?'rgba(255,255,255,'+(0.03+R()*0.07)+')':'rgba(0,0,0,'+(0.04+R()*0.07)+')'; c.lineWidth=0.5+R()*0.6;
+      c.beginPath(); c.moveTo(x,y); c.lineTo(Math.min(X1,x+l),y); c.stroke(); }
+    // 鍋鏟刮痕
+    for(let i=0;i<16;i++){ const x=X0+60+R()*(PW-120), y=Y0+50+R()*(PH-100), r=30+R()*60, a=R()*6.28;
+      c.strokeStyle='rgba(255,255,255,0.09)'; c.lineWidth=2+R()*3; c.beginPath(); c.arc(x,y,r,a,a+0.5+R()*0.7); c.stroke(); }
+    // 焦醬汁、油光
+    for(let i=0;i<9;i++){ const x=X0+40+R()*(PW-80), y=Y0+40+R()*(PH-80), r=10+R()*22;
+      c.fillStyle=rad(x,y,r,[[0,'rgba(40,22,10,0.45)'],[0.6,'rgba(60,35,15,0.2)'],[1,'rgba(60,35,15,0)']]); c.beginPath(); c.arc(x,y,r,0,7); c.fill(); }
+    for(let i=0;i<7;i++){ const x=X0+60+R()*(PW-120), y=Y0+50+R()*(PH-100), r=25+R()*45;
+      c.save(); c.translate(x,y); c.scale(1.8,1); c.fillStyle=rad(0,0,r,[[0,'rgba(255,245,215,0.16)'],[1,'rgba(255,245,215,0)']]); c.beginPath(); c.arc(0,0,r,0,7); c.fill(); c.restore(); }
+    noise(X0,Y0,PW,PH,10);
+    // 斜斜的反光帶
+    c.fillStyle=lin(X0,Y0,X1,Y1,[[0,'rgba(255,255,255,0)'],[0.28,'rgba(255,255,255,0)'],[0.36,'rgba(255,255,255,0.08)'],[0.44,'rgba(255,255,255,0)'],[0.7,'rgba(255,255,255,0)'],[0.74,'rgba(255,255,255,0.06)'],[0.78,'rgba(255,255,255,0)']]);
+    c.fillRect(X0,Y0,PW,PH);
+    // 鐵板邊緣（上亮下暗）
+    c.lineWidth=3; c.strokeStyle='rgba(255,255,255,0.4)'; c.beginPath(); c.moveTo(X0,Y1); c.lineTo(X0,Y0); c.lineTo(X1,Y0); c.stroke();
+    c.strokeStyle='rgba(0,0,0,0.5)'; c.beginPath(); c.moveTo(X1,Y0); c.lineTo(X1,Y1); c.lineTo(X0,Y1); c.stroke();
+    // 螺絲
+    [[22,22],[LW-22,22],[22,LH-22],[LW-22,LH-22],[LW/2,20],[LW/2,LH-20],[20,LH/2],[LW-20,LH/2]].forEach(([x,y])=>bolt(x,y,6));
+  }
+  else if(lk==='lv3'){
+    // ── 露營野火：石頭圍一圈、下面是炭灰和零星餘燼、上面架一片歪歪的鐵網 ──
+    c.fillStyle='#1b1815'; c.fillRect(X0-6,Y0-6,PW+12,PH+12);
+    for(let i=0;i<70;i++){ const x=X0+R()*PW, y=Y0+R()*PH, r=30+R()*80, v=40+R()*30|0;
+      c.fillStyle=rad(x,y,r,[[0,'rgba('+v+','+(v-3)+','+(v-7)+',0.55)'],[1,'rgba('+v+','+(v-3)+','+(v-7)+',0)']]); c.beginPath(); c.arc(x,y,r,0,7); c.fill(); }
+    // 木炭塊
+    for(let i=0;i<260;i++){ const x=X0+R()*PW, y=Y0+R()*PH, s=6+R()*16, a=R()*6.28;
+      c.save(); c.translate(x,y); c.rotate(a);
+      c.fillStyle=R()<0.5?'#121010':'#1a1716'; c.beginPath(); c.moveTo(-s,-s*0.5); c.lineTo(s*0.2,-s*0.7); c.lineTo(s,-s*0.1); c.lineTo(s*0.6,s*0.6); c.lineTo(-s*0.7,s*0.5); c.closePath(); c.fill();
+      c.strokeStyle='rgba(120,112,104,0.35)'; c.lineWidth=1; c.stroke(); c.restore(); }
+    // 白灰點
+    for(let i=0;i<900;i++){ c.fillStyle='rgba(200,195,185,'+(0.08+R()*0.18)+')'; c.fillRect(X0+R()*PW,Y0+R()*PH,1+R()*1.6,1+R()*1.6); }
+    // 零星餘燼（不要整片紅）
+    for(let i=0;i<34;i++){ const x=X0+20+R()*(PW-40), y=Y0+20+R()*(PH-40), r=4+R()*9;
+      c.fillStyle=rad(x,y,r*2.6,[[0,'rgba(255,150,50,0.5)'],[0.35,'rgba(220,80,20,0.22)'],[1,'rgba(200,60,10,0)']]); c.beginPath(); c.arc(x,y,r*2.6,0,7); c.fill();
+      c.fillStyle='rgba(255,190,90,0.7)'; c.beginPath(); c.arc(x,y,r*0.35,0,7); c.fill(); }
+    noise(X0-6,Y0-6,PW+12,PH+12,12);
+    // 鐵網：橫向鐵條（中間微微下垂）+ 3 根直的托架
+    const rod=(x0,y0,x1,y1,sag,w)=>{
+      c.strokeStyle='rgba(0,0,0,0.5)'; c.lineWidth=w+1; c.beginPath(); c.moveTo(x0+2,y0+5); c.quadraticCurveTo((x0+x1)/2+2,(y0+y1)/2+5+sag,x1+2,y1+5); c.stroke();
+      c.strokeStyle='#2a2623'; c.lineWidth=w; c.beginPath(); c.moveTo(x0,y0); c.quadraticCurveTo((x0+x1)/2,(y0+y1)/2+sag,x1,y1); c.stroke();
+      c.strokeStyle='rgba(150,140,128,0.55)'; c.lineWidth=Math.max(1,w*0.28); c.beginPath(); c.moveTo(x0,y0-w*0.25); c.quadraticCurveTo((x0+x1)/2,(y0+y1)/2+sag-w*0.25,x1,y1-w*0.25); c.stroke(); };
+    for(let y=Y0+16;y<Y1-6;y+=27) rod(X0-2,y,X1+2,y+(R()-0.5)*2,2+R()*2,4.5);
+    [0.18,0.5,0.82].forEach(f=>{ const x=X0+PW*f; rod(x,Y0-4,x+(R()-0.5)*4,Y1+4,0,7); });
+    // 鏽斑
+    for(let i=0;i<120;i++){ const x=X0+R()*PW, y=Y0+16+Math.floor(R()*18)*27; c.fillStyle='rgba(150,75,30,'+(0.2+R()*0.25)+')'; c.beginPath(); c.ellipse(x,y,2+R()*5,1.5,0,0,7); c.fill(); }
+    // 外框粗鐵條
+    c.strokeStyle='rgba(0,0,0,0.6)'; c.lineWidth=12; c.strokeRect(X0+2,Y0+4,PW,PH);
+    c.strokeStyle='#2c2724'; c.lineWidth=10; c.strokeRect(X0,Y0,PW,PH);
+    c.strokeStyle='rgba(170,158,142,0.5)'; c.lineWidth=2; c.strokeRect(X0-3,Y0-3,PW+6,PH+6);
+    // 角落綁鐵絲
+    [[X0,Y0],[X1,Y0],[X0,Y1],[X1,Y1]].forEach(([x,y])=>{ c.strokeStyle='#8a8278'; c.lineWidth=1.5; for(let k=-3;k<=3;k++){ c.beginPath(); c.moveTo(x-7,y+k*2.2-3); c.lineTo(x+7,y+k*2.2+3); c.stroke(); } });
+    // 一圈石頭
+    const stone=(x,y,r)=>{ const sx=1+R()*0.35, a=R()*6.28;
+      c.save(); c.translate(x,y); c.rotate(a);
+      c.fillStyle='rgba(0,0,0,0.5)'; c.beginPath(); c.ellipse(3,5,r*sx,r,0,0,7); c.fill();
+      const v=78+R()*34|0; c.fillStyle=rad(-r*0.35,-r*0.4,r*1.6,[[0,'rgb('+(v+40)+','+(v+36)+','+(v+28)+')'],[0.5,'rgb('+v+','+(v-4)+','+(v-12)+')'],[1,'rgb('+(v-70)+','+(v-72)+','+(v-76)+')']]);
+      c.beginPath(); c.ellipse(0,0,r*sx,r,0,0,7); c.fill();
+      if(R()<0.45){ c.fillStyle='rgba(90,120,60,0.35)'; c.beginPath(); c.ellipse(-r*0.3,-r*0.5,r*0.5*sx,r*0.25,0,0,7); c.fill(); }
+      c.strokeStyle='rgba(0,0,0,0.35)'; c.lineWidth=1; c.beginPath(); c.moveTo(-r*0.3,-r*0.2); c.lineTo(r*0.2,r*0.3); c.stroke();
+      c.restore(); };
+    const per=2*(PW+PH), step=34; const ptAt=t=>{ t=((t%per)+per)%per; const o=21;
+      if(t<PW) return [X0+t,Y0-o]; t-=PW; if(t<PH) return [X1+o,Y0+t]; t-=PH; if(t<PW) return [X1-t,Y1+o]; t-=PW; return [X0-o,Y1-t]; };
+    for(let t=0;t<per;t+=step*(0.8+R()*0.4)){ const [x,y]=ptAt(t); stone(x+(R()-0.5)*4,y+(R()-0.5)*4,14+R()*7); }
+    [[X0-21,Y0-21],[X1+21,Y0-21],[X0-21,Y1+21],[X1+21,Y1+21]].forEach(([x,y])=>stone(x,y,18));
+  }
+  else {
+    // ── 地獄料理直播：黑色重型鑄鐵烤盤、斜紋、從中間裂開的發光裂縫、直播取景框 ──
+    rr(4,4,LW-8,LH-8,20); c.fillStyle=lin(0,0,0,LH,[[0,'#2a2328'],[0.5,'#17121a'],[1,'#0b080c']]); c.fill();
+    c.strokeStyle='rgba(255,255,255,0.18)'; c.lineWidth=2; rr(5,5,LW-10,LH-10,19); c.stroke();
+    noise(4,4,LW-8,LH-8,12);
+    c.fillStyle='#08060a'; c.fillRect(X0-8,Y0-8,PW+16,PH+16);
+    c.fillStyle=rad(CX,CY,PW*0.6,[[0,'#2d2530'],[0.6,'#1d181f'],[1,'#141016']]); c.fillRect(X0,Y0,PW,PH);
+    // 斜紋凸條
+    c.save(); c.beginPath(); c.rect(X0,Y0,PW,PH); c.clip();
+    for(let d=-PH;d<PW+PH;d+=30){ c.strokeStyle='rgba(0,0,0,0.55)'; c.lineWidth=7; c.beginPath(); c.moveTo(X0+d,Y0); c.lineTo(X0+d-PH,Y1); c.stroke();
+      c.strokeStyle='rgba(120,100,120,0.28)'; c.lineWidth=1.2; c.beginPath(); c.moveTo(X0+d+4,Y0); c.lineTo(X0+d+4-PH,Y1); c.stroke(); }
+    // 焦黑斑
+    for(let i=0;i<14;i++){ const x=X0+R()*PW, y=Y0+R()*PH, r=20+R()*50; c.fillStyle=rad(x,y,r,[[0,'rgba(0,0,0,0.5)'],[1,'rgba(0,0,0,0)']]); c.beginPath(); c.arc(x,y,r,0,7); c.fill(); }
+    // 中間微微發紫的熱
+    c.fillStyle=rad(CX,CY,170,[[0,'rgba(255,60,150,0.16)'],[0.6,'rgba(160,30,120,0.07)'],[1,'rgba(160,30,120,0)']]); c.fillRect(X0,Y0,PW,PH);
+    // 從中間往外裂的發光裂縫
+    const crack=(x,y,a,len,w,depth)=>{ const pts=[[x,y]]; let px=x,py=y;
+      for(let s=0;s<len;s+=10){ a+=(R()-0.5)*0.7; px+=Math.cos(a)*10; py+=Math.sin(a)*10; pts.push([px,py]);
+        if(depth<2&&R()<0.08) crack(px,py,a+(R()<0.5?-1:1)*(0.6+R()*0.6),len*0.4,w*0.6,depth+1); }
+      const path=()=>{ c.beginPath(); c.moveTo(pts[0][0],pts[0][1]); pts.forEach(p=>c.lineTo(p[0],p[1])); };
+      c.lineCap='round'; c.lineJoin='round';
+      c.shadowColor='rgba(255,40,140,0.6)'; c.shadowBlur=7; c.strokeStyle='rgba(200,30,110,0.3)'; c.lineWidth=w*2.2; path(); c.stroke();
+      c.shadowBlur=0; c.strokeStyle='rgba(240,110,180,0.45)'; c.lineWidth=w*0.8; path(); c.stroke();
+      c.strokeStyle='rgba(255,220,240,0.35)'; c.lineWidth=w*0.3; path(); c.stroke(); };
+    for(let k=0;k<7;k++){ const a=k/7*6.28+R()*0.4, r0=40+R()*30; crack(CX+Math.cos(a)*r0,CY+Math.sin(a)*r0,a,110+R()*150,1.6,0); }
+    c.restore();
+    noise(X0,Y0,PW,PH,9);
+    // 邊緣
+    c.lineWidth=3; c.strokeStyle='rgba(255,255,255,0.2)'; c.beginPath(); c.moveTo(X0,Y1); c.lineTo(X0,Y0); c.lineTo(X1,Y0); c.stroke();
+    c.strokeStyle='rgba(0,0,0,0.7)'; c.beginPath(); c.moveTo(X1,Y0); c.lineTo(X1,Y1); c.lineTo(X0,Y1); c.stroke();
+    // 六角螺栓
+    const hex=(x,y,r)=>{ c.fillStyle='rgba(0,0,0,0.6)'; c.beginPath(); for(let i=0;i<6;i++){ const a=i/6*6.28; c.lineTo(x+1.5+Math.cos(a)*r,y+2+Math.sin(a)*r); } c.fill();
+      c.fillStyle=rad(x-r*0.3,y-r*0.3,r*1.5,[[0,'#7a7480'],[1,'#2a262c']]); c.beginPath(); for(let i=0;i<6;i++){ const a=i/6*6.28; c.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r); } c.fill(); };
+    for(let i=1;i<8;i++){ hex(X0+PW*i/8,20,5.5); hex(X0+PW*i/8,LH-20,5.5); }
+    for(let i=1;i<5;i++){ hex(20,Y0+PH*i/5,5.5); hex(LW-20,Y0+PH*i/5,5.5); }
+    // 直播取景框四個角 + ● LIVE
+    c.strokeStyle='rgba(255,255,255,0.85)'; c.lineWidth=3; const L=26, o=12;
+    [[o,o,1,1],[LW-o,o,-1,1],[o,LH-o,1,-1],[LW-o,LH-o,-1,-1]].forEach(([x,y,sx,sy])=>{ c.beginPath(); c.moveTo(x,y+sy*L); c.lineTo(x,y); c.lineTo(x+sx*L,y); c.stroke(); });
+    c.fillStyle='#ff2a4a'; c.beginPath(); c.arc(52,LH-21,5,0,7); c.fill();
+    c.fillStyle='rgba(255,255,255,0.9)'; c.font='bold 13px sans-serif'; c.textBaseline='middle'; c.fillText('LIVE',62,LH-20.5);
+  }
+  tex.refresh();
+  return key;
+}
 const BBQ_SHAKE_LV=[['mid','📳 畫面震動：中',1],['strong','📳 畫面震動：強',1.5],['off','📴 畫面震動：關',0]];
 function bbqShakeLv(){ try{ return localStorage.getItem('bbq_shake')||'mid'; }catch(e){ return 'mid'; } }
 function bbqShakeMul(){ const l=BBQ_SHAKE_LV.find(x=>x[0]===bbqShakeLv()); return l?l[2]:1; }
@@ -2330,6 +2475,11 @@ class GameScene extends Phaser.Scene {
     if(this.levelData.key==='lv1'&&this.textures.exists('grill_lv1')){
       const sx=G.w/1414, sy=G.h/920;
       this._grillImg=this.add.image(G.x-64*sx,G.y-56*sy,'grill_lv1').setOrigin(0).setDisplaySize(1536*sx,1024*sy).setDepth(-1);
+    } else if(['lv2','lv3','lv4'].includes(this.levelData.key)){
+      // 第 2–4 關：程式畫的烤盤圖（canvas，只畫一次）
+      try{ const tk=bbqMakeGrillTex(this,this.levelData.key);
+        if(tk){ const M=GRILL_TEX_M; this._grillImg=this.add.image(G.x-M,G.y-M,tk).setOrigin(0).setDisplaySize(G.w+2*M,G.h+2*M).setDepth(-1); }
+      }catch(err){ console.error('[grilltex]',err); this._grillImg=null; }
     }
     this.drawGrill();
 
@@ -2467,7 +2617,7 @@ class GameScene extends Phaser.Scene {
     const lk=this.levelData?this.levelData.key:'lv1';
     const g=this.grillLayer; g.clear();
 
-    if(lk==='lv1'&&this._grillImg){
+    if(this._grillImg&&this._grillImg.scene){
       // 家庭烤肉架（圖片版）：只把烤盤外面壓暗，烤盤本身用圖
       const im=this._grillImg, x0=im.x, y0=im.y, x1=im.x+im.displayWidth, y1=im.y+im.displayHeight;
       g.fillStyle(0x0e0904,0.5); g.fillRect(0,0,W,y0); g.fillRect(0,y1,W,H-y1); g.fillRect(0,y0,x0,y1-y0); g.fillRect(x1,y0,W-x1,y1-y0);
