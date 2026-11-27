@@ -6,6 +6,8 @@
 - Scene 順序：BootScene → SelectScene → TeamScene（賽前設定）→ GameScene
 - 大廳 UI：`#lobby-overlay`（HTML + CSS，z-index: 9999，蓋在 Phaser canvas 上方）
   - 等待室 v2（夜市炭烤攤風）：CSS 在 `/* ══ 等待室 v2` 那段；字型 Google Fonts Huninn（中文）+ Bungee（房號、數字）；角色圖直接用 `IMG['char_'+key]`（`Lobby._charImg`）；房號是號碼牌 `#wr-ticket`，複製時蓋「已複製」章、不改房號文字；玩家用座位卡顯示，空位寫「AI 補上」；高度 ≤800px 有緊湊版。背景火星 `.lobby-embers`。
+- **首頁 v3（美式後院 BBQ，2026-11）**：背景是 AI 生圖（`draw` 技能 gpt-image-2 → webp base64），存在全域 `TITLE_BG`（不放 `IMG`，不進 Phaser）。`#lobby-overlay::before` 用 `--title-bg`；首頁時 overlay 有 `ld-on`（亮一點），其他畫面變暗。CSS 在 `/* ══ 首頁 v3`（`.ld-*`）。Logo「烤肉求生」+ BBQ SURVIVAL 緞帶、大按鈕（單人 / 開房間 / 加入）、底部角色排排站（`Lobby._initTitle()` 從 CHARS 產生）、規則收進「📖 怎麼玩」彈窗（`Lobby.toggleHow`，Esc 關）。
+- **選角 v3**：背景 `IMG.sel_bg`（美式燒烤小屋）；左邊 5×2 角色卡（`card.draw(0/1/2)`）+ 4 張烤盤卡 + 專屬機制一行（`mechTxt`）；右邊介紹看板（大頭像 `pBig`、數值條、S / D 說明、技能/大絕預覽：`prevG`/`ultPrevG` 用 setPosition 搬位置）。方向鍵直接聽 window（最上面的全域 keydown 會 preventDefault 方向鍵，Phaser 收不到 — 以前選角方向鍵一直沒作用）。測試 `uishot.js`、`selflow.js`、`keytest.js`。
 - 連線伺服器：`server.js`（socket.io，部署在 Render Singapore `https://bbq-sg.onrender.com`，舊 Oregon 服務可刪，push 到 master 會自動重新部署；免費方案會休眠）
 - 發布：GitHub Pages（https://kshwin.github.io/bbq-survival-game/），push 到 master 約 1 分鐘生效
 
