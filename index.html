@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <title>烤肉求生</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Huninn&display=swap" rel="stylesheet">
   <style>html,body{overflow:hidden;margin:0;padding:0;} #game{width:100vw;height:100vh;}</style>
   <script>
     const GKEYS={};
@@ -197,18 +199,164 @@ const IMG = {
 .team-bar-btn.active-red  { border-color: #ff4444; background: rgba(255,68,68,0.22); color: #ff9988; font-weight:700; }
 .team-bar-btn.active-blue { border-color: #4488ff; background: rgba(68,136,255,0.2); color: #88aaff; font-weight:700; }
 @media (max-width: 640px) { .wr-waiting-layout { grid-template-columns: 1fr; } .lobby-card-wide { padding: 16px !important; } }
+
+/* ══ 等待室 v2：夜市炭烤攤 ══════════════════════════ */
+#lobby-overlay {
+  --ember:#ff6a1a; --flame:#ffb43a; --cream:#fff1d6; --ash:#a07a5c;
+  background:
+    radial-gradient(ellipse 90% 55% at 50% 110%, rgba(255,90,20,0.38), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 15% -10%, rgba(255,150,60,0.10), transparent 70%),
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.22) 0 3px, transparent 3px 38px),
+    linear-gradient(180deg, #1c0700 0%, #2a0a00 55%, #120300 100%);
+}
+.lobby-embers { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+.lobby-embers i { position:absolute; bottom:-10px; width:4px; height:4px; border-radius:50%;
+  background:#ffb43a; box-shadow:0 0 8px 2px rgba(255,120,30,0.8); opacity:0; animation:emberUp linear infinite; }
+@keyframes emberUp { 0%{transform:translate(0,0) scale(1);opacity:0} 10%{opacity:0.9} 80%{opacity:0.5} 100%{transform:translate(var(--dx,20px),-92vh) scale(0.3);opacity:0} }
+.lobby-card { position:relative; z-index:1; }
+
+#screen-waiting {
+  font-family:'Huninn','Microsoft JhengHei','Noto Sans TC',sans-serif;
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 0%, rgba(255,120,40,0.10), transparent 70%),
+    linear-gradient(180deg, #1d0e07 0%, #140804 100%);
+  border:1px solid rgba(255,130,50,0.38); border-radius:20px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.6), 0 30px 80px rgba(0,0,0,0.65), 0 0 60px rgba(255,90,20,0.18), inset 0 1px 0 rgba(255,200,140,0.08);
+  max-height:96vh; overflow-y:auto; overflow-x:hidden;
+  animation: wrIn .45s cubic-bezier(.2,.8,.2,1) both;
+}
+#screen-waiting::before { content:''; position:absolute; left:24px; right:24px; top:-1px; height:2px; border-radius:2px;
+  background:linear-gradient(90deg, transparent, var(--ember), var(--flame), var(--ember), transparent); box-shadow:0 0 14px rgba(255,120,30,0.8); }
+@keyframes wrIn { from{opacity:0; transform:translateY(14px) scale(.985)} to{opacity:1; transform:none} }
+
+.wr-head { display:flex; align-items:center; justify-content:space-between; gap:18px; margin:2px 0 26px; }
+.wr-kicker { font-size:.72rem; letter-spacing:.32em; color:var(--ash); margin-bottom:2px; }
+.wr-title { font-size:2rem; line-height:1.1; color:var(--cream); text-shadow:0 2px 0 #000, 0 0 22px rgba(255,120,30,0.45); }
+.wr-title b { color:var(--flame); font-weight:inherit; }
+
+/* 號碼牌 */
+.wr-ticket { position:relative; display:flex; align-items:center; gap:12px; cursor:pointer; user-select:none; margin-right:8px;
+  padding:8px 20px 8px 18px; background:linear-gradient(180deg,#fff6e2,#f6dfb4); color:#3a1606; border-radius:6px;
+  transform:rotate(-2deg); box-shadow:0 5px 0 #9a5a24, 0 10px 24px rgba(0,0,0,0.5); transition:transform .18s, box-shadow .18s; }
+.wr-ticket::before, .wr-ticket > .wr-notch { content:''; position:absolute; top:50%; left:-7px; width:14px; height:14px; margin-top:-7px; border-radius:50%; background:#1a0c06; }
+.wr-ticket:hover { transform:rotate(-1deg) translateY(-2px); }
+.wr-ticket:active { transform:rotate(-1deg) translateY(3px); box-shadow:0 2px 0 #9a5a24, 0 6px 14px rgba(0,0,0,0.5); }
+.wr-ticket-lbl { writing-mode:vertical-rl; font-size:.72rem; letter-spacing:.2em; padding-right:10px; border-right:2px dashed rgba(90,40,10,0.35); color:#8a4a1c; }
+#screen-waiting .wr-code { all:unset; font-family:'Bungee','Consolas',monospace; font-size:1.75rem; letter-spacing:.14em; color:#c2380a;
+  min-width:7.2em; text-align:center; text-shadow:0 1px 0 rgba(255,255,255,0.6); }
+.wr-ticket-hint { position:absolute; left:0; right:0; bottom:-26px; text-align:center; font-size:.7rem; color:var(--ash); transform:rotate(2deg); transition:color .2s; white-space:nowrap; }
+.wr-ticket.copied .wr-ticket-hint { color:#7dff9a; }
+.wr-ticket.copied::after { content:'已複製'; position:absolute; right:-10px; top:-12px; padding:2px 8px; border:2px solid #d22; color:#d22; border-radius:4px;
+  font-size:.8rem; transform:rotate(12deg); background:rgba(255,246,226,0.92); animation:stamp .25s cubic-bezier(.3,1.6,.5,1) both; }
+@keyframes stamp { from{transform:rotate(12deg) scale(2.2); opacity:0} to{transform:rotate(12deg) scale(1); opacity:1} }
+
+#screen-waiting .lobby-label { font-size:.74rem; letter-spacing:.22em; color:var(--ash); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+#screen-waiting .lobby-label::after { content:''; flex:1; height:1px; background:linear-gradient(90deg, rgba(255,130,50,0.3), transparent); }
+#screen-waiting .wr-waiting-layout { grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:16px; }
+
+/* 角色格：小烤架 */
+#screen-waiting .wr-char-grid { gap:7px; }
+#screen-waiting .wr-char-cell { position:relative; padding:8px 2px 6px; border-radius:12px; border:1px solid rgba(255,140,60,0.12);
+  background: radial-gradient(circle at 50% 40%, rgba(255,140,60,0.10), transparent 62%), repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0 2px, transparent 2px 9px), #1b0d06;
+  color:#d9bf98; font-size:.74rem; transition: transform .15s, border-color .15s, box-shadow .15s, background .15s; }
+.wr-char-cell img { width:52px; height:52px; object-fit:contain; margin-bottom:3px; filter: drop-shadow(0 4px 3px rgba(0,0,0,0.6)); transition: transform .2s cubic-bezier(.3,1.6,.5,1); pointer-events:none; }
+#screen-waiting .wr-char-cell:hover { transform:translateY(-2px); border-color:rgba(255,140,60,0.45); background-color:#241108; }
+.wr-char-cell:hover img { transform: scale(1.08) rotate(-4deg); }
+#screen-waiting .wr-char-cell.selected { border-color:var(--ember); color:var(--cream);
+  background: radial-gradient(circle at 50% 110%, rgba(255,110,30,0.55), transparent 65%), repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0 2px, transparent 2px 9px), #2a1006;
+  box-shadow: 0 0 0 1px rgba(255,106,26,0.6), 0 0 18px rgba(255,106,26,0.45), inset 0 -10px 18px rgba(255,90,20,0.25); }
+.wr-char-cell.selected img { animation: hop .9s ease-in-out infinite; }
+@keyframes hop { 0%,100%{transform:translateY(0) scale(1.06)} 50%{transform:translateY(-4px) scale(1.06,1.1)} }
+
+/* 角色介紹 */
+#screen-waiting .wr-char-detail { position:relative; display:grid; grid-template-columns: 104px 1fr; gap:14px; align-items:start;
+  background: linear-gradient(160deg, rgba(255,140,60,0.07), rgba(0,0,0,0.25)); border:1px solid rgba(255,140,60,0.18); border-radius:14px; padding:14px; margin-bottom:16px; min-height:0; }
+.wr-portrait { position:relative; width:104px; height:104px; border-radius:50%; display:grid; place-items:center;
+  background: radial-gradient(circle at 50% 60%, color-mix(in srgb, var(--cc) 45%, transparent), transparent 68%), radial-gradient(circle, #2a1308 55%, #160904 56%, #160904 60%, rgba(255,130,50,0.35) 61%, transparent 63%); }
+.wr-portrait img { width:92px; height:92px; object-fit:contain; filter: drop-shadow(0 6px 6px rgba(0,0,0,0.6)); animation: wrPop .35s cubic-bezier(.3,1.6,.5,1) both; }
+@keyframes wrPop { from{transform:scale(.6) rotate(-10deg); opacity:0} to{transform:none; opacity:1} }
+.wr-dname { font-size:1.45rem; color:var(--cream); line-height:1.1; margin-bottom:8px; display:flex; align-items:baseline; gap:8px; }
+.wr-dname small { font-size:.7rem; color:var(--ash); letter-spacing:.15em; }
+.wr-move { display:grid; grid-template-columns:auto 1fr; gap:2px 9px; margin-bottom:8px; }
+.wr-move kbd { grid-row: span 2; align-self:start; min-width:24px; height:24px; display:grid; place-items:center; border-radius:6px; font-family:'Bungee',monospace; font-size:.8rem;
+  background:linear-gradient(180deg,#ffe7b8,#f0c27a); color:#3a1606; box-shadow:0 3px 0 #8a4a1c; }
+.wr-move kbd.ult { background:linear-gradient(180deg,#ffd166,#ff7a2a); box-shadow:0 3px 0 #8a2a0a, 0 0 12px rgba(255,120,30,0.55); }
+.wr-move b { font-weight:normal; font-size:.86rem; color:var(--flame); }
+.wr-move span { font-size:.76rem; color:#c9a882; line-height:1.4; }
+.wr-bars { grid-column: 1 / -1; display:grid; grid-template-columns: repeat(3,1fr); gap:10px; padding-top:10px; border-top:1px dashed rgba(255,140,60,0.18); }
+.wr-bar { font-size:.68rem; color:var(--ash); }
+.wr-bar div { display:grid; grid-template-columns:repeat(3,1fr); gap:3px; margin-top:4px; }
+.wr-bar i { height:6px; border-radius:3px; background:rgba(255,255,255,0.08); }
+.wr-bar i.on { background:linear-gradient(90deg,var(--flame),var(--ember)); box-shadow:0 0 6px rgba(255,120,30,0.5); }
+
+/* 座位 */
+.wr-seats { display:grid; grid-template-columns:repeat(2,1fr); gap:7px; }
+.wr-seat { display:flex; align-items:center; gap:8px; padding:6px 10px 6px 6px; border-radius:12px; min-height:46px; box-sizing:border-box;
+  background:rgba(255,130,50,0.08); border:1px solid rgba(255,140,60,0.25); animation: wrPop .3s both; }
+.wr-seat img { width:34px; height:34px; object-fit:contain; flex-shrink:0; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.6)); }
+.wr-seat .nm { font-size:.88rem; color:var(--cream); line-height:1.15; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.wr-seat .ch { font-size:.68rem; color:var(--ash); }
+.wr-seat .tm { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.wr-seat.me { border-color:var(--ember); box-shadow: inset 0 0 0 1px rgba(255,106,26,0.35); }
+.wr-seat.empty { background:transparent; border:1px dashed rgba(255,140,60,0.18); color:rgba(200,160,120,0.45); font-size:.76rem; justify-content:center; animation:none; }
+#wr-seat-count { order:2; color:var(--flame); letter-spacing:0; }
+
+/* 設定 */
+#screen-waiting .wr-settings { border-top:none; padding-top:0; transition:opacity .2s; }
+.wr-set-grid { display:grid; grid-template-columns: repeat(3,1fr); gap:10px; }
+.wr-set { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-radius:12px; background:rgba(0,0,0,0.28); border:1px solid rgba(255,140,60,0.14); }
+.wr-set > span { font-size:.82rem; color:#e6cba4; line-height:1.25; }
+.wr-set > span small { display:block; font-size:.66rem; color:var(--ash); }
+#screen-waiting .wr-toggle { font-family:inherit; border-radius:999px; padding:5px 14px; border:1px solid rgba(255,140,60,0.35); background:#241108; color:var(--cream); font-size:.82rem; transition:all .15s; }
+#screen-waiting .wr-toggle:hover { border-color:var(--ember); }
+#screen-waiting .wr-toggle.on { background:linear-gradient(180deg,#ff8a3a,#e0500e); border-color:#ffb070; color:#fff; box-shadow:0 0 12px rgba(255,106,26,0.45); }
+#screen-waiting .wr-step { width:28px; height:28px; padding:0; display:grid; place-items:center; font-size:1rem; }
+#screen-waiting .wr-setting-val { min-width:22px; text-align:center; font-family:'Bungee',monospace; font-size:1.05rem; color:var(--flame); }
+.wr-stepper { display:flex; align-items:center; gap:6px; }
+#screen-waiting .wr-switch { position:relative; width:52px; height:28px; padding:0; font-size:0; flex-shrink:0; }
+#screen-waiting .wr-switch::before { content:''; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#cdb79a; transition:transform .2s cubic-bezier(.3,1.6,.5,1), background .2s; }
+#screen-waiting .wr-switch.on::before { transform:translateX(24px); background:#fff; }
+
+/* 開烤按鈕 */
+#screen-waiting .wr-go { position:relative; overflow:hidden; margin:18px 0 0; padding:13px; border:none; border-radius:14px; font-family:inherit; font-size:1.35rem; letter-spacing:.12em; color:#fff;
+  background:linear-gradient(180deg,#ff9a3c 0%,#ff5a14 55%,#d63a06 100%); box-shadow:0 6px 0 #7a2004, 0 12px 30px rgba(255,80,10,0.45), inset 0 1px 0 rgba(255,255,255,0.4);
+  text-shadow:0 2px 0 rgba(120,30,0,0.6); transition: transform .12s, box-shadow .12s, filter .15s; }
+#screen-waiting .wr-go:hover { filter:brightness(1.08); transform:translateY(-1px); }
+#screen-waiting .wr-go:active { transform:translateY(4px); box-shadow:0 2px 0 #7a2004, 0 6px 16px rgba(255,80,10,0.4), inset 0 1px 0 rgba(255,255,255,0.4); }
+#screen-waiting .wr-go::after { content:''; position:absolute; top:0; bottom:0; width:40%; left:-50%; background:linear-gradient(100deg, transparent, rgba(255,255,255,0.35), transparent); animation: shine 2.8s ease-in-out infinite; }
+@keyframes shine { 0%,55%{left:-50%} 100%{left:130%} }
+.wr-go small { display:block; font-size:.7rem; letter-spacing:.2em; opacity:.85; margin-top:2px; }
+#wr-waiting-msg { margin-top:18px; padding:14px; border-radius:14px; border:1px dashed rgba(255,140,60,0.3); color:#d9bf98; font-size:.95rem; }
+#wr-waiting-msg .dots i { display:inline-block; font-style:normal; animation: dotB 1.2s infinite; } #wr-waiting-msg .dots i:nth-child(2){animation-delay:.15s} #wr-waiting-msg .dots i:nth-child(3){animation-delay:.3s}
+@keyframes dotB { 0%,60%,100%{transform:none; opacity:.4} 30%{transform:translateY(-4px); opacity:1} }
+#screen-waiting .wr-team-bar { border-top:none; padding:0 0 12px; }
+/* 右欄：角色大卡（直式） */
+#screen-waiting .wr-char-detail { flex:1; margin-bottom:0; grid-template-columns:1fr; justify-items:center; text-align:center; align-content:center; gap:10px; padding:16px 18px; }
+#screen-waiting .wr-char-detail > div:nth-child(2) { width:100%; }
+.wr-char-detail .wr-portrait { width:128px; height:128px; }
+.wr-char-detail .wr-portrait img { width:116px; height:116px; }
+#screen-waiting .wr-dname { justify-content:center; font-size:1.6rem; }
+#screen-waiting .wr-move { text-align:left; padding:8px 10px; border-radius:10px; background:rgba(0,0,0,0.22); margin-bottom:6px; }
+#screen-waiting .wr-bars { width:100%; text-align:left; }
+@media (max-height: 800px) { #screen-waiting.lobby-card-wide { padding:16px 24px !important; } .wr-head { margin-bottom:20px; } .wr-title { font-size:1.7rem; }
+  .wr-char-detail .wr-portrait { width:96px; height:96px; } .wr-char-detail .wr-portrait img { width:86px; height:86px; } #screen-waiting .wr-char-detail { gap:6px; padding:12px 16px; }
+  #screen-waiting .wr-char-cell { padding:5px 2px 4px; } .wr-char-cell img { width:44px; height:44px; } .wr-seat { min-height:40px; padding-top:4px; padding-bottom:4px; } .wr-seat img { width:30px; height:30px; }
+  #screen-waiting .wr-waiting-layout { margin-bottom:12px; } .wr-set { padding:7px 12px; } #screen-waiting .wr-go { margin-top:14px; padding:10px; font-size:1.2rem; } }
+@media (max-width: 720px) { .wr-set-grid { grid-template-columns:1fr; } #screen-waiting .wr-char-detail { grid-template-columns:72px 1fr; } .wr-portrait,.wr-portrait img{width:72px;height:72px} .wr-head{flex-wrap:wrap} }
+@media (prefers-reduced-motion: reduce) { #lobby-overlay *, #lobby-overlay *::before, #lobby-overlay *::after { animation:none !important; } }
   </style>
 </head>
 <body>
 <!-- ── Lobby Overlay ─────────────────────────────── -->
 <div id="lobby-overlay">
+  <div class="lobby-embers"><i style="left:6%;--dx:30px;animation-duration:9s;animation-delay:0s"></i><i style="left:14%;--dx:-20px;animation-duration:11s;animation-delay:3s"></i><i style="left:23%;--dx:40px;animation-duration:8s;animation-delay:5s"></i><i style="left:31%;--dx:-30px;animation-duration:12s;animation-delay:1s"></i><i style="left:42%;--dx:20px;animation-duration:10s;animation-delay:6s"></i><i style="left:51%;--dx:-40px;animation-duration:9s;animation-delay:2s"></i><i style="left:60%;--dx:30px;animation-duration:13s;animation-delay:4s"></i><i style="left:68%;--dx:-20px;animation-duration:8s;animation-delay:7s"></i><i style="left:77%;--dx:40px;animation-duration:11s;animation-delay:1.5s"></i><i style="left:86%;--dx:-30px;animation-duration:10s;animation-delay:5.5s"></i><i style="left:94%;--dx:20px;animation-duration:12s;animation-delay:3.5s"></i><i style="left:37%;--dx:10px;animation-duration:14s;animation-delay:8s"></i></div>
   <!-- Screen: Landing -->
   <div id="screen-landing" class="lobby-card">
     <div class="lobby-title">🥩 烤肉求生</div>
     <div class="lobby-tagline">你是烤盤上的食材——把別人推下去，別讓自己被烤熟！</div>
     <div class="lobby-chips"><span>💥 互推大亂鬥</span><span>🔥 求生</span><span>👥 1–8 人</span><span>⏱ 一局約 1 分鐘</span></div>
     <div class="lobby-rules">
-      <div><b>🎯 目標</b>拿最高分！撞中 +1、把人推出局 +3、活到時間結束 +3</div>
+      <div><b>🎯 目標</b>拿最高分！把人往外撞 +0.5、推出局 +3、復仇 +2、活到最後 +3（每人 3 條命）</div>
       <div><b>💥 互推</b>按 <kbd>A</kbd> 衝撞，把對手撞出烤盤邊緣</div>
       <div><b>⛔ 出局</b>掉出烤盤（被推出去、踩進破洞）或熟度到 100%</div>
       <div><b>🌡 熟度</b>站在火裡、待太久、被別人撞都會變熟；撞別人、推掉對手、站進 ❄ 冷卻圈可以降溫</div>
@@ -252,13 +400,13 @@ const IMG = {
   <!-- Screen: Waiting Room -->
   <div id="screen-waiting" class="lobby-card lobby-card-wide" style="display:none">
     <!-- Header -->
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:4px">
-      <div class="lobby-title" style="margin-bottom:0;font-size:1.4rem">等待室</div>
-      <div class="wr-code" id="wr-room-code" title="點擊複製" onclick="Lobby.copyCode()"
-        style="font-size:1.4rem;padding:5px 14px;margin-bottom:0">------</div>
-      <span style="font-size:0.76rem;color:#664422">點擊複製</span>
+    <div class="wr-head">
+      <div><div class="wr-kicker">炭火已點・等人入座</div><div class="wr-title">等待<b>室</b></div></div>
+      <div class="wr-ticket" id="wr-ticket" title="點擊複製房號" onclick="Lobby.copyCode()">
+        <span class="wr-ticket-lbl">房號</span><span class="wr-code" id="wr-room-code">------</span>
+        <span class="wr-ticket-hint" id="wr-copy-hint">點一下複製，傳給朋友</span>
+      </div>
     </div>
-    <div style="margin-bottom:14px"></div>
 
     <!-- Two-column layout: char grid | detail + players -->
     <div class="wr-waiting-layout">
@@ -266,14 +414,15 @@ const IMG = {
       <div>
         <label class="lobby-label">選擇角色</label>
         <div class="wr-char-grid" id="wr-char-grid"></div>
+        <label class="lobby-label" style="margin-top:16px">入座玩家 <span id="wr-seat-count"></span></label>
+        <div class="wr-seats" id="wr-player-list"></div>
       </div>
-      <!-- Right: char detail + player list -->
-      <div>
+      <!-- Right: char detail -->
+      <div style="display:flex;flex-direction:column">
+        <label class="lobby-label">我的角色</label>
         <div class="wr-char-detail" id="wr-char-detail">
           <div style="color:#664422;font-size:0.85rem;line-height:1.6">點選左側角色<br>查看技能與大絕</div>
         </div>
-        <label class="lobby-label">玩家列表</label>
-        <div class="wr-players" id="wr-player-list"></div>
       </div>
     </div>
 
@@ -288,26 +437,22 @@ const IMG = {
 
     <!-- Settings (host only, dims for non-host) -->
     <div class="wr-settings" id="wr-settings">
-      <label class="lobby-label">🔧 遊戲設定</label>
-      <div class="wr-setting-row">
-        <span class="wr-setting-label">遊戲模式</span>
-        <button class="wr-toggle" id="wr-mode-btn" onclick="Lobby.toggleMode()">個人制</button>
-      </div>
-      <div class="wr-setting-row">
-        <span class="wr-setting-label">大絕招（一開始就可用）</span>
-        <button class="wr-toggle" id="wr-ult-btn" onclick="Lobby.toggleUlt()">關</button>
-      </div>
-      <div class="wr-setting-row">
-        <span class="wr-setting-label">人數上限（AI 補足空位）</span>
-        <button class="wr-toggle" onclick="Lobby.adjMax(-1)">−</button>
-        <span class="wr-setting-val" id="wr-max-val">4</span>
-        <button class="wr-toggle" onclick="Lobby.adjMax(+1)">+</button>
+      <label class="lobby-label">遊戲設定</label>
+      <div class="wr-set-grid">
+        <div class="wr-set"><span>遊戲模式</span>
+          <button class="wr-toggle" id="wr-mode-btn" onclick="Lobby.toggleMode()">個人制</button></div>
+        <div class="wr-set"><span>開局送大絕<small>一開始就能放</small></span>
+          <button class="wr-toggle wr-switch" id="wr-ult-btn" onclick="Lobby.toggleUlt()">關</button></div>
+        <div class="wr-set"><span>人數<small>空位 AI 補上</small></span>
+          <div class="wr-stepper"><button class="wr-toggle wr-step" onclick="Lobby.adjMax(-1)">−</button>
+          <span class="wr-setting-val" id="wr-max-val">4</span>
+          <button class="wr-toggle wr-step" onclick="Lobby.adjMax(+1)">+</button></div></div>
       </div>
     </div>
 
     <div class="lobby-error" id="wr-error"></div>
-    <button class="lobby-btn" id="wr-start-btn" onclick="Lobby.startGame()" style="display:none">▶ 開始遊戲（主機）</button>
-    <div id="wr-waiting-msg" style="text-align:center;color:#886644;font-size:0.9rem">等待主機開始遊戲…</div>
+    <button class="lobby-btn wr-go" id="wr-start-btn" onclick="Lobby.startGame()" style="display:none">🔥 開烤！<small>你是主機・按下就開始</small></button>
+    <div id="wr-waiting-msg" style="text-align:center">等主機開烤<span class="dots"><i>.</i><i>.</i><i>.</i></span></div>
   </div>
 </div>
 <!-- ── / Lobby Overlay ─────────────────────────────── -->
@@ -7789,6 +7934,7 @@ const Lobby = {
   },
 
   _hexCSS(hex) { return '#' + ('000000' + (hex||0xffcc44).toString(16)).slice(-6); },
+  _charImg(key) { return (typeof IMG !== 'undefined' && IMG['char_' + key]) || ''; },
 
   _buildCharGrid() {
     const grid = document.getElementById('wr-char-grid');
@@ -7799,7 +7945,8 @@ const Lobby = {
       cell.className = 'wr-char-cell' + (c.key === this._myChar ? ' selected' : '');
       cell.dataset.key = c.key;
       const col = this._hexCSS(c.color);
-      cell.innerHTML = `<div class="char-dot" style="background:${col}"></div><span>${c.name}</span>`;
+      const src = this._charImg(c.key);
+      cell.innerHTML = (src ? `<img src="${src}" alt="">` : `<div class="char-dot" style="background:${col}"></div>`) + `<span>${c.name}</span>`;
       cell.onclick = () => {
         grid.querySelectorAll('.wr-char-cell').forEach(b => b.classList.remove('selected'));
         cell.classList.add('selected');
@@ -7819,22 +7966,20 @@ const Lobby = {
     const c = this._getChars().find(ch => ch.key === charKey);
     if (!c) return;
     const col = this._hexCSS(c.color);
-    const statsHTML = Object.entries(c.stats || {}).map(([k,v]) =>
-      `<div class="wr-stat"><span class="stat-label">${k}</span><span class="stat-stars">${v}</span></div>`
-    ).join('');
+    const statsHTML = Object.entries(c.stats || {}).map(([k,v]) => {
+      const n = (String(v).match(/★/g) || []).length;
+      return `<div class="wr-bar">${k}<div>${[0,1,2].map(j => `<i class="${j < n ? 'on' : ''}"></i>`).join('')}</div></div>`;
+    }).join('');
+    const src = this._charImg(c.key);
+    panel.style.setProperty('--cc', col);
     panel.innerHTML = `
-      <div class="wr-detail-name">
-        <div class="wr-detail-dot" style="background:${col}"></div>${c.name}
+      <div class="wr-portrait">${src ? `<img src="${src}" alt="">` : ''}</div>
+      <div>
+        <div class="wr-dname">${c.name}</div>
+        <div class="wr-move"><kbd>S</kbd><b>${c.ability}</b><span>${c.abilityDesc}</span></div>
+        <div class="wr-move"><kbd class="ult">D</kbd><b>大絕・${this._UN[charKey] || '—'}</b><span>${this._UD[charKey] || '—'}</span></div>
       </div>
-      <div class="wr-detail-section">
-        <div class="wr-detail-skill-name">❆ S 技能：${c.ability}</div>
-        <div class="wr-detail-skill-desc">${c.abilityDesc}</div>
-      </div>
-      <div class="wr-detail-section">
-        <div class="wr-detail-ult-name">✦ D 大絕：${this._UN[charKey] || '—'}</div>
-        <div class="wr-detail-skill-desc">${this._UD[charKey] || '—'}</div>
-      </div>
-      <div class="wr-detail-stats">${statsHTML}</div>`;
+      <div class="wr-bars">${statsHTML}</div>`;
   },
 
   _connectSocket(cb) {
@@ -7907,11 +8052,19 @@ const Lobby = {
     const el = document.getElementById('wr-player-list');
     if (!el) return;
     const isTeam = this._settings.gameMode === 'team';
-    el.innerHTML = players.map(p => {
-      const dot = isTeam ? `<span class="team-dot ${p.team||'red'}"></span>` : '';
+    const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+    const myId = this._socket && this._socket.id;
+    const max = Math.max(players.length, (this._settings && this._settings.maxPlayers) || players.length);
+    let html = players.map(p => {
+      const dot = isTeam ? `<span class="tm" style="background:${p.team === 'blue' ? '#4488ff' : '#ff4444'}"></span>` : '';
       const name = this._getChars().find(c => c.key === p.charKey)?.name || p.charKey || '';
-      return `<div class="wr-player">${dot}<span>${p.isHost?'👑':''}${p.nickname}</span><span style="font-size:0.75rem;color:#886644">${name}</span></div>`;
+      const src = this._charImg(p.charKey);
+      const me = myId && p.id === myId;
+      return `<div class="wr-seat${me ? ' me' : ''}">${src ? `<img src="${src}" alt="">` : ''}<div style="min-width:0;flex:1"><div class="nm">${p.isHost ? '👑 ' : ''}${esc(p.nickname)}</div><div class="ch">${esc(name)}${me ? '・你' : ''}</div></div>${dot}</div>`;
     }).join('');
+    for (let k = players.length; k < max; k++) html += `<div class="wr-seat empty">空位・AI 補上</div>`;
+    el.innerHTML = html;
+    const cnt = document.getElementById('wr-seat-count'); if (cnt) cnt.textContent = players.length + ' / ' + max;
   },
 
   _renderSettings() {
@@ -7955,6 +8108,7 @@ const Lobby = {
     const val = Math.max(1, Math.min(8, this._settings.maxPlayers + delta));
     this._settings.maxPlayers = val; window.MP.settings.maxPlayers = val;
     document.getElementById('wr-max-val').textContent = val;
+    this._updatePlayerList(window.MP.players || []);
     this._socket.emit('room_settings', this._settings);
   },
 
@@ -7982,12 +8136,11 @@ const Lobby = {
   },
 
   copyCode() {
-    navigator.clipboard.writeText(this._roomCode).then(() => {
-      const el = document.getElementById('wr-room-code');
-      const orig = el.textContent;
-      el.textContent = '已複製！';
-      setTimeout(() => { el.textContent = orig; }, 1200);
-    });
+    // 不改房號文字（以前會變「已複製！」→ 框變寬、連點兩下房號就不見了）：改成蓋一個「已複製」章
+    const t = document.getElementById('wr-ticket'), h = document.getElementById('wr-copy-hint');
+    const done = () => { if (!t) return; t.classList.remove('copied'); void t.offsetWidth; t.classList.add('copied'); if (h) h.textContent = '✓ 已複製，貼給朋友就能加入';
+      clearTimeout(this._copyT); this._copyT = setTimeout(() => { t.classList.remove('copied'); if (h) h.textContent = '點一下複製，傳給朋友'; }, 1600); };
+    if (navigator.clipboard) navigator.clipboard.writeText(this._roomCode).then(done, done); else done();
   },
 
   startGame() {
