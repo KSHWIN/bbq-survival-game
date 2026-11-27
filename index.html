@@ -807,6 +807,8 @@ const LEVELS = [
 ];
 
 var _gPad=0, _gCore=0; // 外圈剝落的寬度 / 中間燒穿的洞半徑（GameScene 設定）：掉出去的判定跟著變
+const BBQ_SKILL_CD={pork:6,beef:6,mushroom:5,corn:6,wing:6,shrimp:5,tofu:7,bacon:6,pepper:7,saury:5};
+const BBQ_SKILL_NAME={pork:'🛢 滑油衝刺',beef:'🐮 堅實裝甲',mushroom:'🍄 縮水跳躍',corn:'🍿 玉米散射',wing:'🪶 起飛搧風',shrimp:'🦐 彎身彈射',tofu:'🛡 護盾硬化',bacon:'🥓 捲身旋打',pepper:'🌶 噴辣氣',saury:'🐟 刀型衝刺'};
 function inGrill(x,y,m=0){ if(_gCore>0&&Math.hypot(x-(G.x+G.w/2),y-(G.y+G.h/2))<_gCore+Math.max(0,m)) return false; m+=_gPad; return x>=G.x+m&&x<=G.x+G.w-m&&y>=G.y+m&&y<=G.y+G.h-m; }
 
 // ── 場地效果開關（開戰前設定畫面可勾選；存在瀏覽器裡，下次還在）─────
@@ -3545,6 +3547,7 @@ class GameScene extends Phaser.Scene {
     this.tweens.killTweensOf(e);
     e.x=pos.x; e.y=pos.y; e.vx=0; e.vy=0; e.heat=30; e.alive=true; e._respawnAt=0; e._ghostT=2.0;
     e.stunTimer=0; e.charging=false; e._lastHitBy=null; e._burn=0; e._soyBy=null; e._inHot=false;
+    e._armorUntil=e._glideUntil=e._spinUntil=e._lockUntil=e._pepSlowUntil=0;
     if(e.activeEffects) Object.keys(e.activeEffects).forEach(k=>e.activeEffects[k]=0);
     const sp=this.enemySprites[i]; if(sp){ sp.setVisible(true).setPosition(e.x,e.y); }
     if(this.enemyFx[i]) this.enemyFx[i].setVisible(false);
@@ -3809,11 +3812,12 @@ class GameScene extends Phaser.Scene {
     if(this.netRole==='host'){
       s.on('input',(inp)=>{ const e=this.enemies.find(x=>x.pid===inp.id); if(!e) return;
         const prevPush=e.inp&&e.inp.push; e.inp=inp; if(prevPush) e.inp.push=true; // 按鍵事件不能丟
+        if(inp.skill) e._skAt=performance.now();
         if(inp.q){ e._ack=inp.q; e._ackAt=performance.now(); } }); // 回報「做到第幾個按鍵」給客戶端對位置
       this._netKeepAlive();
     } else {
       s.on('game_end',(d)=>{ if(this._netEnding||!this.sys||!this.sys.isActive()) return; this._netEnding=true; this._netBoard=d&&d.board||null; this.statusTxt.setText('時間到！'); this.endGame(true,true); });
-      s.on('snap',(sn)=>{ this._snap=sn; this._snapAt=performance.now(); if(sn.ev) sn.ev.forEach(ev=>{ if(ev.k==='b') this._banner(ev.t,ev.d); else if(ev.k==='f') this._pushFeed(ev.m,ev.c); }); });
+      s.on('snap',(sn)=>{ this._snap=sn; this._snapAt=performance.now(); if(sn.ev) sn.ev.forEach(ev=>{ try{ if(ev.k==='b') this._banner(ev.t,ev.d); else if(ev.k==='f') this._pushFeed(ev.m,ev.c); else if(ev.k==='h') this._netHit(ev); else if(ev.k==='sk') this._netSkillEv(ev); }catch(err){ console.error('[net ev]',err); } }); });
       s.on('host_left',()=>{ this._banner('😢 房主離線了','這局無法繼續，2 秒後回到大廳');
         this.time.delayedCall(2000,()=>{ const ov=document.getElementById('lobby-overlay'); if(ov){ ov.classList.remove('hidden'); if(typeof Lobby!=='undefined') Lobby.showLanding(); }
           window.setTimeout(()=>{ if(gameInstance){ gameInstance.destroy(true); gameInstance=null; } },16); }); });
@@ -3821,7 +3825,7 @@ class GameScene extends Phaser.Scene {
       this._inSeq=0; this._seqT={}; this._hist=[]; this._corr={x:0,y:0}; this._dashLock=0; this._snapAt=performance.now();
       this.input.keyboard.on('keydown-A',()=>{ this._netPush=true;
         // 本地先衝（不等房主），但冷卻中、被醬油黏住、鬼魂時不衝，免得衝出去又被拉回來
-        if(this.time.now>=this._dashLock&&!this._netStuck&&!this._netGhost){ this._localDash=0.22; this._dashLock=this.time.now+1200; } });
+        if(this.time.now>=this._dashLock&&!this._netStuck&&!this._netGhost&&!this._netStun){ this._localDash=0.22; this._dashLock=this.time.now+1200; this.playSound('push'); } });
       this.input.keyboard.on('keydown-S',()=>{ this._netSkill=true; });
       this.input.keyboard.on('keydown-D',()=>{ this._netUlt=true; });
     }
@@ -3850,23 +3854,178 @@ class GameScene extends Phaser.Scene {
   }
   // ── 房主：遠端玩家的移動與衝撞 ──
   _remoteControl(e,dt){
-    const inp=e.inp||{}, ch=CHARS.find(c=>c.key===e.ck)||{};
-    const sp=(ch.speed||110)/60*(e._zoneMul||1);
+    const inp=e.inp||{}, ch=CHARS.find(c=>c.key===e.ck)||{}, now=this.time.now;
+    const sp=(ch.speed||110)/60*(e._zoneMul||1)*((e._pepSlowUntil||0)>now?0.5:1); // 被辣氣嗆到：慢一半
     let dx=(inp.r?1:0)-(inp.l?1:0), dy=(inp.d?1:0)-(inp.u?1:0); if(dx&&dy){ dx*=0.707; dy*=0.707; }
     if(dx||dy){ e._ldx=dx; e._ldy=dy; }
     e.chargeTimer=99; e._pushCD=Math.max(0,(e._pushCD||0)-dt);
+    const _lock=()=>{ inp.push=false; e._skAt=0; e._dashT=0; e.charging=false; e.vx=0; e.vy=0; e.pushTimer=Math.max(e.pushTimer||0,0.5); };
+    if((e._lockUntil||0)>now){ _lock(); return; } // 技能滑行中（蝦）：這段時間不能操作
+    if(e._skAt){ const fresh=performance.now()-e._skAt<350; e._skAt=0; // S 技能
+      if(fresh&&now>=(e._skReady||0)&&!(e._ultWind>0)){ try{ this._remoteSkill(e,this.enemies.indexOf(e)); }catch(err){ console.error('[remote skill]',err); }
+        if((e._lockUntil||0)>now){ _lock(); return; } } }
     if(inp.push){ inp.push=false; if(e._pushCD<=0&&!(e._ghostT>0)&&!e._inHot){ e._pushCD=1.2; e._dashT=0.22; const l=Math.hypot(e._ldx||1,e._ldy||0)||1; e._ddx=(e._ldx||1)/l; e._ddy=(e._ldy||0)/l; e.pushTimer=0; } }
     if(inp.ult){ inp.ult=false; if((e.ultCharge||0)>=3&&!(e._ultWind>0)&&!(e._ghostT>0)&&!e.isGhost) this._aiUltStart(e,0.6); }
     if(e._dashT>0){ e._dashT-=dt; e.charging=true; e.vx=e._ddx*9; e.vy=e._ddy*9; if(e._dashT<=0){ e.charging=false; e.vx*=0.3; e.vy*=0.3; e._openUntil=this.time.now+700; } }
     else { e.charging=false; e.pushTimer=Math.max(e.pushTimer,0.5); const k=1-Math.exp(-dt*22); e.vx+=(dx*sp-e.vx)*k; e.vy+=(dy*sp-e.vy)*k; }
+  }
+  // ══ 連線：遠端真人的 S 技能 + 打擊特效同步（2026-11）══════════════
+  // 數值跟單人版一樣，但打得到房主；擊落算在放技能的人身上（_lastHitBy / _pHitBy）
+  _rAb(e){ const n=this.time.now; return (e._armorUntil||0)>n?1:(e._glideUntil||0)>n?2:(e._spinUntil||0)>n?4:0; }
+  _animId(a){ if(!a) return 0; if(a===this.pAnim) return 'H'; const i=this.enemies.findIndex(e=>e.anim===a); return i<0?0:(this.enemies[i].pid||('a'+i)); }
+  _rTargets(att){
+    const L=[];
+    if(this.alive&&!this._pOut&&!(this._ghostT>0)) L.push({p:true,x:this.p.x,y:this.p.y});
+    this.enemies.forEach((o,i)=>{ if(o!==att&&o.alive&&!o.isGhost&&!(o._ghostT>0)) L.push({o,i,x:o.x,y:o.y}); });
+    return L;
+  }
+  // att 的技能把 t 撞飛（t 來自 _rTargets）。回傳 false = 被擋掉 / 打不到
+  _rHit(att,t,nx,ny,F,dur,ha,pw){
+    const now=this.time.now, kb=h=>(this.fx&&this.fx.heatKnock)?(0.55+(h||0)/100*2.0):Math.min(1.4,1+(h||0)/100*0.6);
+    if(t.p){
+      if(!this.alive||this._pOut||this._ghostT>0) return false;
+      if(this.activeEffects.foil>0||(this.abilityActive&&this.abilityActive.pushImmune)){ this.showPop('🛡 擋住 '+att.label+' 的技能！'); if(this.activeEffects.foil>0) this._foilClang(this.p.x,this.p.y-10,null); return false; }
+      if(ha) this._hAdd('被 '+att.label+' 的技能打到',ha);
+      const k=kb(this.heat)*(this.activeEffects.juicy>0?0.5:1);
+      this._pHitBy=att; this._pHitT=now; if(this.dashState) this.dashState.active=false;
+      this.tweens.add({targets:this.p,x:this.p.x+nx*F*k,y:this.p.y+ny*F*k,duration:dur||240,ease:'Cubic.easeOut',
+        onComplete:()=>{ if(this.alive&&!this._pOut&&!inGrill(this.p.x,this.p.y)){ this._addScore(att,3,null,null,true,this.heat,false,'P'); this.subTxt.setText('被 '+att.label+' 的技能打飛！'); this.endGame(false); } }});
+      this._hitFeel({x:this.p.x,y:this.p.y,dx:nx,dy:ny,power:pw||1.3,anim:this.pAnim,freeze:60});
+      return true;
+    }
+    const o=t.o; if(!o.alive||o.isGhost||o._ghostT>0) return false;
+    if(o.activeEffects&&o.activeEffects.foil>0){ this._foilClang(o.x,o.y-10,o); return false; }
+    if(ha) o.heat=Math.min(100,(o.heat||0)+ha);
+    o._lastHitBy=att.label; o._lastHitT=now;
+    const k=kb(o.heat);
+    this.tweens.add({targets:o,x:o.x+nx*F*k,y:o.y+ny*F*k,duration:dur||240,ease:'Cubic.easeOut',onComplete:()=>this.checkEnemyFall(o,t.i)});
+    this._hitFeel({x:o.x,y:o.y,dx:nx,dy:ny,power:pw||1.0,anim:o.anim,freeze:0,shake:false});
+    return true;
+  }
+  _remoteSkill(e,i){
+    const key=e.ck, now=this.time.now;
+    let dx=e._ldx||0, dy=e._ldy||0; if(!dx&&!dy) dx=1; { const l=Math.hypot(dx,dy)||1; dx/=l; dy/=l; }
+    const x0=e.x, y0=e.y; let x1=x0, y1=y0, dur=0;
+    // 位移技能的落點：不會自己衝出烤盤 / 掉進洞
+    const dest=D=>{ const pad=(this.shrinkPad||0)+20; let x=Phaser.Math.Clamp(x0+dx*D,G.x+pad,G.x+G.w-pad), y=Phaser.Math.Clamp(y0+dy*D,G.y+pad,G.y+G.h-pad);
+      for(let k=0;k<16&&!inGrill(x,y,6);k++){ x-=dx*15; y-=dy*15; } return {x,y}; };
+    const near=(R,fn)=>this._rTargets(e).forEach(t=>{ const vx=t.x-e.x, vy=t.y-e.y, d=Math.hypot(vx,vy); if(d<R) fn(t,d>0?vx/d:1,d>0?vy/d:0,d); });
+    switch(key){
+      case 'pork':{ const p=dest(120); this.tweens.killTweensOf(e); e.x=x1=p.x; e.y=y1=p.y;
+        for(let s=1;s<=3;s++) this.oilSlicks.push({x:x0+dx*40*s,y:y0+dy*40*s,r:30,life:3.0,ph:Math.random()*Math.PI*2});
+        near(90,(t,nx,ny)=>this._rHit(e,t,nx,ny,120,200)); break; }
+      case 'beef': e._armorUntil=now+5000; near(110,(t,nx,ny)=>this._rHit(e,t,nx,ny,100,240)); break;
+      case 'mushroom':{
+        near(85,t=>{
+          if(t.p){ if(this.activeEffects.foil>0) return; this.activeEffects.stun=Math.max(this.activeEffects.stun||0,1.0); this._hAdd('被 '+e.label+' 的孢子噴到',6); this._pHitBy=e; this._pHitT=now; }
+          else { if(t.o.activeEffects&&t.o.activeEffects.foil>0) return; t.o.stunTimer=Math.max(t.o.stunTimer||0,1.0); t.o.heat=Math.min(100,(t.o.heat||0)+6); t.o._lastHitBy=e.label; t.o._lastHitT=now; } });
+        for(let a=0;a<40;a++){ const cx=G.x+55+Math.random()*(G.w-110), cy=G.y+55+Math.random()*(G.h-110);
+          if(!this.onFire(cx,cy)&&inGrill(cx,cy,30)&&Math.hypot(cx-x0,cy-y0)>60){ x1=cx; y1=cy; break; } }
+        this.tweens.killTweensOf(e); e.x=x1; e.y=y1; e.vx=0; e.vy=0; break; }
+      case 'corn':
+        this._cornShots(x0,y0,dx,dy,(go,fx,fy)=>{ if(!e.alive) return false;
+          const t=this._rTargets(e).find(t=>Math.hypot(go.px-t.x,go.py-t.y)<26); if(!t) return false;
+          if(this._rHit(e,t,fx,fy,55,180)){ if(t.p) this.activeEffects.stun=Math.min(2.2,(this.activeEffects.stun||0)+1.5); else t.o.stunTimer=Math.min(2.2,(t.o.stunTimer||0)+1.5); }
+          return true; });
+        break;
+      case 'wing': e._glideUntil=now+3000;
+        this._rTargets(e).forEach(t=>{ const vx=t.x-e.x, vy=t.y-e.y, d=Math.hypot(vx,vy); if(d<170&&d>0&&(vx*dx+vy*dy)/d>0.45) this._rHit(e,t,dx*0.7+vx/d*0.3,dy*0.7+vy/d*0.3,130,280); });
+        break;
+      case 'shrimp':{ const p=dest(230); x1=p.x; y1=p.y; dur=420; e._lockUntil=now+420; e.vx=0; e.vy=0; const hit=new Set();
+        this.tweens.killTweensOf(e);
+        this.tweens.add({targets:e,x:x1,y:y1,duration:420,ease:'Quad.easeOut',
+          onUpdate:()=>{ if(!e.alive) return; this._rTargets(e).forEach(t=>{ const id=t.p?'P':t.i; if(hit.has(id)) return;
+            if(Math.hypot(e.x-t.x,e.y-t.y)<34){ hit.add(id); this._rHit(e,t,dx,dy,180,280,0,1.4); } }); }});
+        break; }
+      case 'tofu': if(e.activeEffects) e.activeEffects.foil=Math.max(e.activeEffects.foil||0,4); break; // 4 秒反彈護盾（跟鋁箔同一套）
+      case 'bacon': e._spinUntil=now+1500; near(130,(t,nx,ny)=>this._rHit(e,t,nx,ny,150,260,10,1.2)); break;
+      case 'pepper':
+        near(250,(t,nx,ny,d)=>{ const pf=1-d/250;
+          if(t.p){ if(this.activeEffects.foil>0) return; this._hAdd('被 '+e.label+' 的辣氣嗆到',12*pf); this.activeEffects.slowpow=Math.max(this.activeEffects.slowpow||0,0.6+1.2*pf); }
+          else { const o=t.o; if(o.activeEffects&&o.activeEffects.foil>0) return; o.heat=Math.min(100,(o.heat||0)+12*pf);
+            if(o.remote) o._pepSlowUntil=now+600+1200*pf; else { o.vx*=(0.10+0.16*(1-pf)); o.vy*=(0.10+0.16*(1-pf)); } } });
+        break;
+      case 'saury':{ const p=dest(180); this.tweens.killTweensOf(e); e.x=x1=p.x; e.y=y1=p.y; const px=-dy, py=dx;
+        near(90,(t,nx,ny)=>{ const s=(nx*px+ny*py)>=0?1:-1; this._rHit(e,t,px*s,py*s,150,170,0,1.3); }); break; }
+      default: return;
+    }
+    e._skReady=now+(BBQ_SKILL_CD[key]||6)*1000;
+    this._skillFx(key,x0,y0,dx,dy,x1,y1);
+    this._netEv.push({k:'sk',id:e.pid,c:key,x:Math.round(x0),y:Math.round(y0),dx:+dx.toFixed(2),dy:+dy.toFixed(2),x1:Math.round(x1),y1:Math.round(y1),d:dur});
+    this.playSound('push');
+  }
+  // 玉米粒 5 顆散射。onStep(go,fx,fy) 回傳 true = 這顆打到東西、消失
+  _cornShots(x,y,dx,dy,onStep){
+    for(let ki=0;ki<5;ki++){ const sp=(ki-2)*0.18, rx=dx-dy*sp, ry=dy+dx*sp, l=Math.hypot(rx,ry)||1, fx=rx/l, fy=ry/l;
+      const go={px:x,py:y}, g=this.add.graphics().setDepth(24); let done=false;
+      this.tweens.add({targets:go,px:x+fx*420,py:y+fy*420,duration:480,ease:'Linear',
+        onUpdate:()=>{ if(!g.scene) return; g.clear(); if(done||!inGrill(go.px,go.py)) return;
+          g.fillStyle(0xfffae0,1); g.fillCircle(go.px,go.py,7); g.fillStyle(0xffdd88,0.85); g.fillCircle(go.px-1,go.py-1,4);
+          if(onStep&&onStep(go,fx,fy)){ done=true; g.clear(); this._skillRing(go.px,go.py,42,0xfffae0,300); } },
+        onComplete:()=>{ if(g.scene) g.destroy(); }}); }
+  }
+  // 技能持續光環（1 護甲 / 2 滑翔 / 3 護盾 / 4 旋轉）：房主畫遠端玩家、客戶端畫所有人
+  _skAura(g,code,x,y){
+    const ph=this.firePhase||0;
+    if(code===1){ const p=0.5+0.5*Math.sin(ph*5); g.fillStyle(0x4488ff,0.12); g.fillCircle(x,y,32); g.lineStyle(4,0x4488ff,p); g.strokeCircle(x,y,32); g.lineStyle(1,0x88aaff,p*0.5); g.strokeCircle(x,y,40); }
+    else if(code===2){ const f=0.5+0.3*Math.sin(ph*7); g.fillStyle(0x44ffee,0.15); g.fillCircle(x,y,28); g.lineStyle(2,0x44ffee,0.9); g.strokeCircle(x,y,28); g.lineStyle(2,0x00ffee,f); g.strokeCircle(x,y,34); }
+    else if(code===3){ const p=0.65+0.35*Math.sin(ph*3.5); g.fillStyle(0x88ccff,0.07*p); g.fillCircle(x,y,42); g.lineStyle(2.5,0x66bbff,0.75*p); g.strokeCircle(x,y,38); g.lineStyle(1.5,0xffffff,0.4*p); g.strokeCircle(x,y,34); }
+    else if(code===4){ const rot=ph*12; for(let i=0;i<12;i++){ const a=rot+i*Math.PI/6, r=12+14*(i%2); g.fillStyle(i%2?0xffaa00:0xff4400,0.9); g.fillCircle(x+Math.cos(a)*r,y+Math.sin(a)*r,4+i%2); } }
+  }
+  // 放技能的瞬間特效（房主看遠端玩家放、客戶端看所有人放）
+  _skillFx(key,x,y,dx,dy,x1,y1){
+    const moved=Math.hypot(x1-x,y1-y)>8, atEnd=key==='pork'||key==='saury';
+    this.fireAbilityFx(key,atEnd?x1:x,atEnd?y1:y);
+    if(moved&&key!=='mushroom'){ // 衝刺殘影
+      const col={pork:0xffcc44,saury:0xffffff,shrimp:0x44aaff}[key]||0xffffff, g=this.add.graphics().setDepth(21), o={v:0};
+      this.tweens.add({targets:o,v:1,duration:key==='shrimp'?560:320,ease:'Quad.easeOut',
+        onUpdate:()=>{ if(!g.scene) return; g.clear(); g.lineStyle(14*(1-o.v)+2,col,0.55*(1-o.v)); g.lineBetween(x,y,x1,y1); },
+        onComplete:()=>{ if(g.scene) g.destroy(); }}); }
+    if(key==='beef') this._skillRing(x,y,110,0xd08040,380);
+    else if(key==='mushroom'){ this._skillRing(x,y,85,0xc9a0ff,520); if(moved) this._skillRing(x1,y1,50,0xffffff,300); }
+    else if(key==='tofu') this._skillRing(x,y,55,0xaaddff,300);
+    else if(key==='bacon') this._skillRing(x,y,130,0xffaa44,420);
+    else if(key==='pepper'){ this._skillRing(x,y,250,0x44ff44,650); this._skillRing(x,y,155,0xaaff44,650); }
+    else if(key==='wing'){ const o={v:0}, g=this.add.graphics().setDepth(24), a0=Math.atan2(dy,dx);
+      this.tweens.add({targets:o,v:1,duration:380,ease:'Quad.easeOut',
+        onUpdate:()=>{ if(!g.scene) return; g.clear(); for(let k=0;k<3;k++){ const r=(60+k*45)*o.v+20; g.lineStyle(5*(1-o.v),0xfff2c0,0.85*(1-o.v)); g.beginPath(); g.arc(x,y,r,a0-0.55,a0+0.55); g.strokePath(); } },
+        onComplete:()=>{ if(g.scene) g.destroy(); }}); }
+    else if(key==='pork'&&this.netRole==='client'){ // 油漬（客戶端只有畫面；房主那邊是真的 oilSlicks）
+      for(let s=1;s<=3;s++){ const g=this.add.graphics().setDepth(3); g.fillStyle(0xffee55,0.5); g.fillCircle(x+dx*40*s,y+dy*40*s,30); g.lineStyle(2,0xffcc00,0.5); g.strokeCircle(x+dx*40*s,y+dy*40*s,32);
+        this.tweens.add({targets:g,alpha:0,delay:2500,duration:500,onComplete:()=>{ if(g.scene) g.destroy(); }}); } }
+    const N=BBQ_SKILL_NAME[key]; if(N) this._floatTxt(x1,y1-62,N,'#ffe9a8');
+  }
+  // ── 客戶端：房主傳來的「打中了」→ 衝擊星、閃白、重擊音；打到自己 / 在旁邊才震 ──
+  _netHit(ev){
+    if(this._netEnding||!this.sys||!this.sys.isActive()) return;
+    const me=ev.v===window.MP.myId, rec=(ev.v&&!me)?this._netEnts[ev.v]:null;
+    this._hitFeel({x:ev.x,y:ev.y,dx:ev.dx,dy:ev.dy,power:ev.p,anim:me?this.pAnim:(rec&&rec.anim),freeze:0,shake:false,star:ev.s!==0});
+    if(me) this._addTrauma(Math.min(0.8,0.4+(ev.p||1)*0.2));
+    else if(Math.hypot(ev.x-this.p.x,ev.y-this.p.y)<95) this._addTrauma(0.3);
+  }
+  // ── 客戶端：有人放了 S 技能 ──
+  _netSkillEv(ev){
+    if(this._netEnding||!this.sys||!this.sys.isActive()) return;
+    const me=ev.id===window.MP.myId;
+    this._skillFx(ev.c,ev.x,ev.y,ev.dx,ev.dy,ev.x1,ev.y1);
+    if(ev.c==='corn') this._cornShots(ev.x,ev.y,ev.dx,ev.dy,go=>{ // 只有畫面：碰到人就消失
+      if(!me&&this._netWasA&&Math.hypot(go.px-this.p.x,go.py-this.p.y)<26) return true;
+      return Object.keys(this._netEnts).some(id=>{ const r=this._netEnts[id]; return id!==ev.id&&r.sp.visible&&Math.hypot(go.px-r.x,go.py-r.y)<26; }); });
+    this.playSound('push');
+    if(me){ // 自己的技能有位移：瞬移 → 本地位置直接加上位移；滑行（蝦）→ 這段時間完全跟房主
+      const ddx=ev.x1-ev.x, ddy=ev.y1-ev.y;
+      if(ev.d>0) this._skFollow=performance.now()+ev.d+80;
+      else if(ddx||ddy){ this.p.x+=ddx; this.p.y+=ddy; (this._hist||[]).forEach(h=>{ h.x+=ddx; h.y+=ddy; }); if(this._corr) this._corr.x=this._corr.y=0; this._localDash=0; }
+    }
   }
   // ── 房主：送快照 ──
   _hostTick(dt){
     this._netT-=dt; this._netZT-=dt;
     if(this._netT>0) return; this._netT=1/15;
     const R=v=>Math.round(v), st=this.stats||{};
-    const ents=[{id:'H',k:this.charData.key,n:window.MP.myNickname||'房主',x:R(this.p.x),y:R(this.p.y),h:R(this.heat),a:this.alive?1:0,g:(this._ghostT>0&&!this._pOut)?1:0,gh:this._pOut?1:0,lv:this.lives,pp:this.activeEffects.pepBoost>0?1:0,fo:(this.alive&&!this._pOut&&this.activeEffects.foil>0)?+this.activeEffects.foil.toFixed(1):0,...(this._pOut&&this._gp?(()=>{ const a=this._rimAim(this._gp,this._gChg?this._gCh:0); return {ga:[R(a.x),R(a.y),(this._ghostCD||0)<=0?1:0,0,this._gChg?+this._gCh.toFixed(2):-1]}; })():{}),sk:this._inHotSoy?1:0,s:this.score||0,u:Math.floor(this.ultCharge||0)}];
-    this.enemies.forEach((e,i)=>ents.push({id:e.pid||('a'+i),k:e.ck,n:e.label,x:R(e.x),y:R(e.y),h:R(e.heat||0),a:(e.alive||e.isGhost)?1:0,g:e._ghostT>0?1:0,gh:e.isGhost?1:0,lv:e.lives??0,pp:(e.activeEffects&&e.activeEffects.pepBoost>0)?1:0,fo:(e.alive&&!e.isGhost&&e.activeEffects&&e.activeEffects.foil>0)?+e.activeEffects.foil.toFixed(1):0,...(e.isGhost&&e._gp?(()=>{ const a=this._rimAim(e._gp,e._gChg?e._gCh:0); return {ga:[R(a.x),R(a.y),(e._gcd||0)<=0?1:0,+((e._gcd||0)/6).toFixed(2),e._gChg?+e._gCh.toFixed(2):-1]}; })():{}),sk:e._inHot?1:0,s:e.score||0,u:(e.ultCharge||0),pc:e.remote?+(e._pushCD||0).toFixed(2):0,...(e.remote?{q:e._ack||0,qa:+((performance.now()-(e._ackAt||0))/1000).toFixed(3)}:{})}));
+    const ents=[{id:'H',k:this.charData.key,n:window.MP.myNickname||'房主',x:R(this.p.x),y:R(this.p.y),h:R(this.heat),a:this.alive?1:0,g:(this._ghostT>0&&!this._pOut)?1:0,gh:this._pOut?1:0,lv:this.lives,pp:this.activeEffects.pepBoost>0?1:0,fo:(this.alive&&!this._pOut&&this.activeEffects.foil>0)?+this.activeEffects.foil.toFixed(1):0,...(this._pOut&&this._gp?(()=>{ const a=this._rimAim(this._gp,this._gChg?this._gCh:0); return {ga:[R(a.x),R(a.y),(this._ghostCD||0)<=0?1:0,0,this._gChg?+this._gCh.toFixed(2):-1]}; })():{}),sk:this._inHotSoy?1:0,s:this.score||0,u:Math.floor(this.ultCharge||0),ab:(this.alive&&!this._pOut&&this.abilityActive)?({armor:1,glide:2,shield:3,spin:4}[this.abilityActive.type]||0):0}];
+    this.enemies.forEach((e,i)=>ents.push({id:e.pid||('a'+i),k:e.ck,n:e.label,x:R(e.x),y:R(e.y),h:R(e.heat||0),a:(e.alive||e.isGhost)?1:0,g:e._ghostT>0?1:0,gh:e.isGhost?1:0,lv:e.lives??0,pp:(e.activeEffects&&e.activeEffects.pepBoost>0)?1:0,fo:(e.alive&&!e.isGhost&&e.activeEffects&&e.activeEffects.foil>0)?+e.activeEffects.foil.toFixed(1):0,...(e.isGhost&&e._gp?(()=>{ const a=this._rimAim(e._gp,e._gChg?e._gCh:0); return {ga:[R(a.x),R(a.y),(e._gcd||0)<=0?1:0,+((e._gcd||0)/6).toFixed(2),e._gChg?+e._gCh.toFixed(2):-1]}; })():{}),sk:e._inHot?1:0,s:e.score||0,u:(e.ultCharge||0),pc:e.remote?+(e._pushCD||0).toFixed(2):0,...(e.remote?{q:e._ack||0,qa:+((performance.now()-(e._ackAt||0))/1000).toFixed(3),sc:+Math.max(0,((e._skReady||0)-this.time.now)/1000).toFixed(1),ab:e.alive?this._rAb(e):0,
+      mv:(e.alive&&((e.stunTimer||0)>0||(this.enemyCC&&this.enemyCC.stun>0)||(e._lockUntil||0)>this.time.now))?1:((e._pepSlowUntil||0)>this.time.now?2:0)}:{})}));
     const sn={tl:this.timeLeft,e:ents,lm:this.fx.respawn?1:0,bm:(this.bombs||[]).map(b=>[R(b.x),R(b.y),+b.t.toFixed(2)]),hm:this.heatMode,fm:this._fireMul||1,sp:this.shrinkPad||0,sw:this.shrinkWarning?1:0,wd:this.wind&&this.wind.on?[Math.round(this.wind.x*100),Math.round(this.wind.y*100),this.wind.warn?1:0,Math.round(this.wind.nx*100),Math.round(this.wind.ny*100),this.wind.str||0]:0,co:this.core&&this.core.on?[R(this.core.R),R(this.core.next||0),this.core.warn?1:0,+(this.core.warnT||0).toFixed(2)]:0,uw:this.enemies.filter(e=>e._ultWind>0).map(e=>[R(e.x),R(e.y),+(1-e._ultWind/(e._ultWindMax||1)).toFixed(2)]),cz:this.heatMode==='crowd'?(this.crowdZones||[]).map(z=>[R(z.x),R(z.y),R(z.r),z.st==='warn'?0:z.st==='hot'?1:2,+(z.p||0).toFixed(2)]):null,ti:this.tilt?[this.tilt.x,this.tilt.y,this.tilt.state==='active'?1:0,+this.tilt.timer.toFixed(2),this.tilt.force,this.tilt.rot,this.tilt.hold,this.tilt.lbl]:null,
       f:this.firePts.filter(f=>f.state!=='cooldown').map(f=>({x:R(f.x),y:R(f.y),tx:R(f.tx||f.x),ty:R(f.ty||f.y),st:f.state,al:+(f.alpha||0).toFixed(2),c:f.collision?1:0,sd:f.spd||1,ph:+(f.ph||0).toFixed(2)})),
       o:(this.ultOrbs||[]).map(o=>[R(o.x),R(o.y),o.preSpawn?1:0]),
@@ -3954,7 +4113,7 @@ class GameScene extends Phaser.Scene {
         const t=en.h/100; if(en.gh) rec.sp.setTint(0xaaccff); else rec.sp.setTint(Phaser.Display.Color.GetColor(255,Math.round(255-t*70),Math.round(255-t*110)));
         rec.sp.setAlpha(en.gh?0.5:(en.g?0.35+0.35*Math.sin(this.time.now*0.03):1));
         rec.tag.setText((en.id==='H'?'👑 ':(en.id[0]==='a'?'':'👤 '))+en.n+(sn.lm?' '+(en.gh?'👻':'❤'.repeat(Math.max(0,en.lv||0))):'')+(!en.gh&&en.h>=70?' 🎯':'')+(en.sk?' 🍶黏住':''));
-        rec.tag.setPosition(rec.x,rec.y-54); if(en.pp) this._drawPepAura(g,rec.x,rec.y); this._netFoil(g,en,rec.x,rec.y,false); }
+        rec.tag.setPosition(rec.x,rec.y-54); if(en.pp) this._drawPepAura(g,rec.x,rec.y); if(en.ab&&!en.gh) this._skAura(g,en.ab,rec.x,rec.y); this._applyFlash(rec.sp,rec.anim,dt); this._netFoil(g,en,rec.x,rec.y,false); }
       else this._netFoil(g,en,rec.x,rec.y,false);
     });
     Object.keys(this._netEnts).forEach(id=>{ if(!seen[id]){ const r=this._netEnts[id]; r.sp.destroy(); r.tag.destroy(); delete this._netEnts[id]; } });
@@ -3971,8 +4130,11 @@ class GameScene extends Phaser.Scene {
     const L=this.keys.left.isDown||GKEYS['ArrowLeft'], Rt=this.keys.right.isDown||GKEYS['ArrowRight'], U=this.keys.up.isDown||GKEYS['ArrowUp'], Dn=this.keys.down.isDown||GKEYS['ArrowDown'];
     let dx=(Rt?1:0)-(L?1:0), dy=(Dn?1:0)-(U?1:0); if(dx&&dy){ dx*=0.707; dy*=0.707; }
     if(dx||dy) this.lastDir={x:dx,y:dy};
-    const sp=(this.charData.speed||110)*(this._zoneMul||1);
-    if((this._localDash||0)>0){ this._localDash-=dt; this.p.x+=this.lastDir.x*540*dt; this.p.y+=this.lastDir.y*540*dt; }
+    // mv：1 = 被定住 / 技能滑行中（不能動），2 = 被辣氣嗆到（慢一半）。以前被定住時本地還是照走 → 一直被拉回去
+    const _mv=en.mv||0, _skF=performance.now()<(this._skFollow||0); this._netStun=_mv===1||_skF;
+    const sp=(this.charData.speed||110)*(this._zoneMul||1)*(_mv===2?0.5:1);
+    if(this._netStun){ this._localDash=0; }
+    else if((this._localDash||0)>0){ this._localDash-=dt; this.p.x+=this.lastDir.x*540*dt; this.p.y+=this.lastDir.y*540*dt; }
     else { let _mx=dx,_my=dy,_tx=0,_ty=0; const _TF=this._tiltF(); if(_TF>0){ const tv=this._tiltVel(dx,dy,sp,false,_TF); _mx=tv.mx; _my=tv.my; _tx=tv.tx; _ty=tv.ty; } this.p.x+=(_mx*sp+_tx)*dt; this.p.y+=(_my*sp+_ty)*dt; }
     this.p.x=Phaser.Math.Clamp(this.p.x,G.x+4,G.x+G.w-4); this.p.y=Phaser.Math.Clamp(this.p.y,G.y+4,G.y+G.h-4);
     if(this.wind&&this.wind.on&&this.wind.str>0&&!this._netGhost&&!((this._localDash||0)>0)){ const _w=this.wind, _wx=_w.x*_w.str*dt, _wy=_w.y*_w.str*dt; if(inGrill(this.p.x+_wx,this.p.y+_wy,14)){ this.p.x+=_wx; this.p.y+=_wy; } }
@@ -3984,7 +4146,7 @@ class GameScene extends Phaser.Scene {
     // 以前直接拉向房主的位置 → 房主的位置一定比你慢（網路延遲）→ 一直被往回拉，角色很難動。
     const now=performance.now(), H=this._hist||(this._hist=[]), C=this._corr||(this._corr={x:0,y:0});
     H.push({t:now,x:this.p.x,y:this.p.y}); while(H.length>2&&H[0].t<now-2500) H.shift();
-    if(en.gh||!en.a){ H.length=0; C.x=C.y=0; }
+    if(en.gh||!en.a||_skF){ H.length=0; C.x=C.y=0; if(_skF&&en.a&&!en.gh){ const k=Math.min(1,dt*16); this.p.x+=(en.x-this.p.x)*k; this.p.y+=(en.y-this.p.y)*k; } }
     else if(this._corrSnap!==this._snap){ this._corrSnap=this._snap;
       let ref=null; const ts=this._seqT&&this._seqT[en.q];
       if(ts!==undefined){ const tq=ts+(en.qa||0)*1000; for(const h of H){ if(!ref||Math.abs(h.t-tq)<Math.abs(ref.t-tq)) ref=h; } if(ref&&Math.abs(ref.t-tq)>150) ref=null; }
@@ -3994,9 +4156,13 @@ class GameScene extends Phaser.Scene {
     }
     if(C.x||C.y){ const k=Math.min(1,dt*10), cx=C.x*k, cy=C.y*k; this.p.x+=cx; this.p.y+=cy; C.x-=cx; C.y-=cy; H.forEach(h=>{h.x+=cx;h.y+=cy;}); }
     if(en.gh){ const k=Math.min(1,dt*14); this.p.x+=(en.x-this.p.x)*k; this.p.y+=(en.y-this.p.y)*k; } // 鬼魂：位置完全跟房主
+    if(this._netWasA&&!(en.a&&!en.gh)){ this.playSound('death'); this._addTrauma(0.6); } // 自己出局：音效 + 震一下
+    if(this._netLastS!==undefined&&en.s-this._netLastS>=3&&en.a&&!en.gh){ this.cameras.main.flash(200,255,200,0,false); this.playSound('good'); this._notice('🏆 擊落得分！+'+(Math.round((en.s-this._netLastS)*10)/10),'#8fe8ff'); }
+    this._netLastS=en.s;
     if(en.a&&!en.gh&&!this._netWasA&&this._netLastX!==undefined) this._respawnBeacon(this._netLastX,this._netLastY,en.x,en.y); // 自己復活：顯示在哪裡
     if(en.a&&!en.gh){ this._netLastX=en.x; this._netLastY=en.y; } this._netWasA=!!(en.a&&!en.gh);
     if(en.pp&&en.a&&this._netLayer&&this._netLayer.scene) this._drawPepAura(this._netLayer,this.p.x,this.p.y);
+    if(en.ab&&en.a&&!en.gh&&this._netLayer&&this._netLayer.scene) this._skAura(this._netLayer,en.ab,this.p.x,this.p.y);
     if(this._netLayer&&this._netLayer.scene) this._netFoil(this._netLayer,en,this.p.x,this.p.y,true);
     if(en.sk&&this.time.now-(this._stuckMsgT||0)>1500){ this._stuckMsgT=this.time.now; this._notice('🍶 腳被醬油黏住了，不能衝刺！','#e0a868'); }
     if(en.gh&&this._netLayer&&this._netLayer.scene){ // 鬼魂準心：蓄力在本地先算（不等房主），按著 A 越久丟越遠
@@ -4008,7 +4174,9 @@ class GameScene extends Phaser.Scene {
     if(this._netLayer&&this._netLayer.scene) ((this._snap&&this._snap.e)||[]).forEach(o=>{ if(o.id!==window.MP.myId&&o.gh&&o.ga&&o.ga[4]>=0) this._drawGhostAim(this._netLayer,o.x,o.y,o.ga[0],o.ga[1],true,0,false,o.ga[4]); });
     else if(!en.a){ this.p.x=en.x; this.p.y=en.y; }
     this.heat=en.h; this.ultCharge=en.u; this.score=en.s; this.pushCD=en.pc||0;
-    if(this.playerSprite){ this.playerSprite.setVisible(!!en.a); if(en.a){ this._animChar(this.playerSprite,this.pAnim,this.p.x,this.p.y,dt,{base:this.playerSprite.baseScale||0.26,heat:en.h,faceX:this.lastDir.x,moving:!!(dx||dy),shadow:this.shadowLayer}); if(!en.gh) this.updateHeatFx(this.playerSprite,en.h,this.sweatTxt); this.playerSprite.setAlpha(en.gh?0.5:(en.g?0.35+0.35*Math.sin(this.time.now*0.03):1)); if(en.gh) this.playerSprite.setTint(0xaaccff); } }
+    this.abilityCD=en.sc||0; this.abilityCDMax=BBQ_SKILL_CD[this.charData.key]||6; // S 技能冷卻（頭上的 S 轉盤 + 左下的條）
+    if(this.abilBarFg&&this.abilBarFg.scene){ const r=this.abilityCD<=0; this.abilBarFg.width=r?120:(1-this.abilityCD/this.abilityCDMax)*120; this.abilBarFg.setFillStyle(r?0xffaa00:0x664400); if(this.abilCdTxt&&this.abilCdTxt.scene) this.abilCdTxt.setText(r?'Ready!':this.abilityCD.toFixed(1)+'s'); }
+    if(this.playerSprite){ this.playerSprite.setVisible(!!en.a); if(en.a){ this._animChar(this.playerSprite,this.pAnim,this.p.x,this.p.y,dt,{base:this.playerSprite.baseScale||0.26,heat:en.h,faceX:this.lastDir.x,moving:!!(dx||dy),shadow:this.shadowLayer}); if(!en.gh){ this.updateHeatFx(this.playerSprite,en.h,this.sweatTxt); this._applyFlash(this.playerSprite,this.pAnim,dt); } this.playerSprite.setAlpha(en.gh?0.5:(en.g?0.35+0.35*Math.sin(this.time.now*0.03):1)); if(en.gh) this.playerSprite.setTint(0xaaccff); } }
     this.heatBarFg.width=Math.min(220,en.h*2.2); this.heatTxt.setText(Math.floor(en.h)+'%');
     if(this.scoreTxt) this.scoreTxt.setText('🏆 '+en.s+' 分'+(this._snap&&this._snap.lm?'　'+(en.gh?'👻 鬼魂（按住 A 蓄力丟）':'❤'.repeat(Math.max(0,en.lv||0))):''));
     this.updateUltUI(); if(en.a&&!en.gh) this._drawOverheadHUD(); else if(this.ovLayer&&this.ovLayer.scene){ this.ovLayer.clear(); (this.ovTxt||[]).forEach(t=>t.setVisible(false)); if(this.ovPow) this.ovPow.setVisible(false); }
@@ -4414,6 +4582,7 @@ class GameScene extends Phaser.Scene {
   _hitFeel(o){
     try{
       const pw=Math.max(0.3,o.power||1);
+      if(this.netRole==='host'&&this._netEv&&o.x!==undefined) this._netEv.push({k:'h',x:Math.round(o.x),y:Math.round(o.y),dx:+(o.dx||0).toFixed(2),dy:+(o.dy||0).toFixed(2),p:+pw.toFixed(1),v:this._animId(o.anim),s:o.star===false?0:1}); // 客戶端也要有打擊感
       if(o.anim) this._charImpact(o.anim,o.dx||0,o.dy||0,pw);
       const fr=o.freeze!==undefined?o.freeze:Math.round(35+pw*30);
       if(o.shake!==false) this._addTrauma(fr>0?Math.min(0.8,0.45+pw*0.2):0.12); // 命中一定有感的震動（跟你無關的互推不震）
@@ -4683,6 +4852,7 @@ class GameScene extends Phaser.Scene {
     e._lastHitBy='player'; e._lastHitT=this.time.now;
     const k=(this.fx&&this.fx.heatKnock)?(0.55+(e.heat||0)/100*2.0):Math.min(1.4,1+(e.heat||0)/100*0.6);
     this._charImpact(e.anim,nx,ny,1.0);
+    if(this.netRole==='host'&&this._netEv) this._netEv.push({k:'h',x:Math.round(e.x),y:Math.round(e.y),dx:+nx.toFixed(2),dy:+ny.toFixed(2),p:1,v:e.pid||('a'+i),s:1});
     this.tweens.add({targets:e,x:e.x+nx*F*k,y:e.y+ny*F*k,duration:dur||240,ease:'Cubic.easeOut',onComplete:()=>this.checkEnemyFall(e,i)});
     return true;
   }
@@ -4694,8 +4864,8 @@ class GameScene extends Phaser.Scene {
   }
 
   useAbility(){
-    const c=this.charData;
-    const CDs={pork:6,beef:6,mushroom:5,corn:6,wing:6,shrimp:5,tofu:7,bacon:6,pepper:7,saury:5};
+    const c=this.charData, _nx0=this.p.x, _ny0=this.p.y;
+    const CDs=BBQ_SKILL_CD;
     this.abilityCDMax=CDs[c.key]||6;
     switch(c.key){
       case 'pork':{
@@ -4874,13 +5044,18 @@ class GameScene extends Phaser.Scene {
         this.cameras.main.shake(180,0.008);
         this.showPop('🐟 刀型衝刺！橫向擊飛！');break;}
     }
+    if(this.netRole==='host'&&this._netEv){ // 連線：讓其他人看到房主放技能
+      const _ld=this.lastDir||{x:1,y:0}, _l=Math.hypot(_ld.x,_ld.y); const _dx=_l?_ld.x/_l:1, _dy=_l?_ld.y/_l:0;
+      let _d=0, _x1=this.p.x, _y1=this.p.y;
+      if(c.key==='shrimp'){ _d=420; _x1=Phaser.Math.Clamp(_nx0+_dx*230,G.x+22,G.x+G.w-22); _y1=Phaser.Math.Clamp(_ny0+_dy*230,G.y+22,G.y+G.h-22); }
+      this._netEv.push({k:'sk',id:'H',c:c.key,x:Math.round(_nx0),y:Math.round(_ny0),dx:+_dx.toFixed(2),dy:+_dy.toFixed(2),x1:Math.round(_x1),y1:Math.round(_y1),d:_d}); }
     this.fireAbilityFx(c.key);
     this.abilityCD=this.abilityCDMax;
     this.playSound('push');
   }
 
-  fireAbilityFx(key){
-    const px=this.p.x,py=this.p.y;
+  fireAbilityFx(key,_x,_y){
+    const px=_x!==undefined?_x:this.p.x, py=_y!==undefined?_y:this.p.y;
     // Expanding ring burst helper
     const mkBurst=(color,maxR,dur,thick=3)=>{
       const bg=this.add.graphics().setDepth(24);
@@ -5940,6 +6115,7 @@ class GameScene extends Phaser.Scene {
       if(e.activeEffects) Object.keys(e.activeEffects).forEach(k=>{
         if(e.activeEffects[k]>0) e.activeEffects[k]=Math.max(0,e.activeEffects[k]-dt);
       });
+      const _v0x=e.vx, _v0y=e.vy; // 遠端真人：下面那些 AI 的「自動躲火 / 躲縮圈 / 被能量球吸過去」不能套在他身上
       // 躲火（弱遲鈍，強靈敏）
       const fireW=[0.02,0.055,0.10][diff];
       let avX=0,avY=0;
@@ -6025,7 +6201,7 @@ class GameScene extends Phaser.Scene {
       if((e._zoneMul||1)>1){ e.vx*=1.03; e.vy*=1.03; } // 檸檬：AI 也真的加速
       e._sauceSlow=1.0;
       if(espd>maxSpd){e.vx=(e.vx/espd)*maxSpd;e.vy=(e.vy/espd)*maxSpd;}
-      if(e.remote) this._remoteControl(e,dt); // 遠端真人：用他的按鍵覆蓋 AI 的移動
+      if(e.remote){ e.vx=_v0x; e.vy=_v0y; this._remoteControl(e,dt); } // 遠端真人：只聽他的按鍵。以前 AI 的轉向力會殘留（能量球出現就被吸過去約 30px/秒、縮圈後靠邊被往中間推約 75px/秒）→ 朋友覺得「角色很難動」
       }
       // 推人：找最近對象（玩家或其他 AI 都算）
       const pushCd=[6.0,4.5,3.0][diff]*({aggro:0.6,pack:0.9,camper:1.2}[tac]||1);
@@ -6133,10 +6309,11 @@ class GameScene extends Phaser.Scene {
       const _eFoil=e.activeEffects&&e.activeEffects.foil>0, _eHB=e.heat||0;
       if(this.heatMode==='ring'&&!_eFoil){ const _erh=this._ringHeat(e.x,e.y); if(_erh>0) e.heat=Math.min(100,(e.heat||0)+_erh*dt); }
       if(this.heatMode==='crowd'&&!_eFoil){ const _ech=this._crowdHeat(e.x,e.y); if(_ech>0) e.heat=Math.min(100,(e.heat||0)+_ech*dt); }
-      if(!_eFoil&&this.onFire(e.x,e.y)) e.heat=Math.min(100,e.heat+24*dt);
+      if(!_eFoil&&this.onFire(e.x,e.y)){ if(!((e._glideUntil||0)>this.time.now)) e.heat=Math.min(100,e.heat+24*dt); } // 遠端雞翅滑翔中：不怕火
       else if(!_eFoil)                   e.heat=Math.min(100,e.heat+(this.fx.passiveHeat?0.7:0.8)*dt);
       e._stillT=Math.hypot(e.vx,e.vy)<0.4?(e._stillT||0)+dt:0;
       if(this.fx.stillBurn&&e._stillT>1.5&&!_eFoil) e.heat=Math.min(100,e.heat+Math.max(0,e.heat-_eHB)*0.5+1.2*dt);
+      if((e._armorUntil||0)>this.time.now&&e.heat>_eHB) e.heat=_eHB+(e.heat-_eHB)*0.5; // 遠端牛小排護甲：熟度累積減半
       if(e.heat>=100){
         e.alive=false;
         this.showPop(e.label+' 被烤熟！');
@@ -6459,6 +6636,7 @@ class GameScene extends Phaser.Scene {
         for(let i=0;i<12;i++){const a=rot+i*Math.PI/6,r=12+14*(i%2);const col=i%2===0?0xff4400:0xffaa00;gfx.fillStyle(col,0.9);gfx.fillCircle(px2+Math.cos(a)*r,py2+Math.sin(a)*r,4+i%2);}
       }
     }
+    this.enemies.forEach(e=>{ if(e.remote&&e.alive){ const c=this._rAb(e); if(c) this._skAura(this.abilFxLayer,c,e.x,e.y); } }); // 遠端玩家的技能光環
     // 敵人熟度條 + 暈眩特效
     this.hbLayer.clear();
     const _t2=this.time.now*0.001;
