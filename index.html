@@ -304,6 +304,8 @@ const IMG = {
 /* 設定 */
 #screen-waiting .wr-settings { border-top:none; padding-top:0; transition:opacity .2s; }
 .wr-set-grid { display:grid; grid-template-columns: repeat(3,1fr); gap:10px; }
+.wr-set.wr-map { grid-column: 1 / -1; }
+.wr-set.wr-map > span small { color:#ffb070; }
 .wr-set { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-radius:12px; background:rgba(0,0,0,0.28); border:1px solid rgba(255,140,60,0.14); }
 .wr-set > span { font-size:.82rem; color:#e6cba4; line-height:1.25; }
 .wr-set > span small { display:block; font-size:.66rem; color:var(--ash); }
@@ -439,6 +441,8 @@ const IMG = {
     <div class="wr-settings" id="wr-settings">
       <label class="lobby-label">遊戲設定</label>
       <div class="wr-set-grid">
+        <div class="wr-set wr-map"><span>地圖<small id="wr-map-desc">🧱 外圈剝落：邊緣一圈圈掉下去</small></span>
+          <button class="wr-toggle" id="wr-map-btn" onclick="Lobby.cycleMap()">家庭烤肉架 ▸</button></div>
         <div class="wr-set"><span>遊戲模式</span>
           <button class="wr-toggle" id="wr-mode-btn" onclick="Lobby.toggleMode()">個人制</button></div>
         <div class="wr-set"><span>開局送大絕<small>一開始就能放</small></span>
@@ -529,14 +533,14 @@ function bbqPickAi(n,takenKeys){
 }
 
 const LEVELS = [
-  {key:'lv1',name:'家庭烤肉架',  sub:'初心者友好',       diff:1, timer:60, heatMod:1.0, forkMod:1.0, tiltMod:1.0, fireCnt:8,  fireC1:0xff4400,fireC2:0xff9900 },
-  {key:'lv2',name:'餐廳鐵板燒',  sub:'高溫快節奏',       diff:3, timer:75, heatMod:1.3, forkMod:1.5, tiltMod:1.0, fireCnt:10, fireC1:0x3388ff,fireC2:0xaaccff },
-  {key:'lv3',name:'露營野火烤架', sub:'風向不定傾斜頻繁',  diff:4, timer:90, heatMod:1.1, forkMod:1.0, tiltMod:2.5, fireCnt:8,  fireC1:0xcc8800,fireC2:0xffee44 },
-  {key:'lv4',name:'地獄料理直播', sub:'雙叉子超高溫',     diff:5, timer:45, heatMod:1.5, forkMod:2.5, tiltMod:1.5, fireCnt:12, fireC1:0xcc0055,fireC2:0xff44cc },
+  {key:'lv1',name:'家庭烤肉架',  sub:'外圈一圈圈剝落',   mech:'🧱 外圈剝落：邊緣一圈圈掉下去', diff:1, timer:60, heatMod:1.0, forkMod:1.0, tiltMod:1.0, fireCnt:8,  fireC1:0xff4400,fireC2:0xff9900 },
+  {key:'lv2',name:'餐廳鐵板燒',  sub:'中間燒穿越來越大', mech:'🕳 中心燒穿：中間破洞越來越大，把人往洞裡推', core:{start:12,first:60,step:22,gap:8,max:170}, shrinkMax:0, diff:3, timer:75, heatMod:1.3, forkMod:1.5, tiltMod:1.0, fireCnt:10, fireC1:0x3388ff,fireC2:0xaaccff },
+  {key:'lv3',name:'露營野火烤架', sub:'起風了・順風推更遠', mech:'🌬 野風：一直被吹著走，約 10 秒換風向；順風撞人飛更遠', wind:{str:46}, shrinkMax:90, diff:4, timer:90, heatMod:1.1, forkMod:1.0, tiltMod:1.0, fireCnt:8,  fireC1:0xcc8800,fireC2:0xffee44 },
+  {key:'lv4',name:'地獄料理直播', sub:'中間燒穿＋外圈崩塌', mech:'🔥 兩頭夾擊：中間燒穿、外圈也剝落、雙叉子', core:{start:10,first:55,step:20,gap:6,max:100}, shrinkMax:72, diff:5, timer:45, heatMod:1.5, forkMod:2.5, tiltMod:1.5, fireCnt:12, fireC1:0xcc0055,fireC2:0xff44cc },
 ];
 
-var _gPad=0; // 外圈剝落的寬度（GameScene 設定）：掉出去的判定跟著縮
-function inGrill(x,y,m=0){ m+=_gPad; return x>=G.x+m&&x<=G.x+G.w-m&&y>=G.y+m&&y<=G.y+G.h-m; }
+var _gPad=0, _gCore=0; // 外圈剝落的寬度 / 中間燒穿的洞半徑（GameScene 設定）：掉出去的判定跟著變
+function inGrill(x,y,m=0){ if(_gCore>0&&Math.hypot(x-(G.x+G.w/2),y-(G.y+G.h/2))<_gCore+Math.max(0,m)) return false; m+=_gPad; return x>=G.x+m&&x<=G.x+G.w-m&&y>=G.y+m&&y<=G.y+G.h-m; }
 
 // ── 場地效果開關（開戰前設定畫面可勾選；存在瀏覽器裡，下次還在）─────
 const FX_LIST=[
@@ -2028,6 +2032,9 @@ class GameScene extends Phaser.Scene {
     this.FIRE_R_BASE=46; this.FIRE_R_AMP=12;
     this.shrinkPad=0; _gPad=0; this.shrinkStep=18; this.shrinkMax=165; // 一次剝 18px（原本 55px），慢慢剝
     this.shrinkTimer=12; this.shrinkWarning=false; this.shrinkWarnTimer=0; this._shrinkCount=0; // 12 秒後開始
+    { const _lv=this.levelData||{}; if(_lv.shrinkMax!=null) this.shrinkMax=_lv.shrinkMax; // 每張地圖自己的剝落上限（鐵板燒 0 = 不剝落）
+      this.wind=_lv.wind?{on:true,str:0,base:_lv.wind.str,x:1,y:0,nx:1,ny:0,warn:false,warnT:0,timer:6,started:false,parts:[]}:{on:false};
+      const _c=_lv.core; _gCore=0; this.core=_c?{on:true,R:0,next:0,warn:false,warnT:0,timer:_c.start,first:_c.first,step:_c.step,gap:_c.gap,max:_c.max}:{on:false,R:0}; }
     this.evtTimer=1e9; this.evtQueue=[];
     this.holes=[]; this.holeTimer=1e9;
     this._dirT=8+Math.random()*2; this._dirLast=null; this._dirLog=[]; this._dirGap=false; this._dirRand=null; this._nem={}; this._koPair={}; this._openUntil=0; // 事件導演：第一個大事件約 8–10 秒
@@ -2044,6 +2051,8 @@ class GameScene extends Phaser.Scene {
     this.abilFxLayer=this.add.graphics().setDepth(22);
     this.eventLayer =this.add.graphics().setDepth(16);
     this.shrinkLayer=this.add.graphics().setDepth(4);
+    this.coreLayer=this.add.graphics().setDepth(4);
+    this.windLayer=this.add.graphics().setDepth(26);
     this.holeLayer  =this.add.graphics().setDepth(5);
     this.flareLayer =this.add.graphics().setDepth(6);
     this.heatLayer  =this.add.graphics().setDepth(5);
@@ -2400,14 +2409,18 @@ class GameScene extends Phaser.Scene {
     const M=[55,95,130][diff], K=[0.18,0.42,0.7][diff];
     if(left<M) e.vx+=K*(1-left/M); if(right<M) e.vx-=K*(1-right/M);
     if(top<M)  e.vy+=K*(1-top/M);  if(bot<M)   e.vy-=K*(1-bot/M);
+    { const cr=this._coreR(); if(cr>0){ // 中間燒穿：離洞遠一點（快變大的範圍也算）
+      const M2=[50,80,110][diff], K2=[0.35,0.6,0.9][diff], dx=e.x-cx, dy=e.y-cy, d=Math.hypot(dx,dy)||1, gap=d-cr;
+      if(gap<M2){ const f=K2*(1-Math.max(0,gap)/M2)+(gap<0?K2:0); e.vx+=dx/d*f; e.vy+=dy/d*f; } } }
     // ② 不背對邊緣：玩家靠近時，移到「玩家和中心之間」，讓玩家推的方向是往內
     const px=this.p.x, py=this.p.y, dP=Math.hypot(e.x-px,e.y-py)||1;
     if(this.alive&&dP<230&&diff>0){
       const ax=(e.x-px)/dP, ay=(e.y-py)/dP;             // 被推的方向
       const fx=e.x+ax*140, fy=e.y+ay*140;                // 被推 140px 後的位置
       if(!inGrill(fx,fy)||Math.min(fx-G.x,G.x+G.w-fx,fy-G.y,G.y+G.h-fy)<pad+40){
-        const tcx=cx-px, tcy=cy-py, tl=Math.hypot(tcx,tcy)||1;
-        const wx=px+tcx/tl*70, wy=py+tcy/tl*70;          // 目標點：玩家靠中心那一側
+        const _toCore=_gCore>0&&Math.hypot(fx-cx,fy-cy)<_gCore+40; // 背後是中間的洞
+        const tcx=_toCore?px-cx:cx-px, tcy=_toCore?py-cy:cy-py, tl=Math.hypot(tcx,tcy)||1;
+        const wx=px+tcx/tl*70, wy=py+tcy/tl*70;          // 目標點：玩家靠中心那一側（背後是洞 → 改站玩家外側）
         const wdx=wx-e.x, wdy=wy-e.y, wd=Math.hypot(wdx,wdy)||1;
         const S=[0,0.32,0.55][diff];
         e.vx+=wdx/wd*S; e.vy+=wdy/wd*S;
@@ -2421,7 +2434,7 @@ class GameScene extends Phaser.Scene {
         e._dodgeId=ds;
         if(Math.random()<[0.15,0.45,0.75][diff]){
           let sx=-ds.dy, sy=ds.dx;                           // 垂直方向
-          if((cx-e.x)*sx+(cy-e.y)*sy<0){ sx=-sx; sy=-sy; }    // 選靠中心那邊
+          if(((cx-e.x)*sx+(cy-e.y)*sy<0)!==(_gCore>0&&Math.hypot(e.x-cx,e.y-cy)<_gCore+120)){ sx=-sx; sy=-sy; } // 選靠中心那邊（中間有洞就選外側）
           e._dodgeVx=sx*6; e._dodgeVy=sy*6; e._dodgeT=0.24; // 約 85px 的側閃
         }
       }
@@ -2496,9 +2509,10 @@ class GameScene extends Phaser.Scene {
       const x=G.x+pad+Math.random()*(G.w-pad*2), y=G.y+pad+Math.random()*(G.h-pad*2);
       const nearFire=this.firePts.some(f=>(f.state==='active'||f.state==='warning')&&Math.hypot(x-(f.tx||f.x),y-(f.ty||f.y))<120);
       const nearOld=this.cool&&Math.hypot(x-this.cool.x,y-this.cool.y)<170;
-      if(!nearFire&&!nearOld) return {x,y};
+      const inCore=this._coreR()>0&&Math.hypot(x-(G.x+G.w/2),y-(G.y+G.h/2))<this._coreR()+70;
+      if(!nearFire&&!nearOld&&!inCore) return {x,y};
     }
-    return {x:G.x+G.w/2,y:G.y+G.h/2};
+    return this._coreR()>0?this._outerSpot(80,0.5):{x:G.x+G.w/2,y:G.y+G.h/2};
   }
   _updateCool(dt){
     if(!this.fx||!this.fx.coolZone||!this.zoneLayer) return;
@@ -2967,6 +2981,7 @@ class GameScene extends Phaser.Scene {
       this.firePts.forEach(f=>{ if(f.state==='active'||f.state==='warning'||f.state==='dying'){ const d=Math.hypot(x-(f.tx||f.x),y-(f.ty||f.y)); if(d<120) sc-=(120-d)*3; } });
       if(this.fork&&Math.abs(x-this.fork.cx)<this.fork.half+60&&Math.abs(y-this.fork.cy)<this.fork.half+60) sc-=1000;
       (this.holes||[]).forEach(h=>{ if(Math.hypot(x-h.x,y-h.y)<80) sc-=500; });
+      { const cr=this._coreR(); if(cr>0&&Math.hypot(x-(G.x+G.w/2),y-(G.y+G.h/2))<cr+70) sc-=2000; }
       if(this.heatMode==='ring') sc-=this._ringHeat(x,y)*40;
       if(this.heatMode==='crowd') (this.crowdZones||[]).forEach(z=>{ if(Math.hypot(x-z.x,y-z.y)<z.r+50) sc-=600; });
       [{x:this.p.x,y:this.p.y},...this.enemies.filter(e=>e.alive)].forEach(o=>{ const d=Math.hypot(x-o.x,y-o.y); if(d<140) sc-=(140-d); });
@@ -3319,7 +3334,7 @@ class GameScene extends Phaser.Scene {
     const R=v=>Math.round(v), st=this.stats||{};
     const ents=[{id:'H',k:this.charData.key,n:window.MP.myNickname||'房主',x:R(this.p.x),y:R(this.p.y),h:R(this.heat),a:this.alive?1:0,g:(this._ghostT>0&&!this._pOut)?1:0,gh:this._pOut?1:0,lv:this.lives,pp:this.activeEffects.pepBoost>0?1:0,sk:this._inHotSoy?1:0,s:this.score||0,u:Math.floor(this.ultCharge||0)}];
     this.enemies.forEach((e,i)=>ents.push({id:e.pid||('a'+i),k:e.ck,n:e.label,x:R(e.x),y:R(e.y),h:R(e.heat||0),a:(e.alive||e.isGhost)?1:0,g:e._ghostT>0?1:0,gh:e.isGhost?1:0,lv:e.lives??0,pp:(e.activeEffects&&e.activeEffects.pepBoost>0)?1:0,sk:e._inHot?1:0,s:e.score||0,u:(e.ultCharge||0),pc:e.remote?+(e._pushCD||0).toFixed(2):0,...(e.remote?{q:e._ack||0,qa:+((performance.now()-(e._ackAt||0))/1000).toFixed(3)}:{})}));
-    const sn={tl:this.timeLeft,e:ents,lm:this.fx.respawn?1:0,bm:(this.bombs||[]).map(b=>[R(b.x),R(b.y),+b.t.toFixed(2)]),hm:this.heatMode,fm:this._fireMul||1,sp:this.shrinkPad||0,sw:this.shrinkWarning?1:0,uw:this.enemies.filter(e=>e._ultWind>0).map(e=>[R(e.x),R(e.y),+(1-e._ultWind/(e._ultWindMax||1)).toFixed(2)]),cz:this.heatMode==='crowd'?(this.crowdZones||[]).map(z=>[R(z.x),R(z.y),R(z.r),z.st==='warn'?0:z.st==='hot'?1:2,+(z.p||0).toFixed(2)]):null,ti:this.tilt?[this.tilt.x,this.tilt.y,this.tilt.state==='active'?1:0,+this.tilt.timer.toFixed(2),this.tilt.force,this.tilt.rot,this.tilt.hold,this.tilt.lbl]:null,
+    const sn={tl:this.timeLeft,e:ents,lm:this.fx.respawn?1:0,bm:(this.bombs||[]).map(b=>[R(b.x),R(b.y),+b.t.toFixed(2)]),hm:this.heatMode,fm:this._fireMul||1,sp:this.shrinkPad||0,sw:this.shrinkWarning?1:0,wd:this.wind&&this.wind.on?[Math.round(this.wind.x*100),Math.round(this.wind.y*100),this.wind.warn?1:0,Math.round(this.wind.nx*100),Math.round(this.wind.ny*100),this.wind.str||0]:0,co:this.core&&this.core.on?[R(this.core.R),R(this.core.next||0),this.core.warn?1:0,+(this.core.warnT||0).toFixed(2)]:0,uw:this.enemies.filter(e=>e._ultWind>0).map(e=>[R(e.x),R(e.y),+(1-e._ultWind/(e._ultWindMax||1)).toFixed(2)]),cz:this.heatMode==='crowd'?(this.crowdZones||[]).map(z=>[R(z.x),R(z.y),R(z.r),z.st==='warn'?0:z.st==='hot'?1:2,+(z.p||0).toFixed(2)]):null,ti:this.tilt?[this.tilt.x,this.tilt.y,this.tilt.state==='active'?1:0,+this.tilt.timer.toFixed(2),this.tilt.force,this.tilt.rot,this.tilt.hold,this.tilt.lbl]:null,
       f:this.firePts.filter(f=>f.state!=='cooldown').map(f=>({x:R(f.x),y:R(f.y),tx:R(f.tx||f.x),ty:R(f.ty||f.y),st:f.state,al:+(f.alpha||0).toFixed(2),c:f.collision?1:0,sd:f.spd||1,ph:+(f.ph||0).toFixed(2)})),
       o:(this.ultOrbs||[]).map(o=>[R(o.x),R(o.y),o.preSpawn?1:0]),
       it:(this.mapItems||[]).map(it=>[R(it.x),R(it.y),it.type,it.good?1:0]),
@@ -3386,6 +3401,9 @@ class GameScene extends Phaser.Scene {
     this._netIcons.forEach((t,i)=>{ const ic=icons[i]; if(ic) t.setText(ic[2]).setPosition(ic[0],ic[1]).setVisible(true); else t.setVisible(false); });
     this.fork=sn.fk; if(this.fork) this.drawFork(); else { this.forkLayer.clear(); if(this.forkFx&&this.forkFx.scene) this.forkFx.clear(); }
     this.shrinkPad=sn.sp; _gPad=sn.sp||0; this.shrinkWarning=!!sn.sw; this.drawShrinkRing();
+    if(sn.wd){ const _w=this.wind&&this.wind.on?this.wind:(this.wind={on:true,parts:[]}); _w.x=sn.wd[0]/100; _w.y=sn.wd[1]/100; _w.warn=!!sn.wd[2]; _w.nx=sn.wd[3]/100; _w.ny=sn.wd[4]/100; _w.str=sn.wd[5]; } else this.wind={on:false};
+    if(sn.co){ this.core={on:true,R:sn.co[0],next:sn.co[1],warn:!!sn.co[2],warnT:sn.co[3]}; _gCore=sn.co[0]; } else { this.core={on:false,R:0}; _gCore=0; }
+    this.drawCore();
     { const T=sn.ti; this.tilt=T?{x:T[0],y:T[1],state:T[2]?'active':'warn',timer:T[3],dur:3.0,force:T[4],rot:T[5],hold:T[6],lbl:T[7]}:null; this._tiltVisual(); }
     // 角色
     if(this.shadowLayer&&this.shadowLayer.scene) this.shadowLayer.clear();
@@ -3423,6 +3441,9 @@ class GameScene extends Phaser.Scene {
     if((this._localDash||0)>0){ this._localDash-=dt; this.p.x+=this.lastDir.x*540*dt; this.p.y+=this.lastDir.y*540*dt; }
     else { let _mx=dx,_my=dy,_tx=0,_ty=0; const _TF=this._tiltF(); if(_TF>0){ const tv=this._tiltVel(dx,dy,sp,false,_TF); _mx=tv.mx; _my=tv.my; _tx=tv.tx; _ty=tv.ty; } this.p.x+=(_mx*sp+_tx)*dt; this.p.y+=(_my*sp+_ty)*dt; }
     this.p.x=Phaser.Math.Clamp(this.p.x,G.x+4,G.x+G.w-4); this.p.y=Phaser.Math.Clamp(this.p.y,G.y+4,G.y+G.h-4);
+    if(this.wind&&this.wind.on&&this.wind.str>0&&!this._netGhost&&!((this._localDash||0)>0)){ const _w=this.wind, _wx=_w.x*_w.str*dt, _wy=_w.y*_w.str*dt; if(inGrill(this.p.x+_wx,this.p.y+_wy,14)){ this.p.x+=_wx; this.p.y+=_wy; } }
+    if(this.wind&&this.wind.on){ this._windParts(dt); this.drawWind(); }
+    if(_gCore>0&&!this._netGhost){ const _cx=G.x+G.w/2,_cy=G.y+G.h/2,_dx=this.p.x-_cx,_dy=this.p.y-_cy,_d=Math.hypot(_dx,_dy)||1; if(_d<_gCore+4){ this.p.x=_cx+_dx/_d*(_gCore+4); this.p.y=_cy+_dy/_d*(_gCore+4); } }
     this._netStuck=!!en.sk; if(en.gh&&!this._netGhost) this._banner('👻 你變成鬼魂了','沿著烤盤外圈走，按 A 丟炭火彈；炸下去一個人就能復活一次'); this._netGhost=!!en.gh;
     if(en.pc>0.05) this._dashLock=Math.max(this._dashLock||0,this.time.now+en.pc*1000-150);
     // 對位置：跟「自己送出第 q 個按鍵、再過 qa 秒」那時的位置比（不是跟現在比）。
@@ -4406,6 +4427,8 @@ class GameScene extends Phaser.Scene {
       const fp=this.firePts[Math.floor(Math.random()*this.firePts.length)];
       x=Phaser.Math.Clamp(fp.x+(Math.random()*90-45),G.x+margin,G.x+G.w-margin);
       y=Phaser.Math.Clamp(fp.y+(Math.random()*90-45),G.y+margin,G.y+G.h-margin);
+    } else if(Math.random()<0.5){ // 一半放在外圈：想拿道具就得離開安全的中間
+      const sp=this._outerSpot(margin,0.55); x=sp.x; y=sp.y;
     } else {
       x=G.x+margin+Math.random()*(G.w-margin*2);
       y=G.y+margin+Math.random()*(G.h-margin*2);
@@ -4418,6 +4441,7 @@ class GameScene extends Phaser.Scene {
         y=Phaser.Math.Clamp((a.y+b.y)/2+(Math.random()*60-30),G.y+pm,G.y+G.h-pm);
       }
     }
+    if(!inGrill(x,y,40)){ const sp=this._outerSpot(margin,0.3); x=sp.x; y=sp.y; } // 掉在剝落區或洞裡 → 換位置
     // Glow ring behind item
     const gfx=this.add.graphics().setDepth(15);
     gfx.fillStyle(tp.good?0x00ccff:0xff3300,0.45);
@@ -5025,15 +5049,15 @@ class GameScene extends Phaser.Scene {
           const _rep=(e._pHitT||0)>this.time.now-3000; e._pHitT=this.time.now; // 3 秒內連撞同一個人：不加分、不傳熱
           if(!_rep) this._xferHeat(null,e); e._lastHitBy='player'; e._lastHitT=this.time.now; if(this.stats) this.stats.hits++;
           if(!_rep&&this._outHit(e.x,e.y,mx,my)) this._addScore(null,1,e.x,e.y);
-          else if(!_rep) this._tip('inhit',e.x,e.y,'往中間撞不加分','把人往烤盤邊緣撞才 +0.5 分；往中間撞只是推開他。');
+          else if(!_rep) this._tip('inhit',e.x,e.y,'往中間撞不加分','把人往烤盤邊緣撞才 +0.5 分（中間有洞時往洞推也算）；往中間撞只是推開他。');
           this._charImpact(this.pAnim,mx,my,0.45); this.pAnim.flash=0; // 攻擊方也小震一下（不閃白）
           if(charBst>1.8)this.showPop('🔥 脆了！飛出去！');
           else if(resist<1)this.showPop('💪 撐住了！');
           else this.showPop('💥 撞飛！');
           if((e._openUntil||0)>this.time.now){ this.showPop('⏱ 抓到破綻！飛更遠'); this._tip('opening',e.x,e.y,'⏱ 抓破綻','對手剛衝完有 0.7 秒空檔（黃圈），這時撞他會飛 1.35 倍。先閃開他的衝刺，再撞回去！'); }
           this.tweens.add({targets:e,
-            x:e.x+mx*this.dashState.force*resist*charBst*this._ultKnockMul(e),
-            y:e.y+my*this.dashState.force*resist*charBst*this._ultKnockMul(e),
+            x:e.x+mx*this.dashState.force*resist*charBst*this._ultKnockMul(e)*this._windMul(mx,my),
+            y:e.y+my*this.dashState.force*resist*charBst*this._ultKnockMul(e)*this._windMul(mx,my),
             duration:260,ease:'Cubic.easeOut',
             onComplete:()=>this.checkEnemyFall(e,i)});
           if(this.activeEffects.pepBoost>0) this._scatterPepper(e.x,e.y,false,e);
@@ -5088,8 +5112,12 @@ class GameScene extends Phaser.Scene {
         // 鍵盤在安全範圍頂牆：夾緊座標
         this.p.x=Phaser.Math.Clamp(nx,G.x+_gPad+4,G.x+G.w-_gPad-4);
         this.p.y=Phaser.Math.Clamp(ny,G.y+_gPad+4,G.y+G.h-_gPad-4);
+        if(_gCore>0){ const _cx=G.x+G.w/2,_cy=G.y+G.h/2,_dx=this.p.x-_cx,_dy=this.p.y-_cy,_d=Math.hypot(_dx,_dy)||1; if(_d<_gCore+4){ this.p.x=_cx+_dx/_d*(_gCore+4); this.p.y=_cy+_dy/_d*(_gCore+4); } }
       }
     } else {this.p.x=nx;this.p.y=ny;}
+    this._windMv=0;
+    if(this.wind&&this.wind.on&&this.wind.str>0&&!isDash&&!this._pOut){ const _w=this.wind, _wx=_w.x*_w.str*dt, _wy=_w.y*_w.str*dt;
+      if(inGrill(this.p.x+_wx,this.p.y+_wy,14)){ this.p.x+=_wx; this.p.y+=_wy; this._windMv=_w.str; } }
     this._lastPX=this.p.x; this._lastPY=this.p.y;
     // 傾斜低側加速帶
     if(this.tilt&&this.tilt.state==='active'){
@@ -5164,7 +5192,7 @@ class GameScene extends Phaser.Scene {
     }
     { const _mv=Math.hypot(this.p.x-(this._stX??this.p.x),this.p.y-(this._stY??this.p.y))/(dt||0.016); this._stX=this.p.x; this._stY=this.p.y;
       const _key=this.keys.left.isDown||this.keys.right.isDown||this.keys.up.isDown||this.keys.down.isDown||GKEYS['ArrowLeft']||GKEYS['ArrowRight']||GKEYS['ArrowUp']||GKEYS['ArrowDown'];
-      this._stillT=(_mv>25||_key)?0:(this._stillT||0)+dt; } // 以前只看自己的速度：被推飛、撐住傾斜、被定住都會算成「站著不動」
+      this._stillT=((_mv-(this._windMv||0))>25||_key)?0:(this._stillT||0)+dt; } // 被風吹著走不算有在動 // 以前只看自己的速度：被推飛、撐住傾斜、被定住都會算成「站著不動」
     if(this.fx.stillBurn&&this._stillT>1.5&&!fireImmune){ this._hAdd('站著不動被烤焦',Math.max(0,this.heat-_hB0)*0.5+1.2*dt,heatCap); } // 站著不動：熟度上升 ×1.5
     if(this.heat>=heatCap){this.subTxt.setText('被烤熟了！');this.endGame(false);return;}
 
@@ -5411,7 +5439,7 @@ class GameScene extends Phaser.Scene {
       if(this.shrinkPad>0){
         const mg=this.shrinkPad+[16,22,32][diff];
         const cxA=G.x+G.w/2, cyA=G.y+G.h/2;
-        if(e.x<G.x+mg||e.x>G.x+G.w-mg||e.y<G.y+mg||e.y>G.y+G.h-mg){
+        if((e.x<G.x+mg||e.x>G.x+G.w-mg||e.y<G.y+mg||e.y>G.y+G.h-mg)&&!(_gCore>0&&Math.hypot(e.x-cxA,e.y-cyA)<_gCore+90)){
           const dl=Math.hypot(cxA-e.x,cyA-e.y)||1;
           e.vx+=(cxA-e.x)/dl*[0.30,0.55,0.85][diff];
           e.vy+=(cyA-e.y)/dl*[0.30,0.55,0.85][diff];
@@ -5444,7 +5472,7 @@ class GameScene extends Phaser.Scene {
       const chargeCd=(diff===0?6+Math.random()*4:diff===1?3.5+Math.random()*3:2+Math.random()*2)*({aggro:0.6,pack:0.9,camper:1.3}[tac]||1);
       const _chRange=tac==='aggro'?230:tac==='pack'?150:tac==='camper'?(e._opp?180:0):(diff===1?165:200);
       if(!onIceTrail){
-      const _nearEdge=Math.min(e.x-G.x,G.x+G.w-e.x,e.y-G.y,G.y+G.h-e.y)<(this.shrinkPad||0)+95;
+      const _nearEdge=Math.min(e.x-G.x,G.x+G.w-e.x,e.y-G.y,G.y+G.h-e.y)<(this.shrinkPad||0)+95||(_gCore>0&&Math.hypot(e.x-(G.x+G.w/2),e.y-(G.y+G.h/2))<_gCore+95);
       if(e.chargeTimer<=0&&edist<_chRange&&!onOil&&!e._inHot&&!(diff>0&&_nearEdge)){ // 中/強：靠邊時不亂衝刺
         e.chargeTimer=chargeCd;
         e.charging=true; e.chargeTime=0.32;
@@ -5519,7 +5547,7 @@ class GameScene extends Phaser.Scene {
             // AI 有胡椒推玩家 → 散出胡椒（玩家視野受限）
             if(e.activeEffects&&e.activeEffects.pepBoost>0) this._scatterPepper(this.p.x,this.p.y,true,null,e);
             this.tweens.add({targets:this.p,
-              x:this.p.x+pnx*pForce*cBst*_kRes*_juicyRes,y:this.p.y+pny*pForce*cBst*_kRes*_juicyRes,
+              x:this.p.x+pnx*pForce*cBst*_kRes*_juicyRes*this._windMul(pnx,pny),y:this.p.y+pny*pForce*cBst*_kRes*_juicyRes*this._windMul(pnx,pny),
               duration:240,ease:'Cubic.easeOut',
               onComplete:()=>{if(!inGrill(this.p.x,this.p.y)){this._addScore(e,3,null,null,true,this.heat,false,'P');this.subTxt.setText('被 '+e.label+' 推落！');this.endGame(false);}else{this._spawnCollisionOil(this.p.x,this.p.y);
                 if(this.onFire(this.p.x,this.p.y)){ this._hAdd('被推進火裡',15); this._notice('🔥 被推進火裡！熟度 +15%','#ff6a3a'); this._addTrauma(0.4); }}}});
@@ -5561,6 +5589,7 @@ class GameScene extends Phaser.Scene {
       }
       if(onOil){e.vx*=0.985;e.vy*=0.985;} // 油上滑行：輕微減速但失去轉向控制
       { const _tm=(this._tiltF()>0&&!e.charging)?0.35:1; e.x+=e.vx*_tm; e.y+=e.vy*_tm; } // 傾斜中自己幾乎走不動
+      if(this.wind&&this.wind.on&&this.wind.str>0&&!e.isGhost&&!e.charging){ const _w=this.wind, _wx=_w.x*_w.str/60, _wy=_w.y*_w.str/60; if(inGrill(e.x+_wx,e.y+_wy,(e.r||20)*0.6)){ e.x+=_wx; e.y+=_wy; } } // 野風
       // AI 冰跡留下
       if(e.activeEffects&&e.activeEffects.iceBoost>0){
         const _eid=Math.hypot(e.x-(e.iceLastX||0),e.y-(e.iceLastY||0));
@@ -5571,7 +5600,9 @@ class GameScene extends Phaser.Scene {
       }
       { const _m=_gPad+e.r; // 自己走路碰到邊（剝落後是縮小的邊）就彈回，不會走進剝掉的黑區
         if((e.x<G.x+_m&&e.vx<0)||(e.x>G.x+G.w-_m&&e.vx>0)) e.vx*=-1;
-        if((e.y<G.y+_m&&e.vy<0)||(e.y>G.y+G.h-_m&&e.vy>0)) e.vy*=-1; } // 只擋往外走；傾斜、被撞還是會掉
+        if((e.y<G.y+_m&&e.vy<0)||(e.y>G.y+G.h-_m&&e.vy>0)) e.vy*=-1; // 只擋往外走；傾斜、被撞還是會掉
+        if(_gCore>0){ const _dx=e.x-(G.x+G.w/2), _dy=e.y-(G.y+G.h/2), _d=Math.hypot(_dx,_dy)||1, _vr=(e.vx*_dx+e.vy*_dy)/_d;
+          if(_d<_gCore+e.r&&_vr<0){ e.vx-=2*_vr*_dx/_d; e.vy-=2*_vr*_dy/_d; } } } // 走到中間的洞邊也彈回
       { const _TF=this._tiltF(); if(_TF>0&&!(e._ghostT>0)){
         let _s;
         if(e.remote){ // 遠端真人：跟玩家一樣，按反方向才撐得住
@@ -5696,6 +5727,8 @@ class GameScene extends Phaser.Scene {
     this._drawCrowdZones();
     this.updateRandEvents(dt); if(!this.alive) return;
     this.updateShrink(dt);    if(!this.alive) return;
+    this.updateCore(dt);      if(!this.alive) return;
+    this.updateWind(dt);
     this.updateHoles(dt);     if(!this.alive) return;
     // 碰撞油漬更新：等待點火 → 變成青綠火
     this.collisionOils=this.collisionOils.filter(o=>{
@@ -5871,6 +5904,8 @@ class GameScene extends Phaser.Scene {
     this.drawFires(this.firePhase);
     this.drawTrailEffects();
     this.drawShrinkRing();
+    this.drawCore();
+    this.drawWind();
     this.drawHoles();
     this.drawEventFx();
     // 技能持續光環
@@ -6462,6 +6497,113 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // ══ 中心燒穿（鐵板燒 / 地獄料理）：中間燒出一個洞，每隔幾秒預告 2.5 秒後變大 ══
+  _coreR(){ const c=this.core; return c&&c.on?Math.max(_gCore,c.warn?c.next:0):0; } // 含「快要變大」的範圍
+  _corePush(o){ // 把人推到洞的邊緣外（無敵中不掉下去）
+    const cx=G.x+G.w/2, cy=G.y+G.h/2, dx=o.x-cx, dy=o.y-cy, d=Math.hypot(dx,dy)||1, R=_gCore+(o.r||18)+6;
+    if(d<R){ o.x=cx+dx/d*R; o.y=cy+dy/d*R; }
+  }
+  updateCore(dt){
+    const c=this.core; if(!c||!c.on) return;
+    const cx=G.x+G.w/2, cy=G.y+G.h/2;
+    if(c.R<c.max){
+      c.timer-=dt;
+      if(c.timer<=0&&!c.warn){
+        c.warn=true; c.warnT=2.5; c.next=Math.min(c.max,c.R>0?c.R+c.step:c.first);
+        if(!c.R) this._evt('core',cx,cy,'🕳 中間開始燒穿','烤盤中間會燒出一個洞，而且越來越大；洞邊很燙（每秒 +10%）。把人往洞裡推也算擊落！');
+        else this._notice('⚠ 中間的洞要變大了！','#ffb070');
+      }
+      if(c.warn){
+        c.warnT-=dt;
+        if(c.warnT<=0){
+          c.warn=false; c.R=c.next; _gCore=c.R; c.timer=c.gap;
+          this._addTrauma(0.18,0.3);
+          if(c.R>c.first) this._notice('🕳 中間的洞又變大了','#ffb070');
+          if(this.alive&&!this._pOut&&Math.hypot(this.p.x-cx,this.p.y-cy)<c.R){
+            if(this._ghostT>0) this._corePush(this.p);
+            else { this.subTxt.setText('掉進中間燒穿的洞！'); this.endGame(false); return; }
+          }
+          this.enemies.forEach((e,i)=>{
+            if(!e.alive||e.isGhost) return;
+            if(Math.hypot(e.x-cx,e.y-cy)<c.R){ if(e._ghostT>0) this._corePush(e); else this.checkEnemyFall(e,i,true); }
+          });
+        }
+      }
+    }
+    if(c.R>0){ // 洞邊很燙：20px 內每秒 +10%
+      if(this.alive&&!this._pOut&&!(this._ghostT>0)&&!(this.activeEffects.foil>0)&&Math.hypot(this.p.x-cx,this.p.y-cy)-c.R<20)
+        this._hAdd('貼著中間的洞（洞邊很燙）',10*dt);
+      this.enemies.forEach(e=>{ if(!e.alive||e.isGhost) return; if(Math.hypot(e.x-cx,e.y-cy)-c.R<20) e.heat=Math.min(100,(e.heat||0)+10*dt); });
+    }
+  }
+  drawCore(){
+    const g=this.coreLayer; if(!g||!g.scene) return; g.clear();
+    const c=this.core; if(!c||!c.on) return;
+    const cx=G.x+G.w/2, cy=G.y+G.h/2, ph=this.firePhase||0, n=44;
+    const poly=(r,j,sd)=>{ const pts=[]; for(let i=0;i<n;i++){ const a=i/n*Math.PI*2, v=Math.sin(i*37.719+sd)*43758.5453, f=1+j*((v-Math.floor(v))-0.5); pts.push({x:cx+Math.cos(a)*r*f,y:cy+Math.sin(a)*r*f}); } return pts; };
+    if(c.warn){ // 預告：下一圈的範圍先烤焦、閃橘紅
+      const p=Math.max(0,Math.min(1,1-c.warnT/2.5)), bl=0.55+0.45*Math.sin(ph*(8+p*10));
+      g.fillStyle(0xff5a1a,(0.10+0.22*p)*bl); g.fillCircle(cx,cy,c.next+10);
+      g.fillStyle(0x2a1408,0.25+0.5*p); g.fillPoints(poly(c.next,0.07,3.1),true);
+      g.lineStyle(3,0xffa040,0.45+0.5*bl); g.strokeCircle(cx,cy,c.next);
+      for(let k=0;k<5;k++){ const t=(ph*0.6+k/5)%1, a=k*1.26+ph*0.1; g.fillStyle(0x3a3a3a,(1-t)*0.35*p); g.fillCircle(cx+Math.cos(a)*c.next*0.7,cy+Math.sin(a)*c.next*0.7-t*40,6+t*12); }
+    }
+    if(c.R<=0) return;
+    const R=c.R, glow=0.6+0.4*Math.sin(ph*5);
+    g.fillStyle(0xff5a1a,0.16+0.10*glow); g.fillCircle(cx,cy,R+20);           // 洞邊很燙（20px）
+    g.fillStyle(0x24110a,0.9); g.fillPoints(poly(R+9,0.10,1.7),true);          // 焦黑外緣
+    g.fillStyle(0x000000,1); g.fillPoints(poly(R,0.05,5.3),true);              // 洞
+    g.fillStyle(0x4a0c00,0.5*glow); g.fillCircle(cx,cy,R*0.55);                // 洞底暗紅
+    g.lineStyle(4,0xff4a10,0.85*glow); g.strokePoints(poly(R,0.05,5.3),true,true);
+    g.lineStyle(1.5,0xff9a40,0.55*glow); g.strokePoints(poly(R*0.92,0.05,5.3),true,true);
+    for(let k=0;k<10;k++){ const t=(ph*0.8+k/10)%1, a=k*0.63+ph*0.05, rr=R*(0.97-0.8*t); g.fillStyle(0xffa040,1-t); g.fillCircle(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr,2.6*(1-t)+0.6); }
+  }
+  // ══ 野風（露營野火）：一直把大家往箭頭方向吹；約 10 秒換方向（預告 1.6 秒）；順風撞人飛更遠 ══
+  updateWind(dt){
+    const w=this.wind; if(!w||!w.on) return;
+    w.timer-=dt;
+    if(!w.warn&&w.timer<=0){
+      const D=[[1,0],[0.707,0.707],[0,1],[-0.707,0.707],[-1,0],[-0.707,-0.707],[0,-1],[0.707,-0.707]];
+      let k; do{ k=Math.floor(Math.random()*8); }while(w.started&&D[k][0]*w.x+D[k][1]*w.y>0.2); // 新風向至少轉 90°
+      w.nx=D[k][0]; w.ny=D[k][1]; w.warn=true; w.warnT=1.6;
+      if(!w.started) this._evt('wind',G.x+G.w/2,G.y+G.h/2,'🌬 起風了','風會一直把大家往箭頭方向吹，約 10 秒換一次方向；順著風把人撞出去會飛更遠！');
+      else this._notice('🌬 風向要變了！'+this._windArrow(w.nx,w.ny),'#bfe8ff');
+    }
+    if(w.warn){ w.warnT-=dt; if(w.warnT<=0){ w.warn=false; w.x=w.nx; w.y=w.ny; w.started=true; w.str=w.base; w.timer=9+Math.random()*3; } }
+    this._windParts(dt);
+  }
+  _windArrow(x,y){ return ['→','↘','↓','↙','←','↖','↑','↗'][(Math.round(Math.atan2(y,x)/(Math.PI/4))+8)%8]; }
+  _windMul(dx,dy){ const w=this.wind; if(!w||!w.on||!w.str) return 1; const l=Math.hypot(dx,dy)||1; return 1+0.3*Math.max(0,(dx*w.x+dy*w.y)/l); } // 順風撞：最多飛遠 30%
+  _windParts(dt){
+    const w=this.wind; if(!w||!w.on) return;
+    if(!w.parts||!w.parts.length){ w.parts=[]; for(let i=0;i<34;i++) w.parts.push({x:G.x+Math.random()*G.w,y:G.y+Math.random()*G.h,s:0.7+Math.random()*0.6}); }
+    const v=(w.str||0)*3.2;
+    w.parts.forEach(p=>{ p.x+=w.x*v*p.s*dt; p.y+=w.y*v*p.s*dt;
+      if(p.x<G.x) p.x+=G.w; if(p.x>G.x+G.w) p.x-=G.w; if(p.y<G.y) p.y+=G.h; if(p.y>G.y+G.h) p.y-=G.h; });
+  }
+  drawWind(){
+    const g=this.windLayer; if(!g||!g.scene) return; g.clear();
+    const w=this.wind; if(!w||!w.on) return;
+    if(w.str>0) w.parts.forEach(p=>{ const L=30*p.s; g.lineStyle(2.5,0xffffff,0.34*p.s); g.beginPath(); g.moveTo(p.x,p.y); g.lineTo(p.x-w.x*L,p.y-w.y*L); g.strokePath(); });
+    if(w.warn){ // 新風向的大箭頭（閃）
+      const cx=G.x+G.w/2, cy=G.y+G.h/2, bl=0.45+0.35*Math.sin((this.firePhase||0)*10), ux=w.nx, uy=w.ny, px=-uy, py=ux;
+      g.fillStyle(0xd8f2ff,0.35+bl*0.5); g.lineStyle(4,0x2a6a9a,0.5+bl*0.5);
+      const pts=[[-120,-16],[40,-16],[40,-46],[120,0],[40,46],[40,16],[-120,16]].map(([a,b])=>({x:cx+ux*a+px*b,y:cy+uy*a+py*b}));
+      g.fillPoints(pts,true); g.strokePoints(pts,true,true);
+    }
+  }
+  // 找一個外圈的位置（minN：離中心的比例，0.55 = 外面那一圈）；會避開剝落、中間的洞
+  _outerSpot(margin,minN){
+    const pad=(this.shrinkPad||0)+margin, cx=G.x+G.w/2, cy=G.y+G.h/2, hw=Math.max(10,G.w/2-pad), hh=Math.max(10,G.h/2-pad), cr=this._coreR();
+    for(let i=0;i<40;i++){
+      const x=cx+(Math.random()*2-1)*hw, y=cy+(Math.random()*2-1)*hh;
+      if(Math.max(Math.abs(x-cx)/hw,Math.abs(y-cy)/hh)<minN) continue;
+      if(cr>0&&Math.hypot(x-cx,y-cy)<cr+margin) continue;
+      return {x,y};
+    }
+    return {x:cx+(Math.random()<0.5?-1:1)*hw*0.85,y:cy};
+  }
+
   drawTrailEffects(){
     const g=this.fxTrailLayer; g.clear();
     this.iceTrail.forEach(t=>{
@@ -6560,10 +6702,12 @@ class GameScene extends Phaser.Scene {
       this.holeTimer=1e9;
       const pad=this.shrinkPad+40;
       const sx=G.w-pad*2-100, sy=G.h-pad*2-100;
+      let hx=G.x+pad+50+Math.random()*sx, hy=G.y+pad+50+Math.random()*sy;
+      for(let t=0;t<15&&this._coreR()>0&&Math.hypot(hx-(G.x+G.w/2),hy-(G.y+G.h/2))<this._coreR()+90;t++){ hx=G.x+pad+50+Math.random()*sx; hy=G.y+pad+50+Math.random()*sy; }
       if(sx>0&&sy>0){
         this.holes.push({
-          x:G.x+pad+50+Math.random()*sx,
-          y:G.y+pad+50+Math.random()*sy,
+          x:hx,
+          y:hy,
           r:32+Math.random()*14, // 原本 18–28，太小
           state:'warn', timer:2.2, alpha:0
         });
@@ -6850,11 +6994,12 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnCenterOrb(){
-    const cx=G.x+G.w/2, cy=G.y+G.h/2;
+    const _hc=this.core&&this.core.on, _sp=_hc?this._outerSpot(90,0.5):null;
+    const cx=_hc?_sp.x:G.x+G.w/2, cy=_hc?_sp.y:G.y+G.h/2;
     const gfx=this.add.graphics().setDepth(20);
     this.centerOrb={x:cx,y:cy,gfx,ph:0,ring:0};
     const _at1=this.add.text(W/2,H/2-50,'✦ 大絕道具降臨！',{fontSize:'36px',color:'#ffdd00',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000000',strokeThickness:8}).setOrigin(0.5).setDepth(95).setAlpha(0);
-    const _at2=this.add.text(W/2,H/2+8,'⇒ 往烤盤中央衝！⇐',{fontSize:'22px',color:'#ffffff',fontFamily:'sans-serif',stroke:'#000000',strokeThickness:5}).setOrigin(0.5).setDepth(95).setAlpha(0);
+    const _at2=this.add.text(W/2,H/2+8,_hc?'⇒ 快去搶！⇐':'⇒ 往烤盤中央衝！⇐',{fontSize:'22px',color:'#ffffff',fontFamily:'sans-serif',stroke:'#000000',strokeThickness:5}).setOrigin(0.5).setDepth(95).setAlpha(0);
     this.tweens.add({targets:[_at1,_at2],alpha:1,duration:300,hold:1800,yoyo:true,onComplete:()=>{_at1.destroy();_at2.destroy();}});
     const _sf=this.add.rectangle(W/2,H/2,W,H,0xffdd00,0).setDepth(94);
     this.tweens.add({targets:_sf,alpha:{from:0.45,to:0},duration:380,onComplete:()=>_sf.destroy()});
@@ -7355,11 +7500,9 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnUltOrb(){
-    const margin=(this.shrinkPad||0)+70;
     let x=G.x+G.w/2, y=G.y+G.h/2;
-    for(let i=0;i<30;i++){ // 不要生在玩家腳邊（要跑過去搶）；四成機率在中間一帶
-      const mid=Math.random()<0.4, sx=mid?G.w*0.3:G.w-margin*2, sy=mid?G.h*0.3:G.h-margin*2;
-      x=G.x+G.w/2+(Math.random()-0.5)*sx; y=G.y+G.h/2+(Math.random()-0.5)*sy;
+    for(let i=0;i<30;i++){ // 不要生在玩家腳邊（要跑過去搶）；八成在外圈（以前四成在中間 → 大家都躲中間）
+      const sp=this._outerSpot(70,Math.random()<0.8?0.55:0); x=sp.x; y=sp.y;
       if(Math.hypot(x-this.p.x,y-this.p.y)>150) break;
     }
     const gfx=this.add.graphics().setDepth(17);
@@ -7553,7 +7696,9 @@ class GameScene extends Phaser.Scene {
   // 大絕的「易飛」加成：被豆腐凍脆 ×2.5、在培根煙 / 香菇霧 / 辣椒裡 ×1.6
   _ultKnockMul(e){ const now=this.time.now; let m=1; if((e._brittleT||0)>now) m*=2.5; if((e._smokeT||0)>now) m*=1.6; if((e._openUntil||0)>now) m*=1.35; return m; }
   // 撞中算分：要把人往外撞（推的方向跟「中心→他」同向）才 +0.5；往中間撞不算（模擬：亂衝不再比挑時機好）
-  _outHit(x,y,dx,dy){ const cx=G.x+G.w/2, cy=G.y+G.h/2, od=Math.hypot(x-cx,y-cy); return od<40||(dx*(x-cx)+dy*(y-cy))/od>0.2; }
+  _outHit(x,y,dx,dy){ const cx=G.x+G.w/2, cy=G.y+G.h/2, od=Math.hypot(x-cx,y-cy)||1, dt=(dx*(x-cx)+dy*(y-cy))/od;
+    if(_gCore>0&&od<_gCore+170&&dt<-0.2) return true; // 中間燒穿：往洞裡推也算
+    return od<40||dt>0.2; }
   // 衝刺撲空：冷卻多 0.5 秒、0.7 秒破綻（被撞飛 1.35 倍，附近 AI 會趁機衝過來）。亂衝不再比挑時機划算
   _dashWhiff(){
     const now=this.time.now; this.pushCD+=0.5; this._openUntil=now+700;
@@ -7990,7 +8135,7 @@ window.MP = {
   roomCode: null,
   isHost: false,
   myId: null,
-  settings: { maxPlayers: 4, gameMode: 'individual', ultFromStart: false },
+  settings: { maxPlayers: 4, gameMode: 'individual', ultFromStart: false, level: 0 },
   players: [],
   myCharKey: 'bacon',
   myTeam: 'red',
@@ -8001,7 +8146,7 @@ const Lobby = {
   _socket: null,
   _myTeam: 'red',
   _myChar: 'pork',
-  _settings: { maxPlayers: 4, gameMode: 'individual', ultFromStart: false },
+  _settings: { maxPlayers: 4, gameMode: 'individual', ultFromStart: false, level: 0 },
   _isHost: false,
   _roomCode: '',
 
@@ -8203,6 +8348,9 @@ const Lobby = {
 
   _renderSettings() {
     document.getElementById('wr-max-val').textContent = this._settings.maxPlayers;
+    if (typeof LEVELS !== 'undefined') { const lv = LEVELS[(this._settings.level | 0)] || LEVELS[0];
+      document.getElementById('wr-map-btn').textContent = lv.name + ' ▸';
+      document.getElementById('wr-map-desc').textContent = lv.mech || lv.sub; }
     const isTeam = this._settings.gameMode === 'team';
     const modeBtn = document.getElementById('wr-mode-btn');
     modeBtn.textContent = isTeam ? '隊伍制' : '個人制';
@@ -8243,6 +8391,14 @@ const Lobby = {
     this._settings.maxPlayers = val; window.MP.settings.maxPlayers = val;
     document.getElementById('wr-max-val').textContent = val;
     this._updatePlayerList(window.MP.players || []);
+    this._socket.emit('room_settings', this._settings);
+  },
+
+  cycleMap() { // 房主換地圖（每張地圖有自己的機制）
+    if (!this._isHost || typeof LEVELS === 'undefined') return;
+    this._settings.level = ((this._settings.level | 0) + 1) % LEVELS.length;
+    window.MP.settings.level = this._settings.level;
+    this._renderSettings();
     this._socket.emit('room_settings', this._settings);
   },
 
@@ -8289,7 +8445,7 @@ const Lobby = {
     const charData = this._getChars().find(c => c.key === charKey) || this._getChars()[0];
     const launchData = {
       char: charData,
-      level: (typeof LEVELS !== 'undefined' ? LEVELS[0] : null),
+      level: (typeof LEVELS !== 'undefined' ? (LEVELS[(window.MP.settings && window.MP.settings.level) | 0] || LEVELS[0]) : null), // 房主在等待室選的地圖
       enemyCnt: Math.max(0, (window.MP.settings.maxPlayers||4) - window.MP.players.length),
       aiDiff: 1,
       multiplay: true,
