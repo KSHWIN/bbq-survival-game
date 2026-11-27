@@ -382,7 +382,8 @@ const LEVELS = [
   {key:'lv4',name:'地獄料理直播', sub:'雙叉子超高溫',     diff:5, timer:45, heatMod:1.5, forkMod:2.5, tiltMod:1.5, fireCnt:12, fireC1:0xcc0055,fireC2:0xff44cc },
 ];
 
-function inGrill(x,y,m=0){ return x>=G.x+m&&x<=G.x+G.w-m&&y>=G.y+m&&y<=G.y+G.h-m; }
+var _gPad=0; // 外圈剝落的寬度（GameScene 設定）：掉出去的判定跟著縮
+function inGrill(x,y,m=0){ m+=_gPad; return x>=G.x+m&&x<=G.x+G.w-m&&y>=G.y+m&&y<=G.y+G.h-m; }
 
 // ── 場地效果開關（開戰前設定畫面可勾選；存在瀏覽器裡，下次還在）─────
 const FX_LIST=[
@@ -1316,7 +1317,7 @@ class SelectScene extends Phaser.Scene {
       pork:'持續5秒向四方亂噴豬油，落地形成油漬，敵人踩到即失控滑行',
       beef:'蓄力3秒後沿方向高速衝鋒，撞到敵人大幅往旁邊彈出',
       mushroom:'孢子向外噴散，霧氣逐層擴張，1.1 秒後暈眩全場敵人',
-      corn:'亂射 22 顆爆米花顆粒，射中敵人即動彈不得',
+      corn:'5 秒狂射約 60 顆爆米花，會追著最近的人打；射中就彈飛、定住、+3% 熟度',
       wing:'速度爆升 1.8 倍、衝撞推力大增，持續 5 秒',
       shrimp:'蓄力3秒後釋放寬幅海浪，可邊倒數邊調整方向，沿路敵人強力推出',
       tofu:'瞬間降低熱度 70%，展開護盾抵擋後續傷害',
@@ -1868,7 +1869,7 @@ class GameScene extends Phaser.Scene {
                r:40, spd:2.2+Math.random()*1.8, ph:Math.random()*Math.PI*2 };
     });
     this.FIRE_R_BASE=46; this.FIRE_R_AMP=12;
-    this.shrinkPad=0; this.shrinkStep=18; this.shrinkMax=165; // 一次剝 18px（原本 55px），慢慢剝
+    this.shrinkPad=0; _gPad=0; this.shrinkStep=18; this.shrinkMax=165; // 一次剝 18px（原本 55px），慢慢剝
     this.shrinkTimer=12; this.shrinkWarning=false; this.shrinkWarnTimer=0; this._shrinkCount=0; // 12 秒後開始
     this.evtTimer=1e9; this.evtQueue=[];
     this.holes=[]; this.holeTimer=1e9;
@@ -3198,7 +3199,7 @@ class GameScene extends Phaser.Scene {
     const icons=[...(sn.it||[]).map(([x,y,type])=>[x,y,{ice:'🧊',foil:'🪙',garlic:'🧄',sauce:'🍶',pepper:'🌶'}[type]||'🎁']),...(sn.pr||[]).map(([x,y,k])=>[x,y-34,k?'🍋':'🍶'])];
     this._netIcons.forEach((t,i)=>{ const ic=icons[i]; if(ic) t.setText(ic[2]).setPosition(ic[0],ic[1]).setVisible(true); else t.setVisible(false); });
     this.fork=sn.fk; if(this.fork) this.drawFork(); else { this.forkLayer.clear(); if(this.forkFx&&this.forkFx.scene) this.forkFx.clear(); }
-    this.shrinkPad=sn.sp; this.shrinkWarning=!!sn.sw; this.drawShrinkRing();
+    this.shrinkPad=sn.sp; _gPad=sn.sp||0; this.shrinkWarning=!!sn.sw; this.drawShrinkRing();
     { const T=sn.ti; this.tilt=T?{x:T[0],y:T[1],state:T[2]?'active':'warn',timer:T[3],dur:3.0,force:T[4],rot:T[5],hold:T[6],lbl:T[7]}:null; this._tiltVisual(); }
     // 角色
     if(this.shadowLayer&&this.shadowLayer.scene) this.shadowLayer.clear();
@@ -4824,8 +4825,8 @@ class GameScene extends Phaser.Scene {
           this.endGame(false);return;
         }
         // 鍵盤在安全範圍頂牆：夾緊座標
-        this.p.x=Phaser.Math.Clamp(nx,G.x+4,G.x+G.w-4);
-        this.p.y=Phaser.Math.Clamp(ny,G.y+4,G.y+G.h-4);
+        this.p.x=Phaser.Math.Clamp(nx,G.x+_gPad+4,G.x+G.w-_gPad-4);
+        this.p.y=Phaser.Math.Clamp(ny,G.y+_gPad+4,G.y+G.h-_gPad-4);
       }
     } else {this.p.x=nx;this.p.y=ny;}
     this._lastPX=this.p.x; this._lastPY=this.p.y;
@@ -5307,8 +5308,9 @@ class GameScene extends Phaser.Scene {
           e.iceLastX=e.x; e.iceLastY=e.y;
         }
       }
-      if(e.x<G.x+e.r||e.x>G.x+G.w-e.r) e.vx*=-1;
-      if(e.y<G.y+e.r||e.y>G.y+G.h-e.r) e.vy*=-1;
+      { const _m=_gPad+e.r; // 自己走路碰到邊（剝落後是縮小的邊）就彈回，不會走進剝掉的黑區
+        if((e.x<G.x+_m&&e.vx<0)||(e.x>G.x+G.w-_m&&e.vx>0)) e.vx*=-1;
+        if((e.y<G.y+_m&&e.vy<0)||(e.y>G.y+G.h-_m&&e.vy>0)) e.vy*=-1; } // 只擋往外走；傾斜、被撞還是會掉
       { const _TF=this._tiltF(); if(_TF>0&&!(e._ghostT>0)){
         let _s;
         if(e.remote){ // 遠端真人：跟玩家一樣，按反方向才撐得住
@@ -6155,7 +6157,7 @@ class GameScene extends Phaser.Scene {
     if(this.shrinkWarning){
       this.shrinkWarnTimer-=dt;
       if(this.shrinkWarnTimer<=0){
-        this.shrinkPad=Math.min(this.shrinkMax,this.shrinkPad+this.shrinkStep);
+        this.shrinkPad=Math.min(this.shrinkMax,this.shrinkPad+this.shrinkStep); _gPad=this.shrinkPad;
         this.shrinkWarning=false;
         this.shrinkTimer=7; this._shrinkCount=(this._shrinkCount||0)+1;
         this._addTrauma(0.18,0.3);
@@ -6182,8 +6184,6 @@ class GameScene extends Phaser.Scene {
         this.sizzleTimer-=dt;
         if(this.sizzleTimer<=0){this.playSound('sizzle');this.sizzleTimer=0.4;}
       }
-      this.p.x=Phaser.Math.Clamp(this.p.x,G.x+pad+2,G.x+G.w-pad-2);
-      this.p.y=Phaser.Math.Clamp(this.p.y,G.y+pad+2,G.y+G.h-pad-2);
     }
     // 邊緣火圈：靠近縮圈邊界加熱
     if(this.shrinkPad>0&&this.alive){
@@ -6506,10 +6506,10 @@ class GameScene extends Phaser.Scene {
         break;}
       case 'corn':{
         // 加特林爆裂：速度減半＋每0.2秒自動射擊 (5秒)
-        this.ultState={type:'corn',timer:5,autoShoot:true,shootTimer:0,spdMul:0.5};
+        this.ultState={type:'corn',timer:5,autoShoot:true,shootTimer:0,spdMul:0.75};
         gBurst(this.p.x,this.p.y,16,0xfffae0);
         this.cameras.main.shake(200,0.012);
-        this.showPop('🍿 加特林爆裂！全自動連射5秒！');
+        this.showPop('🍿 加特林爆裂！5 秒狂射爆米花，會自動追著人打！');
         break;}
       case 'wing':{
         // 火海轟炸：飛起＋準心＋3次投彈 (3.5秒)
@@ -6787,8 +6787,10 @@ class GameScene extends Phaser.Scene {
     } else if(us.type==='corn'){
       us.shootTimer-=dt;
       if(us.shootTimer<=0){
-        // 大絕：亂射，隨機方向，不鎖定
-        const _rang=Math.random()*Math.PI*2;
+        // 大絕：每 0.08 秒一顆（5 秒約 60 顆）；2/3 瞄最近的人（±20°散射），其餘亂射
+        let _rang=Math.random()*Math.PI*2;
+        { let _bt=null,_bd=480; this.enemies.forEach(e=>{ if(!e.alive||e.ghost)return; const d=Math.hypot(e.x-this.p.x,e.y-this.p.y); if(d<_bd){_bd=d;_bt=e;} });
+          if(_bt&&Math.random()<0.67) _rang=Math.atan2(_bt.y-this.p.y,_bt.x-this.p.x)+(Math.random()-0.5)*0.7; }
         const _rdx=Math.cos(_rang),_rdy=Math.sin(_rang);
         const go={px:this.p.x,py:this.p.y};const gfx=this.add.graphics().setDepth(24);let chit=false;
         this.tweens.add({targets:go,px:this.p.x+_rdx*400,py:this.p.y+_rdy*400,duration:350,ease:'Linear',
@@ -6800,8 +6802,9 @@ class GameScene extends Phaser.Scene {
               if(!e.alive||chit)return;
               if(Math.hypot(go.px-e.x,go.py-e.y)<26){
                 chit=true;
-                this.tweens.add({targets:e,x:e.x+_rdx*130,y:e.y+_rdy*130,duration:250,ease:'Quad.easeOut',onComplete:()=>this.checkEnemyFall(e,idx)});
-                e.stunTimer=(e.stunTimer||0)+0.5;
+                const _kb=95*this._ultKnockMul(e); e._lastHitBy='player'; e._lastHitT=this.time.now;
+                this.tweens.add({targets:e,x:e.x+_rdx*_kb,y:e.y+_rdy*_kb,duration:220,ease:'Quad.easeOut',onComplete:()=>this.checkEnemyFall(e,idx)});
+                e.stunTimer=Math.min(1.6,(e.stunTimer||0)+0.45); e.heat=Math.min(100,(e.heat||0)+3);
                 const ef={r:0};const eg=this.add.graphics().setDepth(25);
                 this.tweens.add({targets:ef,r:1,duration:180,onUpdate:()=>{eg.clear();eg.lineStyle(5*(1-ef.r),0xfffae0,1-ef.r);eg.strokeCircle(go.px,go.py,ef.r*38);},onComplete:()=>eg.destroy()});
               }
@@ -6809,7 +6812,7 @@ class GameScene extends Phaser.Scene {
           },
           onComplete:()=>gfx.destroy()});
         if(this.playerSprite){this.tweens.add({targets:this.playerSprite,x:this.p.x+(Math.random()-0.5)*6,y:this.p.y+(Math.random()-0.5)*6,duration:45,yoyo:true});}
-        us.shootTimer=0.2;
+        us.shootTimer=0.08;
       }
     } else if(us.type==='wing'){
       const _aimSpd=200;
@@ -7749,7 +7752,7 @@ const Lobby = {
     pork:'持續5秒向四方亂噴豬油，落地形成油漬，敵人踩到即失控滑行',
     beef:'蓄力3秒後沿方向高速衝鋒，撞到敵人大幅往旁邊彈出',
     mushroom:'孢子向外噴散，霧氣逐層擴張，1.1秒後暈眩全場敵人',
-    corn:'亂射22顆爆米花顆粒，射中敵人即動彈不得',
+    corn:'5 秒狂射約 60 顆爆米花，會追著最近的人打；射中就彈飛、定住、+3% 熟度',
     wing:'速度爆升1.8倍、衝撞推力大增，持續5秒',
     shrimp:'蓄力3秒後釋放寬幅海浪，可邊倒數邊調整方向，沿路敵人強力推出',
     tofu:'瞬間降低熱度70%，展開護盾抵擋後續傷害',
