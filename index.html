@@ -4430,19 +4430,19 @@ class GameScene extends Phaser.Scene {
       ? this.add.image(x,y,imgKey).setDisplaySize(36,36).setDepth(16)
       : this.add.text(x,y,tp.label,{fontSize:'12px',color:tp.good?'#88ffcc':'#ff8888',backgroundColor:tp.good?'#0a3322':'#440000',padding:{x:3,y:2}}).setOrigin(0.5).setDepth(16);
     this.mapItems.push({x,y,type:tp.type,good:tp.good,dur:tp.dur,img,gfx,life:12});
-    const _IT={ice:['❄️ 冰塊','走過去撿：熟度 -42%，加速 5 秒'],foil:['◎ 鋁箔紙','走過去撿：10 秒內被推會反彈回去'],
+    const _IT={ice:['❄️ 冰塊','走過去撿：熟度 -42%，超加速 5 秒'],foil:['◎ 鋁箔紙','走過去撿：10 秒內被推會反彈回去'],
       garlic:['★ 大蒜','走過去撿：身體變超大、推力 ×2（一次撞一個人）'],sauce:['🍶 滾燙醬油','走過去撿：按 A 往前丟。踩到的人黏住（慢、不能衝刺）又燙；4 秒內出局算你的'],
-      pepper:['🌶 胡椒粉','走過去撿：15 秒內撞到人 → 他打噴嚏定住 1 秒、+8% 熟度']};
+      pepper:['🌶 胡椒粉','走過去撿：15 秒內第一次撞到人 → 爆出胡椒煙，附近的人全部定住 3 秒（趁機撞他們！）']};
     if(_IT[tp.type]) this._tip('item_'+tp.type,x,y,_IT[tp.type][0],_IT[tp.type][1]);
   }
 
   applyItem(item){
     const ae=this.activeEffects;
-    if(item.type==='ice')   {this.heat=Math.max(0,this.heat-42); ae.iceBoost=5; this.showPop('❄️ 冰塊！冷卻 -42%＋加速 5秒！'); this.playSound('good');}
+    if(item.type==='ice')   {this.heat=Math.max(0,this.heat-42); ae.iceBoost=5; this.showPop('❄️ 冰塊！冷卻 -42%＋超加速 5 秒！'); this.playSound('good');}
     if(item.type==='foil')  {ae.foil=item.dur+6;  this.showPop('◎ 鋁箔紙！10 秒盔甲！推不動！'); this.playSound('good');}
     if(item.type==='garlic'){ae.garlic=item.dur+2; this._garlicAoeDone=false; this.showPop('★ 大蒜！身體變超大、推力 ×2！'); this.playSound('good');}
     if(item.type==='sauce') {ae.sauceCharge=5.0; this.showPop('🍶 滾燙醬油！按 A 往前丟：踩到的人黏住不能衝刺、又燙，出局算你的！'); this.playSound('good');}
-    if(item.type==='pepper'){ae.pepBoost=15.0; this.showPop('🌶 胡椒粉！15 秒內撞到人 → 他打噴嚏定住 1 秒！'); this.playSound('good');}
+    if(item.type==='pepper'){ae.pepBoost=15.0; this.showPop('🌶 胡椒粉！第一次撞到人 → 附近的人全部定住 3 秒！'); this.playSound('good');}
   }
 
   applyItemToEnemy(e, item){
@@ -4454,12 +4454,24 @@ class GameScene extends Phaser.Scene {
     if(item.type==='pepper'){ ae.pepBoost=item.dur; }
   }
 
-  _scatterPepper(cx,cy,fromAI,tgt){
+  _scatterPepper(cx,cy,fromAI,tgt,att){
     this._pepperBurst(cx,cy); // 撞到瞬間：一大團胡椒煙
-    // 噴嚏：附近的人定住 1 秒、熟度 +8%（胡椒不再只是減速）
-    if(fromAI){ if(this.alive&&!this._pOut){ this.activeEffects.stun=Math.max(this.activeEffects.stun||0,1.0); this._hAdd('胡椒噴嚏',8); this._floatTxt(this.p.x,this.p.y-60,'🤧 哈啾！定住 1 秒','#ffd080'); } }
-    else [tgt].forEach(e=>{ if(!e||!e.alive||e._ghostT>0) return; // 只有被撞的那個人打噴嚏（不再範圍攻擊）
-      e.stunTimer=Math.max(e.stunTimer||0,1.0); e.heat=Math.min(100,(e.heat||0)+8); this._floatTxt(e.x,e.y-50,'🤧 哈啾！','#ffd080'); });
+    // 胡椒（2026-11）：第一次撞到人 → 撞擊點 PEP_R 內所有人（含被撞的人、不含丟的人）打噴嚏定住 3 秒 +8%，胡椒用掉
+    const PEP_R=140, PEP_T=3.0;
+    if(fromAI){ if(att&&att.activeEffects) att.activeEffects.pepBoost=0; }
+    else this.activeEffects.pepBoost=0;
+    if(this.alive&&!this._pOut&&!(this._ghostT>0)&&fromAI&&Math.hypot(this.p.x-cx,this.p.y-cy)<PEP_R){
+      this.activeEffects.stun=Math.max(this.activeEffects.stun||0,PEP_T); this._hAdd('胡椒噴嚏',8);
+      this._floatTxt(this.p.x,this.p.y-60,'🤧 哈啾！定住 3 秒','#ffd080');
+    }
+    this.enemies.forEach(e=>{
+      if(e===att||!e.alive||e.isGhost||e._ghostT>0) return;
+      if(e!==tgt&&Math.hypot(e.x-cx,e.y-cy)>=PEP_R) return;
+      e.stunTimer=Math.max(e.stunTimer||0,PEP_T); e.heat=Math.min(100,(e.heat||0)+8);
+      if(!fromAI){ e._lastHitBy='player'; e._lastHitT=this.time.now; }
+      this._floatTxt(e.x,e.y-50,'🤧 哈啾！','#ffd080');
+    });
+    if(this._skillRing) this._skillRing(cx,cy,PEP_R,0x9acd32,520);
     for(let i=0;i<22;i++){
       const ang=Math.random()*Math.PI*2;
       const spd=110+Math.random()*160;
@@ -4939,7 +4951,7 @@ class GameScene extends Phaser.Scene {
     const _ultSpdMul=(this.ultState&&this.ultState.spdMul)?this.ultState.spdMul:1;
     // ── 正向循環速度加成 ──
     const _goldenSpd=this.activeEffects.goldenZone>0?1.15:1.0;   // 黃金熟度 +15%
-    const _iceSpd=this.activeEffects.iceBoost>0?1.5:1.0;          // 冰塊加速 +50%
+    const _iceSpd=this.activeEffects.iceBoost>0?1.9:1.0;          // 冰塊加速 +90%
     // 打滑：捕捉入冰速度，滑行期間無法輸入
     if(this.activeEffects.slip>0&&!this._slipInit){
       this._slipInit=true;
@@ -5459,7 +5471,7 @@ class GameScene extends Phaser.Scene {
       const capSlow=(e.capsaicinTimer||0)>0?0.25:1.0;
       const _eAE=e.activeEffects||{};
       const _ePepSpd=1.0; // pepper 不再加速
-      const _eIceSpd=_eAE.iceBoost>0?1.5:1.0;
+      const _eIceSpd=_eAE.iceBoost>0?1.9:1.0;
       const _eSauceSlow=(e._sauceSlow&&e._sauceSlow<1)?e._sauceSlow:1.0;
       const _eLemonSlow=this.lemonPuddles.some(lp=>Math.hypot(e.x-lp.x,e.y-lp.y)<lp.r)?0.7:1.0;
       const _eIceTrailSlow=1.0; // 踩冰速度由慣性 vx/vy 直接控制，不另外限制 maxSpd
@@ -5505,7 +5517,7 @@ class GameScene extends Phaser.Scene {
             const _juicyRes=(this.activeEffects.juicy>0?0.5:1.0)*((this._openUntil||0)>this.time.now?1.35:1); // 多汁狀態：被推距離減半；撲空破綻 ×1.35
             const cBst=(this.fx&&this.fx.heatKnock)?(0.55+this.heat/100*2.0):Math.min(1.5,1+this.heat/100*0.8);
             // AI 有胡椒推玩家 → 散出胡椒（玩家視野受限）
-            if(e.activeEffects&&e.activeEffects.pepBoost>0) this._scatterPepper(this.p.x,this.p.y,true);
+            if(e.activeEffects&&e.activeEffects.pepBoost>0) this._scatterPepper(this.p.x,this.p.y,true,null,e);
             this.tweens.add({targets:this.p,
               x:this.p.x+pnx*pForce*cBst*_kRes*_juicyRes,y:this.p.y+pny*pForce*cBst*_kRes*_juicyRes,
               duration:240,ease:'Cubic.easeOut',
