@@ -441,6 +441,7 @@ const TITLE_BG = "data:image/webp;base64,UklGRtxRAgBXRUJQVlA4INBRAgBwLgqdASoABgA
         <button onclick="Lobby.toggleHow(true)">📖 怎麼玩</button>
         <button onclick="openAnimModal()">🎬 烤肉動畫</button>
         <button onclick="window.open('changelog.html','_blank')">📋 更新日誌</button>
+        <button class="bgm-btn" onclick="BBQMusic.toggle()">🎵 音樂：開</button>
       </div>
     </div>
     <div class="ld-cast" id="ld-cast"></div>
@@ -546,6 +547,185 @@ const TITLE_BG = "data:image/webp;base64,UklGRtxRAgBXRUJQVlA4INBRAgBwLgqdASoABgA
 </div>
 <!-- ── / Lobby Overlay ─────────────────────────────── -->
 
+<script>
+// ══ 背景音樂 BBQMusic（2026-11）：程式即時合成，不用音檔、不用付費 ══
+// menu = 後院烤肉鄉村搖擺：G 大調 100 BPM、搖擺八分音符、滑音主旋律、電鋼琴、班鳩琴撥弦（第二遍加三度和聲）
+// game = 烤盤大亂鬥：E 小調 148 BPM、四拍大鼓、八度迪斯可貝斯、反拍和弦、方波主旋律＋回音；最後 20 秒加速＋琶音（setIntensity(1)）
+// 瀏覽器規定：第一次點擊 / 按鍵之後才能出聲（unlock）。開關存在 localStorage bbq_music。
+window.BBQMusic=(function(){
+  const VOL=0.22; // 音樂比音效小聲（撞擊音效要聽得到）
+  let _ls=null; try{ _ls=localStorage.getItem('bbq_music'); }catch(e){}
+  const M={ac:null,ch:null,bus:null,cur:null,want:null,on:_ls!=='0',tok:0,int:0,_held:false,_iv:null};
+  const mtof=n=>440*Math.pow(2,(n-69)/12);
+  function chain(ac){
+    const comp=ac.createDynamicsCompressor(); comp.threshold.value=-12; comp.knee.value=8; comp.ratio.value=3; comp.attack.value=0.005; comp.release.value=0.2;
+    const master=ac.createGain(); master.connect(comp); comp.connect(ac.destination);
+    const rev=ac.createConvolver(), len=Math.floor(ac.sampleRate*1.7), ir=ac.createBuffer(2,len,ac.sampleRate);
+    for(let c=0;c<2;c++){ const d=ir.getChannelData(c); for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,3.2); }
+    rev.buffer=ir; const rg=ac.createGain(); rg.gain.value=0.35; rev.connect(rg); rg.connect(master);
+    const noise=ac.createBuffer(1,ac.sampleRate,ac.sampleRate), nd=noise.getChannelData(0); for(let i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;
+    return {ac,master,rev,noise};
+  }
+  function mkBus(ch,tr,t0,fade){
+    const ac=ch.ac, b={ac,ch,tr,step:0,next:t0,prevLead:0};
+    b.g=ac.createGain(); b.g.gain.setValueAtTime(0.0001,ac.currentTime); b.g.gain.linearRampToValueAtTime(tr.vol,ac.currentTime+fade); b.g.connect(ch.master);
+    b.send=ac.createGain(); b.send.gain.value=1; b.send.connect(ch.rev);
+    b.dl=ac.createDelay(1.5); b.dl.delayTime.value=60/tr.bpm*0.75; // 主旋律回音（附點八分）
+    const fb=ac.createGain(); fb.gain.value=0.3; const lp=ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2400;
+    b.dl.connect(lp); lp.connect(fb); fb.connect(b.dl); b.dOut=ac.createGain(); b.dOut.gain.value=0.32; lp.connect(b.dOut); b.dOut.connect(b.g);
+    return b;
+  }
+  function toSend(b,g,amt){ const sg=b.ac.createGain(); sg.gain.value=amt; g.connect(sg); sg.connect(b.send); }
+  // ── 樂器 ──
+  function kick(b,t,v){ const ac=b.ac,o=ac.createOscillator(),g=ac.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(45,t+0.12);
+    g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.34);
+    o.connect(g); g.connect(b.g); o.start(t); o.stop(t+0.36); }
+  function nz(b,t,v,dur,type,freq,q,send){ const ac=b.ac,s=ac.createBufferSource(),f=ac.createBiquadFilter(),g=ac.createGain();
+    s.buffer=b.ch.noise; f.type=type; f.frequency.value=freq; if(q) f.Q.value=q;
+    g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+    s.connect(f); f.connect(g); g.connect(b.g); if(send) toSend(b,g,send);
+    s.start(t,Math.random()*0.5); s.stop(t+dur+0.02); }
+  function snare(b,t,v){ nz(b,t,v,0.17,'highpass',1300,0,0.25);
+    const ac=b.ac,o=ac.createOscillator(),g=ac.createGain(); o.type='triangle'; o.frequency.setValueAtTime(220,t); o.frequency.exponentialRampToValueAtTime(160,t+0.06);
+    g.gain.setValueAtTime(v*0.7,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.09); o.connect(g); g.connect(b.g); o.start(t); o.stop(t+0.1); }
+  const brush=(b,t,v)=>nz(b,t,v,0.2,'bandpass',2600,0.7,0.3);
+  const hat=(b,t,v,open)=>nz(b,t,v,open?0.16:0.035,'highpass',7800,0,0);
+  const shaker=(b,t,v)=>nz(b,t,v,0.06,'bandpass',6500,1.2,0);
+  function bass(b,t,n,dur,v,saw){ const ac=b.ac,o=ac.createOscillator(),f=ac.createBiquadFilter(),g=ac.createGain();
+    o.type=saw?'sawtooth':'triangle'; o.frequency.value=mtof(n); f.type='lowpass'; f.Q.value=saw?6:1;
+    if(saw){ f.frequency.setValueAtTime(1800,t); f.frequency.exponentialRampToValueAtTime(380,t+0.14); } else f.frequency.value=900;
+    g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(v,t+0.006); g.gain.linearRampToValueAtTime(v*0.8,t+dur*0.7); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+    o.connect(f); f.connect(g); g.connect(b.g); o.start(t); o.stop(t+dur+0.02);
+    if(!saw){ const s=ac.createOscillator(),sg=ac.createGain(); s.type='sine'; s.frequency.value=mtof(n);
+      sg.gain.setValueAtTime(0.0001,t); sg.gain.linearRampToValueAtTime(v*0.8,t+0.006); sg.gain.exponentialRampToValueAtTime(0.001,t+dur);
+      s.connect(sg); sg.connect(b.g); s.start(t); s.stop(t+dur+0.02); } }
+  function ep(b,t,notes,dur,v){ const ac=b.ac; // 電鋼琴（FM 1:1）
+    notes.forEach(n=>{ const fr=mtof(n),c=ac.createOscillator(),m=ac.createOscillator(),mg=ac.createGain(),g=ac.createGain();
+      c.type='sine'; m.type='sine'; c.frequency.value=fr; m.frequency.value=fr;
+      mg.gain.setValueAtTime(fr*1.4,t); mg.gain.exponentialRampToValueAtTime(fr*0.08,t+0.3); m.connect(mg); mg.connect(c.frequency);
+      g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(v,t+0.004); g.gain.exponentialRampToValueAtTime(v*0.35,t+0.18); g.gain.exponentialRampToValueAtTime(0.0008,t+dur);
+      c.connect(g); g.connect(b.g); toSend(b,g,0.3);
+      c.start(t); m.start(t); c.stop(t+dur+0.02); m.stop(t+dur+0.02); }); }
+  function stab(b,t,notes,v){ const ac=b.ac,f=ac.createBiquadFilter(),g=ac.createGain(); // 反拍和弦
+    f.type='lowpass'; f.Q.value=2; f.frequency.setValueAtTime(3200,t); f.frequency.exponentialRampToValueAtTime(600,t+0.13);
+    g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.17); f.connect(g); g.connect(b.g); toSend(b,g,0.25);
+    notes.forEach(n=>[-7,7].forEach(dt=>{ const o=ac.createOscillator(); o.type='sawtooth'; o.frequency.value=mtof(n); o.detune.value=dt; o.connect(f); o.start(t); o.stop(t+0.18); })); }
+  function lead(b,t,n,dur,v,sq,glide){ const ac=b.ac,fr=mtof(n),o=ac.createOscillator(),f=ac.createBiquadFilter(),g=ac.createGain();
+    o.type=sq?'square':'triangle';
+    const pv=b.prevLead; if(glide&&pv&&pv!==n&&Math.abs(pv-n)<=4){ o.frequency.setValueAtTime(mtof(pv),t); o.frequency.exponentialRampToValueAtTime(fr,t+0.07); } else o.frequency.setValueAtTime(fr,t); // 小音程滑過去（滑棒吉他味）
+    if(glide) b.prevLead=n;
+    const lfo=ac.createOscillator(),lg=ac.createGain(); lfo.frequency.value=sq?6:5.2; // 慢慢加深的抖音
+    lg.gain.setValueAtTime(0,t); lg.gain.linearRampToValueAtTime(fr*(sq?0.007:0.009),t+Math.min(0.25,dur*0.8)); lfo.connect(lg); lg.connect(o.frequency);
+    f.type='lowpass'; f.frequency.value=sq?3000:2600;
+    const rel=sq?0.06:0.12, end=t+dur+rel+0.02;
+    g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(v,t+(sq?0.006:0.02)); g.gain.linearRampToValueAtTime(v*0.8,t+Math.max(0.03,dur)); g.gain.exponentialRampToValueAtTime(0.001,t+dur+rel);
+    o.connect(f); f.connect(g); g.connect(b.g); g.connect(b.dl); toSend(b,g,0.35);
+    o.start(t); lfo.start(t); o.stop(end); lfo.stop(end);
+    if(!sq){ const o2=ac.createOscillator(),g2=ac.createGain(); o2.type='sine'; o2.frequency.value=fr*2; g2.gain.value=0.18; o2.connect(g2); g2.connect(f); o2.start(t); o2.stop(end); } }
+  function pluck(b,t,n,v){ const ac=b.ac,o=ac.createOscillator(),f=ac.createBiquadFilter(),g=ac.createGain(); // 班鳩琴 / 琶音
+    o.type='sawtooth'; o.frequency.value=mtof(n); f.type='lowpass'; f.frequency.setValueAtTime(4200,t); f.frequency.exponentialRampToValueAtTime(900,t+0.1);
+    g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.22); o.connect(f); f.connect(g); g.connect(b.g); toSend(b,g,0.2);
+    o.start(t); o.stop(t+0.24); }
+
+  // ── 選單曲：後院烤肉鄉村搖擺（16 小節循環）──
+  const HAR=[55,57,59,60,62,64,66,67,69,71,72,74,76,78,79,81,83];
+  const harm=n=>{ const i=HAR.indexOf(n); return i>=2?HAR[i-2]:n-4; }; // 低三度和聲（G 大調內）
+  const C1={G:{r:43,f:50,v:[59,62,67]},G7:{r:43,f:50,v:[59,62,65]},C:{r:48,f:43,v:[60,64,67]},Em:{r:40,f:47,v:[59,64,67]},Am:{r:45,f:40,v:[60,64,69]},D:{r:38,f:45,v:[57,62,66]}};
+  const P1=['G','G7','C','C','G','Em',['Am','D'],'G', 'C','C','G','G','Am','D','G','D'];
+  const L1=[ // [第幾個八分音符, 音, 長度]
+    [[0,74,2],[2,71,1],[3,74,1],[4,76,2],[6,74,2]], [[0,71,2],[2,67,1],[3,69,1],[4,71,3]],
+    [[0,72,2],[2,76,1],[3,79,1],[4,76,2],[6,72,2]], [[0,74,1],[1,72,1],[2,71,2],[4,69,4]],
+    [[0,74,2],[2,71,1],[3,74,1],[4,79,2],[6,78,1],[7,76,1]], [[0,74,2],[2,71,2],[4,76,2],[6,74,2]],
+    [[0,72,2],[2,69,2],[4,74,1],[5,76,1],[6,78,2]], [[0,79,4],[6,74,1],[7,76,1]],
+    [[0,76,3],[3,74,1],[4,72,2],[6,76,2]], [[0,79,4],[4,76,2],[6,72,2]],
+    [[0,74,3],[3,71,1],[4,67,2],[6,71,2]], [[0,74,6]],
+    [[0,72,2],[2,76,2],[4,81,2],[6,79,1],[7,76,1]], [[0,78,2],[2,74,2],[4,69,2],[6,78,2]],
+    [[0,79,2],[2,74,1],[3,71,1],[4,67,2],[6,71,1],[7,72,1]], [[0,74,2],[2,72,1],[3,71,1],[4,69,4]] ];
+  const menu={bpm:100,spb:2,swing:0.32,vol:0.9,play(b,st,t,sd){
+    const bar=Math.floor(st/8)%16, s=st%8, pass=Math.floor(st/128);
+    const pc=P1[bar], split=Array.isArray(pc), c=C1[split?(s<4?pc[0]:pc[1]):pc];
+    const np=P1[(bar+1)%16], nr=C1[Array.isArray(np)?np[0]:np].r;
+    if(s===0) kick(b,t,0.8); if(s===4) kick(b,t,0.6); if(s===7&&bar%4===3) kick(b,t,0.35);
+    if(s===2||s===6) brush(b,t,0.3);
+    shaker(b,t,s%2?0.05:0.085);
+    if(s===0) bass(b,t,c.r,sd*1.8,0.32);
+    if(s===4) bass(b,t,split?c.r:c.f,sd*1.8,0.3);
+    if(!split&&nr!==c.r&&(s===6||s===7)) bass(b,t,nr-(s===6?2:1),sd*0.9,0.26); // 換和弦前走兩步
+    if(s===2||s===6) ep(b,t,c.v,sd*1.6,0.075);
+    if(pass%2===1&&s%2===1&&s!==7) pluck(b,t,c.v[(s>>1)%3]+12,0.035);
+    L1[bar].forEach(([ss,n,l])=>{ if(ss!==s) return; lead(b,t,n,l*sd*0.95,0.15,false,true); if(pass%2===1) lead(b,t,harm(n),l*sd*0.95,0.07,false,false); });
+  }};
+
+  // ── 遊戲曲：烤盤大亂鬥（16 小節循環）──
+  const C2={Em:{r:40,v:[64,67,71]},C:{r:36,v:[64,67,72]},G:{r:43,v:[62,67,71]},D:{r:38,v:[62,66,69]},Am:{r:45,v:[64,69,72]},B7:{r:47,v:[63,66,69,71]}};
+  const P2=['Em','C','G','D','Em','C','G','D','Am','Em','C','D','Am','Em','B7','B7'];
+  const A1=[[0,71,2],[2,76,2],[4,79,2],[6,78,2],[8,76,3],[11,74,1],[12,76,4]], A2=[[0,79,2],[2,76,2],[4,72,2],[6,76,2],[8,79,4],[12,81,2],[14,79,2]],
+        A3=[[0,74,2],[2,79,2],[4,83,4],[8,81,2],[10,79,2],[12,78,2],[14,79,2]], B1=[[0,69,3],[3,72,1],[4,76,4],[8,74,2],[10,72,2],[12,71,4]],
+        B2=[[0,67,3],[3,71,1],[4,76,4],[12,76,2],[14,78,2]];
+  const L2=[A1,A2,A3,[[0,81,4],[4,78,2],[6,74,2],[12,74,1],[13,76,1],[14,78,2]], A1,A2,A3,[[0,81,6],[6,83,2],[8,81,2],[10,78,2],[12,74,4]],
+    B1,B2,[[0,79,3],[3,76,1],[4,72,4],[8,76,2],[10,79,2],[12,81,4]],[[0,78,3],[3,74,1],[4,69,4],[8,74,2],[10,76,2],[12,78,4]],
+    B1,B2,[[0,75,4],[4,78,4],[8,81,4],[12,83,4]],[[0,81,2],[2,78,2],[4,75,2],[6,71,2]] ]; // 第幾個十六分音符
+  const game={bpm:148,spb:4,swing:0,vol:0.85,fast:1.08,play(b,st,t,sd){
+    const bar=Math.floor(st/16)%16, s=st%16, pass=Math.floor(st/256), c=C2[P2[bar]], hot=M.int>0;
+    const fill=(bar===7||bar===15)&&s>=12;
+    if(st%256===0) nz(b,t,0.16,1.1,'highpass',5000,0,0.4); // 鈸
+    if(s%4===0&&!(fill&&s>12)) kick(b,t,0.85);
+    if(s===10&&bar%2===1) kick(b,t,0.45);
+    if((s===4||s===12)&&!fill) snare(b,t,0.42);
+    if(fill) snare(b,t,0.18+0.08*(s-12)); // 過門
+    if(s%4===2) hat(b,t,0.12,true); else if(s%2===1||hot) hat(b,t,hot?0.07:0.045,false);
+    if(s%2===0) bass(b,t,c.r+(s%4===2?12:0),sd*1.7,0.2,true); // 八度迪斯可貝斯
+    if(s%4===2) stab(b,t,c.v,0.04);
+    if(hot||(pass%2===1&&bar>=8)) pluck(b,t,c.v[[0,1,2,1][s%4]]+12,0.03);
+    L2[bar].forEach(([ss,n,l])=>{ if(ss!==s) return; lead(b,t,n,l*sd*0.92,0.085,true,false); if(hot) lead(b,t,n+12,l*sd*0.9,0.035,true,false); });
+  }};
+  const TR={menu,game};
+
+  function stepDur(tr){ return 60/(tr.bpm*(M.int&&tr.fast?tr.fast:1))/tr.spb; }
+  function schedule(b,until){
+    while(b.next<until){ const tr=b.tr, sd=stepDur(tr); let t=b.next; if(tr.swing&&b.step%2===1) t+=sd*tr.swing;
+      try{ tr.play(b,b.step,t,sd); }catch(e){ console.error('[music]',e); }
+      b.step++; b.next+=sd; } }
+  function tick(){
+    const b=M.bus; if(!b||!M.ac||M.ac.state!=='running') return;
+    const now=M.ac.currentTime;
+    if(!M.on||b.next<now-0.1){ b.next=now+0.05; if(!M.on) return; } // 關掉 / 分頁睡著回來：不要一次補一堆音
+    schedule(b,now+0.2);
+  }
+  function switchTo(name){
+    const ac=M.ac, old=M.bus, now=ac.currentTime;
+    if(old){ old.g.gain.cancelScheduledValues(now); old.g.gain.setValueAtTime(Math.max(0.0001,old.g.gain.value),now); old.g.gain.exponentialRampToValueAtTime(0.0001,now+0.6);
+      old.send.gain.setTargetAtTime(0,now,0.15);
+      setTimeout(()=>{ try{ old.g.disconnect(); old.send.disconnect(); old.dOut.disconnect(); }catch(e){} },2500); }
+    M.bus=TR[name]?mkBus(M.ch,TR[name],now+(old?0.25:0.05),old?0.8:0.3):null;
+  }
+  function sync(){ if(M.ac&&M.ac.state==='running'&&M.cur!==M.want){ M.cur=M.want; switchTo(M.want); } }
+  M.play=function(name){ name=name||null; if(name==='game') M.tok++; if(name!=='game') M.int=0; M.want=name; sync(); };
+  M.setIntensity=function(v){ M.int=v?1:0; };
+  M.unlock=function(){
+    if(!M.ac){ const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return; try{ M.ac=new AC(); }catch(e){ return; }
+      M.ch=chain(M.ac); M.ch.master.gain.value=M.on?VOL:0; M._iv=setInterval(tick,40); }
+    if(M.ac.state==='suspended'&&!M._held&&!document.hidden) M.ac.resume().then(sync).catch(()=>{});
+    else sync();
+  };
+  M.hold=function(on){ M._held=!!on; if(!M.ac) return; if(on) M.ac.suspend().catch(()=>{}); else M.ac.resume().then(sync).catch(()=>{}); }; // 看烤肉動畫時暫停
+  M.toggle=function(){ M.on=!M.on; try{ localStorage.setItem('bbq_music',M.on?'1':'0'); }catch(e){}
+    if(M.ch){ const n=M.ac.currentTime; M.ch.master.gain.cancelScheduledValues(n); M.ch.master.gain.setTargetAtTime(M.on?VOL:0,n,0.08); }
+    M._btn(); M.unlock(); return M.on; };
+  M._btn=function(){ document.querySelectorAll('.bgm-btn').forEach(e=>{ e.textContent=M.on?'🎵 音樂：開':'🔇 音樂：關'; }); };
+  M._render=async function(name,sec,hot){ // 測試用：離線算出整段音樂的音量
+    const ac=new OfflineAudioContext(2,Math.floor(44100*sec),44100), ch=chain(ac); ch.master.gain.value=VOL;
+    const b=mkBus(ch,TR[name],0.05,0.01), pi=M.int; M.int=hot?1:0; schedule(b,sec); M.int=pi;
+    const buf=await ac.startRendering(); let pk=0,ss=0,n=0;
+    for(let c=0;c<2;c++){ const d=buf.getChannelData(c); for(let i=0;i<d.length;i++){ const a=Math.abs(d[i]); if(a>pk) pk=a; ss+=d[i]*d[i]; n++; } }
+    return {peak:+pk.toFixed(3),rms:+Math.sqrt(ss/n).toFixed(4),steps:b.step};
+  };
+  ['pointerdown','keydown','touchstart'].forEach(ev=>window.addEventListener(ev,()=>M.unlock(),{capture:true,passive:true}));
+  document.addEventListener('visibilitychange',()=>{ if(!M.ac) return; if(document.hidden) M.ac.suspend().catch(()=>{}); else if(!M._held) M.ac.resume().then(sync).catch(()=>{}); });
+  return M;
+})();
+</script>
 <!-- ── 烤肉動畫 Modal ─────────────────────────────── -->
 <div id="anim-modal" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.88);display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;">
   <video id="anim-video" src="烤肉動畫.mp4" controls autoplay style="max-width:90vw;max-height:80vh;border-radius:12px;box-shadow:0 0 40px rgba(255,102,0,0.5);outline:2px solid #ff6600;"></video>
@@ -558,12 +738,14 @@ function openAnimModal(){
   document.getElementById('anim-video').currentTime=0;
   document.getElementById('anim-video').play();
   if(window._gameAC) window._gameAC.suspend();
+  if(window.BBQMusic) BBQMusic.hold(true);
 }
 function closeAnimModal(){
   const m=document.getElementById('anim-modal');
   m.style.display='none';
   document.getElementById('anim-video').pause();
   if(window._gameAC) window._gameAC.resume();
+  if(window.BBQMusic) BBQMusic.hold(false);
 }
 document.getElementById('anim-modal').addEventListener('click',function(e){
   if(e.target===this) closeAnimModal();
@@ -1899,33 +2081,9 @@ class SelectScene extends Phaser.Scene {
     }
   }
 
-  _startSelBGM(){
-    if(!this.ac||this.selBgm) return;
-    // 輕快烤肉選角主題（五聲音階，柔和 sine/triangle）
-    const mel=[392,494,523,494, 392,330,294,330,
-               392,494,523,659, 523,494,392,330];
-    let step=0;
-    this.selBgm=this.time.addEvent({delay:220,loop:true,callback:()=>{
-      if(!this.ac) return;
-      const t=this.ac.currentTime, f=mel[step%mel.length];
-      const o=this.ac.createOscillator(),g=this.ac.createGain();
-      o.type='sine'; o.frequency.value=f;
-      o.connect(g); g.connect(this.ac.destination);
-      g.gain.setValueAtTime(0.055,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.20);
-      o.start(t); o.stop(t+0.20);
-      if(step%4===0){
-        const b=this.ac.createOscillator(),bg=this.ac.createGain();
-        b.type='triangle'; b.frequency.value=f/2;
-        b.connect(bg); bg.connect(this.ac.destination);
-        bg.gain.setValueAtTime(0.05,t); bg.gain.exponentialRampToValueAtTime(0.001,t+0.28);
-        b.start(t); b.stop(t+0.28);
-      }
-      step++;
-    }});
-  }
+  _startSelBGM(){ if(window.BBQMusic) BBQMusic.play('menu'); } // 選單音樂（BBQMusic，首頁 / 等待室 / 選角共用）
 
   _stopSelBGM(){
-    if(this.selBgm){this.selBgm.remove();this.selBgm=null;}
     if(this.ac){try{this.ac.close();}catch(e){} this.ac=null;}
   }
 
@@ -2075,8 +2233,9 @@ class GameScene extends Phaser.Scene {
     this.enemyCC={stun:0,slow:0};
     const AC=window.AudioContext||window.webkitAudioContext;
     this.ac=AC?new AC():null;
-    this.time.delayedCall(200,()=>this.startBGM());
+    this.startBGM();
     this.events.once('shutdown',()=>{
+      { const _tk=window.BBQMusic&&BBQMusic.tok; setTimeout(()=>{ if(window.BBQMusic&&BBQMusic.tok===_tk&&BBQMusic.want==='game') BBQMusic.play('menu'); },120); } // 離開遊戲（不是重開）→ 回選單音樂
       if(this.bgmEvent){this.bgmEvent.remove();this.bgmEvent=null;}
       if(this.ac){try{this.ac.close();}catch(e){} this.ac=null;}
       if(this.multiplay&&window.MP&&window.MP.socket){
@@ -2268,6 +2427,7 @@ class GameScene extends Phaser.Scene {
     this.time.addEvent({delay:1000,loop:true,callback:()=>{
       if(!this.alive) return;
       this.timeLeft--;
+      if(this.timeLeft===20&&window.BBQMusic) BBQMusic.setIntensity(1); // 最後 20 秒：音樂加速
       if(this.timeLeft===20&&this.fx&&(this.fx.fire||this.heatMode!=='fire')){ this._fireMul=1.35;
         this._banner('🔥 火力全開！',this.heatMode==='crowd'?'最後 20 秒：熱區變大、更燙':this.heatMode==='ring'?'最後 20 秒：中間的高溫區變大了':'最後 20 秒：火變大、熄了很快又燒起來'); this._addTrauma(0.35); }
       if(this.timeLeft<=0) this.endGame(!this._pOut,true);
@@ -4203,45 +4363,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  startBGM(){
-    if(!this.ac||this.bgmEvent) return;
-    // Fun upbeat cooking melody in C major (16 eighth-notes)
-    const mel=[262,330,392,330,349,440,392,349,
-               294,392,440,392,523,494,440,262];
-    let step=0;
-    this.bgmEvent=this.time.addEvent({
-      delay:214, loop:true, // ~140bpm 8th note
-      callback:()=>{
-        if(!this.ac) return;
-        const t=this.ac.currentTime, f=mel[step%mel.length];
-        // Lead melody (square wave, soft)
-        const o=this.ac.createOscillator(),g=this.ac.createGain();
-        o.type='square'; o.frequency.value=f;
-        o.connect(g); g.connect(this.ac.destination);
-        g.gain.setValueAtTime(0.045,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.19);
-        o.start(t); o.stop(t+0.19);
-        // Bass on beats 1 & 3 (every 4 steps)
-        if(step%4===0){
-          const b=this.ac.createOscillator(),bg=this.ac.createGain();
-          b.type='triangle'; b.frequency.value=f/2;
-          b.connect(bg); bg.connect(this.ac.destination);
-          bg.gain.setValueAtTime(0.07,t); bg.gain.exponentialRampToValueAtTime(0.001,t+0.25);
-          b.start(t); b.stop(t+0.25);
-        }
-        // Hi-hat on every other step
-        if(step%2===0){ try{
-          const sz=Math.floor(this.ac.sampleRate*0.015);
-          const buf=this.ac.createBuffer(1,sz,this.ac.sampleRate);
-          const d=buf.getChannelData(0);
-          for(let i=0;i<sz;i++) d[i]=(Math.random()*2-1)*0.055;
-          const s=this.ac.createBufferSource(),hf=this.ac.createBiquadFilter();
-          hf.type='highpass'; hf.frequency.value=5000;
-          s.buffer=buf; s.connect(hf); hf.connect(this.ac.destination); s.start(t);
-        }catch(e){} }
-        step++;
-      }
-    });
-  }
+  startBGM(){ if(window.BBQMusic){ BBQMusic.play('game'); BBQMusic.setIntensity(0); } } // 遊戲音樂（BBQMusic）
 
   // S 技能共用擊退：記成玩家打的（擊落才算你的分）、鬼魂不受影響、熟度越高飛越遠
   _skillHit(e,i,nx,ny,F,dur){
@@ -4791,6 +4913,7 @@ class GameScene extends Phaser.Scene {
     if(win&&!final&&this.fx&&this.fx.respawn) return; // 三條命模式：只有時間到或剩一個人才結束
     if(!win&&this.alive&&!final) this._announcePlayerOut(); // 告訴玩家為什麼出局
     if(!win&&!final&&this.fx&&this.fx.respawn&&this.timeLeft>0&&this.alive){ this._respawnPlayer(); return; } // 三條命：還有命就回場
+    if(window.BBQMusic){ BBQMusic.play(null); setTimeout(()=>{ if(window.BBQMusic&&BBQMusic.want===null) BBQMusic.play('menu'); },1800); } // 比賽結束：先停，讓勝負音效出來，再回選單音樂
     if(!win) this._addTrauma(0.85); // 出局：大級震動
     (this.pours||[]).forEach(pp=>{ if(pp.icon&&pp.icon.scene) pp.icon.destroy(); }); this.pours=[]; this.drops=[];
     if(this._forkDim&&this._forkDim.scene) this._forkDim.setAlpha(0);
@@ -8250,6 +8373,7 @@ const Lobby = {
     });
     const ov = document.getElementById('lobby-overlay');
     ov.classList.toggle('ld-on', id === 'screen-landing');
+    if (window.BBQMusic && !ov.classList.contains('hidden')) BBQMusic.play('menu');
     if (id !== 'screen-landing') this.toggleHow(false);
   },
 
@@ -8259,6 +8383,7 @@ const Lobby = {
   },
 
   _initTitle() { // 首頁：背景圖 + 角色在烤盤前排排站
+    if (window.BBQMusic) { BBQMusic._btn(); BBQMusic.play('menu'); }
     const ov = document.getElementById('lobby-overlay');
     if (typeof TITLE_BG !== 'undefined') ov.style.setProperty('--title-bg', 'url("' + TITLE_BG + '")');
     ov.classList.toggle('ld-on', document.getElementById('screen-landing').style.display !== 'none');
