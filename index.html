@@ -3401,7 +3401,7 @@ class GameScene extends Phaser.Scene {
     if(r==='throw'){ this._throwBomb('P',this._gp,this._gCh); this._ghostCD=6; this._gCh=0; }
     else if(r==='cd') this._notice('炭火彈冷卻中，還要 '+this._ghostCD.toFixed(1)+' 秒','#aaaaaa');
     this.pushWas=pn;
-    if(this.shadowLayer&&this.shadowLayer.scene) this.shadowLayer.clear(); // 一般移動區被跳過 → 陰影層要在這裡清
+    if(this.shadowLayer&&this.shadowLayer.scene) this.shadowLayer.clear(); if(this._poseLayer&&this._poseLayer.scene) this._poseLayer.clear(); // 一般移動區被跳過 → 陰影層要在這裡清
     if(this.playerSprite){ this.playerSprite.setVisible(true);
       this._animChar(this.playerSprite,this.pAnim,this.p.x,this.p.y,dt,{base:(this.playerSprite.baseScale||0.26)*0.85,heat:0,faceX:dx,moving:!!(dx||dy)});
       this.playerSprite.setAlpha(0.65).setTint(0xaaccff); }
@@ -4185,6 +4185,8 @@ class GameScene extends Phaser.Scene {
     if(this._netEnding||!this.sys||!this.sys.isActive()) return;
     const me=ev.v===window.MP.myId, rec=(ev.v&&!me)?this._netEnts[ev.v]:null;
     this._hitFeel({x:ev.x,y:ev.y,dx:ev.dx,dy:ev.dy,power:ev.p,anim:me?this.pAnim:(rec&&rec.anim),freeze:0,shake:false,star:ev.s!==0});
+    { const vA=me?this.pAnim:(rec&&rec.anim), bump=a=>{ if(a&&a!==vA&&a.dashing&&a.lx!==null&&Math.hypot(a.lx-ev.x,a.ly-ev.y)<80) this._charBump(a,ev.dx,ev.dy); };
+      bump(this.pAnim); Object.keys(this._netEnts||{}).forEach(id=>bump(this._netEnts[id].anim)); }
     if(me) this._addTrauma(Math.min(0.8,0.4+(ev.p||1)*0.2));
     else if(Math.hypot(ev.x-this.p.x,ev.y-this.p.y)<95) this._addTrauma(0.3);
   }
@@ -4208,8 +4210,8 @@ class GameScene extends Phaser.Scene {
     this._netT-=dt; this._netZT-=dt;
     if(this._netT>0) return; this._netT=1/15;
     const R=v=>Math.round(v), st=this.stats||{};
-    const ents=[{id:'H',k:this.charData.key,n:window.MP.myNickname||'房主',x:R(this.p.x),y:R(this.p.y),h:R(this.heat),a:this.alive?1:0,g:(this._ghostT>0&&!this._pOut)?1:0,gh:this._pOut?1:0,lv:this.lives,pp:this.activeEffects.pepBoost>0?1:0,fo:(this.alive&&!this._pOut&&this.activeEffects.foil>0)?+this.activeEffects.foil.toFixed(1):0,...(this._pOut&&this._gp?(()=>{ const a=this._rimAim(this._gp,this._gChg?this._gCh:0); return {ga:[R(a.x),R(a.y),(this._ghostCD||0)<=0?1:0,0,this._gChg?+this._gCh.toFixed(2):-1]}; })():{}),sk:this._inHotSoy?1:0,s:this.score||0,u:Math.floor(this.ultCharge||0),ab:(this.alive&&!this._pOut&&this.abilityActive)?({armor:1,glide:2,shield:3,spin:4}[this.abilityActive.type]||0):0}];
-    this.enemies.forEach((e,i)=>ents.push({id:e.pid||('a'+i),k:e.ck,n:e.label,x:R(e.x),y:R(e.y),h:R(e.heat||0),a:(e.alive||e.isGhost)?1:0,g:e._ghostT>0?1:0,gh:e.isGhost?1:0,lv:e.lives??0,pp:(e.activeEffects&&e.activeEffects.pepBoost>0)?1:0,fo:(e.alive&&!e.isGhost&&e.activeEffects&&e.activeEffects.foil>0)?+e.activeEffects.foil.toFixed(1):0,...(e.isGhost&&e._gp?(()=>{ const a=this._rimAim(e._gp,e._gChg?e._gCh:0); return {ga:[R(a.x),R(a.y),(e._gcd||0)<=0?1:0,+((e._gcd||0)/6).toFixed(2),e._gChg?+e._gCh.toFixed(2):-1]}; })():{}),sk:e._inHot?1:0,s:e.score||0,u:(e.ultCharge||0),pc:e.remote?+(e._pushCD||0).toFixed(2):0,...(e.remote?{q:e._ack||0,qa:+((performance.now()-(e._ackAt||0))/1000).toFixed(3),sc:+Math.max(0,((e._skReady||0)-this.time.now)/1000).toFixed(1),ab:e.alive?this._rAb(e):0,
+    const ents=[{id:'H',k:this.charData.key,n:window.MP.myNickname||'房主',x:R(this.p.x),y:R(this.p.y),h:R(this.heat),a:this.alive?1:0,g:(this._ghostT>0&&!this._pOut)?1:0,gh:this._pOut?1:0,lv:this.lives,pp:this.activeEffects.pepBoost>0?1:0,fo:(this.alive&&!this._pOut&&this.activeEffects.foil>0)?+this.activeEffects.foil.toFixed(1):0,...(this._pOut&&this._gp?(()=>{ const a=this._rimAim(this._gp,this._gChg?this._gCh:0); return {ga:[R(a.x),R(a.y),(this._ghostCD||0)<=0?1:0,0,this._gChg?+this._gCh.toFixed(2):-1]}; })():{}),sk:this._inHotSoy?1:0,...((this.dashState&&this.dashState.active&&this.alive&&!this._pOut)?{d:[R(this.dashState.dx*10),R(this.dashState.dy*10)]}:{}),s:this.score||0,u:Math.floor(this.ultCharge||0),ab:(this.alive&&!this._pOut&&this.abilityActive)?({armor:1,glide:2,shield:3,spin:4}[this.abilityActive.type]||0):0}];
+    this.enemies.forEach((e,i)=>ents.push({id:e.pid||('a'+i),k:e.ck,n:e.label,x:R(e.x),y:R(e.y),h:R(e.heat||0),a:(e.alive||e.isGhost)?1:0,g:e._ghostT>0?1:0,gh:e.isGhost?1:0,lv:e.lives??0,pp:(e.activeEffects&&e.activeEffects.pepBoost>0)?1:0,fo:(e.alive&&!e.isGhost&&e.activeEffects&&e.activeEffects.foil>0)?+e.activeEffects.foil.toFixed(1):0,...(e.isGhost&&e._gp?(()=>{ const a=this._rimAim(e._gp,e._gChg?e._gCh:0); return {ga:[R(a.x),R(a.y),(e._gcd||0)<=0?1:0,+((e._gcd||0)/6).toFixed(2),e._gChg?+e._gCh.toFixed(2):-1]}; })():{}),sk:e._inHot?1:0,...((e.charging&&e.alive&&!e.isGhost)?{d:[R(((e._dashT>0?e._ddx:e.chDx)||0)*10),R(((e._dashT>0?e._ddy:e.chDy)||0)*10)]}:{}),s:e.score||0,u:(e.ultCharge||0),pc:e.remote?+(e._pushCD||0).toFixed(2):0,...(e.remote?{q:e._ack||0,qa:+((performance.now()-(e._ackAt||0))/1000).toFixed(3),sc:+Math.max(0,((e._skReady||0)-this.time.now)/1000).toFixed(1),ab:e.alive?this._rAb(e):0,
       mv:(e.alive&&((e.stunTimer||0)>0||(this.enemyCC&&this.enemyCC.stun>0)||(e._lockUntil||0)>this.time.now))?1:((e._pepSlowUntil||0)>this.time.now?2:0)}:{})}));
     const sn={tl:this.timeLeft,cr:this._crownId(),e:ents,lm:this.fx.respawn?1:0,bm:(this.bombs||[]).map(b=>[R(b.x),R(b.y),+b.t.toFixed(2)]),hm:this.heatMode,fm:this._fireMul||1,sp:this.shrinkPad||0,sw:this.shrinkWarning?1:0,wd:this.wind&&this.wind.on?[Math.round(this.wind.x*100),Math.round(this.wind.y*100),this.wind.warn?1:0,Math.round(this.wind.nx*100),Math.round(this.wind.ny*100),this.wind.str||0]:0,co:this.core&&this.core.on?[R(this.core.R),R(this.core.next||0),this.core.warn?1:0,+(this.core.warnT||0).toFixed(2)]:0,uw:this.enemies.filter(e=>e._ultWind>0).map(e=>[R(e.x),R(e.y),+(1-e._ultWind/(e._ultWindMax||1)).toFixed(2)]),cz:this.heatMode==='crowd'?(this.crowdZones||[]).map(z=>[R(z.x),R(z.y),R(z.r),z.st==='warn'?0:z.st==='hot'?1:2,+(z.p||0).toFixed(2)]):null,ti:this.tilt?[this.tilt.x,this.tilt.y,this.tilt.state==='active'?1:0,+this.tilt.timer.toFixed(2),this.tilt.force,this.tilt.rot,this.tilt.hold,this.tilt.lbl]:null,
       f:this.firePts.filter(f=>f.state!=='cooldown').map(f=>({x:R(f.x),y:R(f.y),tx:R(f.tx||f.x),ty:R(f.ty||f.y),st:f.state,al:+(f.alpha||0).toFixed(2),c:f.collision?1:0,sd:f.spd||1,ph:+(f.ph||0).toFixed(2)})),
@@ -4298,7 +4300,7 @@ class GameScene extends Phaser.Scene {
     this.drawCore();
     { const T=sn.ti; this.tilt=T?{x:T[0],y:T[1],state:T[2]?'active':'warn',timer:T[3],dur:3.0,force:T[4],rot:T[5],hold:T[6],lbl:T[7]}:null; this._tiltVisual(); }
     // 角色
-    if(this.shadowLayer&&this.shadowLayer.scene) this.shadowLayer.clear();
+    if(this.shadowLayer&&this.shadowLayer.scene) this.shadowLayer.clear(); if(this._poseLayer&&this._poseLayer.scene) this._poseLayer.clear();
     const seen={};
     (sn.e||[]).forEach(en=>{
       seen[en.id]=1;
@@ -4309,8 +4311,8 @@ class GameScene extends Phaser.Scene {
         rec=this._netEnts[en.id]={sp,anim:this._mkAnim(),x:en.x,y:en.y,tag:this.add.text(0,0,(/^a\d+$/.test(en.id)?'':'👤 ')+en.n,{fontSize:'12px',color:/^a\d+$/.test(en.id)?'#dddddd':'#9fe0ff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:3}).setOrigin(0.5).setDepth(23)}; }
       const big=Math.hypot(en.x-rec.x,en.y-rec.y)>120; rec.x=big?en.x:rec.x+(en.x-rec.x)*Math.min(1,dt*14); rec.y=big?en.y:rec.y+(en.y-rec.y)*Math.min(1,dt*14);
       rec.sp.setVisible(!!en.a); rec.tag.setVisible(!!en.a);
-      if(en.a){ this._animChar(rec.sp,rec.anim,rec.x,rec.y,dt,{base:rec.sp.baseScale,heat:en.h,shadow:this.shadowLayer});
-        const t=en.h/100; if(en.gh) rec.sp.setTint(0xaaccff); else rec.sp.setTint(Phaser.Display.Color.GetColor(255,Math.round(255-t*70),Math.round(255-t*110)));
+      if(en.a){ this._animChar(rec.sp,rec.anim,rec.x,rec.y,dt,{base:rec.sp.baseScale,heat:en.h,shadow:this.shadowLayer,dash:(en.d&&!en.gh)?{dx:en.d[0]/10,dy:en.d[1]/10}:null});
+        if(en.gh) rec.sp.setTint(0xaaccff); else this._litTint(rec.sp,en.h);
         rec.sp.setAlpha(en.gh?0.5:(en.g?0.35+0.35*Math.sin(this.time.now*0.03):1));
         rec.tag.setText((/^a\d+$/.test(en.id)?'':'👤 ')+en.n+(sn.lm?' '+(en.gh?'👻':'❤'.repeat(Math.max(0,en.lv||0))):'')+(!en.gh&&en.h>=70?' 🎯':'')+(en.sk?' 🍶黏住':''));
         rec.tag.setPosition(rec.x,rec.y-(en.id===sn.cr?66:54)); if(en.pp) this._drawPepAura(g,rec.x,rec.y); if(en.ab&&!en.gh) this._skAura(g,en.ab,rec.x,rec.y); this._applyFlash(rec.sp,rec.anim,dt); this._netFoil(g,en,rec.x,rec.y,false); }
@@ -4382,7 +4384,7 @@ class GameScene extends Phaser.Scene {
     this.heat=en.h; this.ultCharge=en.u; this.score=en.s; this.pushCD=en.pc||0;
     this.abilityCD=en.sc||0; this.abilityCDMax=BBQ_SKILL_CD[this.charData.key]||6; // S 技能冷卻（頭上的 S 轉盤 + 左下的條）
     if(this.abilBarFg&&this.abilBarFg.scene){ const r=this.abilityCD<=0; this.abilBarFg.width=r?120:(1-this.abilityCD/this.abilityCDMax)*120; this.abilBarFg.setFillStyle(r?0xffaa00:0x664400); if(this.abilCdTxt&&this.abilCdTxt.scene) this.abilCdTxt.setText(r?'Ready!':this.abilityCD.toFixed(1)+'s'); }
-    if(this.playerSprite){ this.playerSprite.setVisible(!!en.a); if(en.a){ this._animChar(this.playerSprite,this.pAnim,this.p.x,this.p.y,dt,{base:this.playerSprite.baseScale||0.26,heat:en.h,faceX:this.lastDir.x,moving:!!(dx||dy),shadow:this.shadowLayer}); if(!en.gh){ this.updateHeatFx(this.playerSprite,en.h,this.sweatTxt); this._applyFlash(this.playerSprite,this.pAnim,dt); } this.playerSprite.setAlpha(en.gh?0.5:(en.g?0.35+0.35*Math.sin(this.time.now*0.03):1)); if(en.gh) this.playerSprite.setTint(0xaaccff); } }
+    if(this.playerSprite){ this.playerSprite.setVisible(!!en.a); if(en.a){ this._animChar(this.playerSprite,this.pAnim,this.p.x,this.p.y,dt,{base:this.playerSprite.baseScale||0.26,heat:en.h,faceX:this.lastDir.x,moving:!!(dx||dy),shadow:this.shadowLayer,top:true,dash:(!en.gh&&(this._localDash||0)>0)?{prog:1-this._localDash/0.22,dx:this.lastDir.x,dy:this.lastDir.y}:null}); if(!en.gh){ this.updateHeatFx(this.playerSprite,en.h,this.sweatTxt); this._applyFlash(this.playerSprite,this.pAnim,dt); } this.playerSprite.setAlpha(en.gh?0.5:(en.g?0.35+0.35*Math.sin(this.time.now*0.03):1)); if(en.gh) this.playerSprite.setTint(0xaaccff); } }
     this.heatBarFg.width=Math.min(220,en.h*2.2); this.heatTxt.setText(Math.floor(en.h)+'%');
     if(this.scoreTxt) this.scoreTxt.setText('🏆 '+en.s+' 分'+(this._snap&&this._snap.lm?'　'+(en.gh?'👻 鬼魂（按住 A 蓄力丟）':'❤'.repeat(Math.max(0,en.lv||0))):''));
     this.updateUltUI(); if(en.a&&!en.gh) this._drawOverheadHUD(); else if(this.ovLayer&&this.ovLayer.scene){ this.ovLayer.clear(); (this.ovTxt||[]).forEach(t=>t.setVisible(false)); if(this.ovPow) this.ovPow.setVisible(false); }
@@ -4685,11 +4687,16 @@ class GameScene extends Phaser.Scene {
     if(!keepQueue&&this._tipQ) this._tipQ.length=0;
   }
 
-  // ── 角色動態（玩家/AI 共用）──────────────────────────────────
-  // 美術只有一張正面圖，所以不做假的側面/背面；改用：
-  // 轉身（scaleX 翻面）、跳步、前傾、彈簧擠壓（Q 彈）、命中閃白、地面陰影
-  _mkAnim(){ return {face:1,faceDisp:1,phase:0,sx:1,sy:1,vsx:0,vsy:0,lean:0,hop:0,flash:0,lx:null,ly:null,moving:false,spd:0,size:1,seed:0}; }
-  // 受擊：沿擊退方向拉長、垂直方向壓扁，交給彈簧彈回來
+  // ── 角色動態 v2（玩家 / AI / 連線共用）────────────────────────
+  // 美術只有一張正面圖，所以不做假的側面 / 背面；靠「姿勢」做出重量和立體感：
+  //   腳底當支點（壓扁、前傾時腳還踩在原地）、左右搖擺的小跳步、
+  //   專屬的衝撞姿勢（蹲一下 → 頭先衝出去 + 前面一道氣浪 → 撞到回彈 / 撲空踉蹌）、
+  //   被撞飛（腳先飛、離地、落地壓扁；重擊翻一圈）、頂光漸層染色、兩層地面陰影、依 y 排前後。
+  // 全部只改畫面，不動遊戲判定（位置還是 x,y）。
+  _mkAnim(){ return {face:1,faceDisp:1,phase:0,sx:1,sy:1,vsx:0,vsy:0,lean:0,vlean:0,rock:0,hop:0,flash:0,lx:null,ly:null,moving:false,spd:0,size:1,seed:0,psp:1,
+    dashing:false,dT:0,ddx:0,ddy:0,bumpAt:-9999,kT:0,kMax:0.4,kAt:-9999,kdx:0,kdy:0,kPow:1,kSpin:0,kLand:false}; }
+  _animTurn(st){ return 0.6+0.4*Math.abs(st.faceDisp); } // 轉身：寬度縮一下再展開（以前縮到 12%，像紙片翻面）
+  // 受擊：沿擊退方向拉長、垂直方向壓扁，交給彈簧彈回來；夠大力就進「被撞飛」姿勢
   _charImpact(st,dx,dy,power){
     if(!st) return;
     const p=Phaser.Math.Clamp(power||1,0.4,1.6);
@@ -4697,67 +4704,135 @@ class GameScene extends Phaser.Scene {
     else                          { st.sx=1-0.22*p; st.sy=1+0.28*p; }
     st.vsx=0; st.vsy=0;
     st.flash=0.06+0.03*p;
+    if(p>=0.8) this._charKnock(st,dx,dy,p);
   }
-  // o: {base, heat, faceX, moving, dash:{prog,dx,dy}, sizeMul, shadow:Graphics}
+  // 被撞飛：腳先飛出去、頭在後面，離地一小段弧線；重擊（≥1.45，通常是熟度過半的人）往後翻一圈
+  _charKnock(st,dx,dy,p){
+    if(!st) return;
+    st.kPow=Phaser.Math.Clamp(p||1,0.8,1.6); st.kMax=0.24+0.08*st.kPow; st.kT=st.kMax; st.kAt=this.time.now;
+    st.kdx=dx||0; st.kdy=dy||0; st.kSpin=(st.kPow>=1.45&&Math.abs(st.kdx)>0.35)?(st.kdx<0?-1:1):0;
+    st.dashing=false;
+  }
+  // 撞到人的那一方：往前擠扁一下、身體往後彈
+  _charBump(st,dx,dy){
+    if(!st) return;
+    if(Math.abs(dx)>=Math.abs(dy)){ st.sx=0.80; st.sy=1.18; } else { st.sx=1.16; st.sy=0.84; }
+    st.vsx=0; st.vsy=0; st.vlean-=(dx||0)*420; st.bumpAt=this.time.now;
+  }
+  _poseFx(){ if(!this._poseLayer||!this._poseLayer.scene) this._poseLayer=this.add.graphics().setDepth(10.4); return this._poseLayer; }
+  // 腳邊的小煙塵（起跑蹬地、被撞飛落地）
+  _animPuff(x,y,dx,dy,n){
+    try{
+      for(let i=0;i<(n||3);i++){
+        const g=this.add.graphics().setDepth(8.5).setPosition(x+(Math.random()-0.5)*14,y+(Math.random()-0.5)*4);
+        g.fillStyle(0xf2e6d0,0.55); g.fillEllipse(0,0,9+Math.random()*5,5+Math.random()*3);
+        const a=(dx||dy)?Math.atan2(dy,dx)+(Math.random()-0.5)*1.2:Math.random()*Math.PI*2, d=14+Math.random()*14;
+        this.tweens.add({targets:g,x:g.x+Math.cos(a)*d,y:g.y+Math.sin(a)*d*0.6-4,scaleX:1.7,scaleY:1.7,alpha:0,duration:240+Math.random()*120,ease:'Quad.easeOut',
+          onComplete:()=>{ if(g.scene) g.destroy(); }});
+      }
+    }catch(e){}
+  }
+  // 頂光：上面亮、下面暗一點 → 一張平面圖看起來有厚度。heat 0–100 照舊帶一點暖色
+  _litTint(sp,heat){
+    if(!sp||!sp.scene) return;
+    const t=Phaser.Math.Clamp((heat||0)/100,0,1), g=Math.round(255-t*70), b=Math.round(255-t*110), C=Phaser.Display.Color.GetColor;
+    const top=C(255,g,b), bot=C(206,Math.round(g*0.79),Math.round(b*0.81));
+    sp.setTint(top,top,bot,bot);
+  }
+  // o: {base, heat, faceX, moving, dash:{prog,dx,dy}, sizeMul, shadow:Graphics, top:自己（同高度時畫在上面）}
   _animChar(sp,st,x,y,dt,o){
     if(!sp||!sp.scene||!st) return;
     if(st.lx===null){st.lx=x;st.ly=y;}
-    const vx=dt>0?(x-st.lx)/dt:0, vy=dt>0?(y-st.ly)/dt:0;
+    const now=this.time.now;
+    if(st.kT>0&&now-st.kAt>1500){ st.kT=0; st.kSpin=0; st.kLand=false; } // 出局前沒演完的姿勢：復活後不接著演
+    let vx=dt>0?(x-st.lx)/dt:0, vy=dt>0?(y-st.ly)/dt:0;
+    if(!(st.kT>0)&&Math.hypot(x-st.lx,y-st.ly)>170){ vx=0; vy=0; st.lean=0; st.vlean=0; st.hop=0; st.dashing=false; } // 復活 / 瞬移：姿勢歸零
     st.lx=x; st.ly=y;
     st.spd+=(Math.min(600,Math.hypot(vx,vy))-st.spd)*Math.min(1,dt*12);
-    const dash=o.dash;
+    const knock=st.kT>0, dash=(!knock&&o.dash&&(o.dash.dx||o.dash.dy))?o.dash:null;
     const moving=o.moving!==undefined?o.moving:st.spd>25;
-    // 面向：玩家用按鍵方向，AI 用速度方向（有明顯水平速度才轉身，避免來回抖）
+    // 面向：玩家用按鍵方向，AI 用速度方向（有明顯水平速度才轉身，避免來回抖）；被撞飛時不轉身
     if(o.faceX!==undefined){ if(Math.abs(o.faceX)>0.1) st.face=o.faceX<0?-1:1; }
-    else if(Math.abs(vx)>40) st.face=vx<0?-1:1;
-    st.faceDisp+=(st.face-st.faceDisp)*Math.min(1,dt*18);
+    else if(!knock&&Math.abs(vx)>40) st.face=vx<0?-1:1;
+    st.faceDisp+=(st.face-st.faceDisp)*Math.min(1,dt*20);
+    st.size+=((o.sizeMul||1)-st.size)*Math.min(1,dt*8);
+    st.psp=0.965+0.07*Phaser.Math.Clamp((y-G.y)/G.h,0,1); // 近大遠小（很輕微）
+    const base=o.base*st.size*st.psp, Hh=sp.height*base, L=Hh*0.40, gy=y+L; // gy = 腳底
+    // 事件：衝刺開始（蹲一下再彈出去）/ 衝完沒撞到人（煞車踉蹌）/ 被撞飛落地（壓扁 + 煙塵）
+    if(dash&&!st.dashing){ st.dashing=true; st.dT=0; st.ddx=dash.dx; st.ddy=dash.dy; st.sx=1.24; st.sy=0.76; st.vsx=0; st.vsy=0; st.vlean+=dash.dx*260; this._animPuff(x,gy,-dash.dx,-dash.dy,3); }
+    else if(!dash&&st.dashing){ st.dashing=false; if(!knock&&now-st.bumpAt>300){ st.vlean+=st.ddx*240; st.vsy-=3.6; st.vsx+=2.8; } }
+    if(st.kLand&&!knock){ st.kLand=false; st.vsy-=4.6; st.vsx+=3.4; this._animPuff(x,gy,0,0,4); }
     // 起步拉長、停步壓扁
-    if(moving&&!st.moving){ st.vsy+=3.0; st.vsx-=2.2; }
-    if(!moving&&st.moving){ st.vsy-=4.0; st.vsx+=3.0; }
+    if(!dash&&!knock){ if(moving&&!st.moving){ st.vsy+=3.0; st.vsx-=2.2; } if(!moving&&st.moving){ st.vsy-=4.0; st.vsx+=3.0; } }
     st.moving=moving;
-    let hopT=0, tx=1, ty=1, leanT=0;
-    if(dash){
-      // 飛撲：沿方向拉長 + 拋物線離地
-      const isH=Math.abs(dash.dx)>=Math.abs(dash.dy);
-      tx=isH?1.35:0.78; ty=isH?0.78:1.32;
-      hopT=Math.sin(Math.min(1,dash.prog)*Math.PI)*3;
-      leanT=dash.dx*24-dash.dy*10;
+    let hopT=0, tx=1, ty=1, leanT=0, rock=0, spin=0, pf=1, pr=0;
+    if(knock){
+      // 被撞飛：離地弧線；腳先飛、頭在後；重擊往後翻一圈（騰空時改繞身體中心轉）
+      st.kT=Math.max(0,st.kT-dt); st.kLand=true;
+      const kp=Phaser.Math.Clamp(1-st.kT/st.kMax,0,1), arc=Math.sin(kp*Math.PI);
+      hopT=arc*(6+7*st.kPow); pf=1-arc;
+      const kz=1+st.kdy*0.07*arc; tx=kz; ty=kz; // 往鏡頭飛大一點、往遠處飛小一點
+      if(st.kSpin) spin=-st.kSpin*360*(1-(1-kp)*(1-kp));
+      else leanT=-st.kdx*(16+9*st.kPow)*Math.min(1,arc*1.6);
+    } else if(dash){
+      // 衝撞：頭先衝出去（身體往前倒、沿身體拉長），低低的一個撲；往下（朝鏡頭）變大、往上變瘦長
+      st.dT+=dt; pr=Phaser.Math.Clamp(dash.prog!==undefined?dash.prog:st.dT/0.24,0,1);
+      const wx=dash.dx*dash.dx, wy=dash.dy*dash.dy;
+      tx=1-wx*0.10+wy*(dash.dy>0?0.13:-0.08); ty=1+wx*0.20+wy*(dash.dy>0?0.10:0.15);
+      hopT=Math.sin(pr*Math.PI)*9; leanT=dash.dx*25;
     } else if(moving){
-      // 小跳步：落地壓扁、騰空拉長，步頻隨速度
-      st.phase+=dt*(11+Math.min(st.spd,260)*0.02);
-      const h=Math.abs(Math.sin(st.phase));
-      hopT=h;
-      ty=1+0.10*(h-0.35); tx=1-0.08*(h-0.35);
-      leanT=Phaser.Math.Clamp(vx/200,-1,1)*6;
+      // 搖擺小跳步：一步一跳、身體左右晃（腳踩著地），落地壓扁、騰空拉長，步頻隨速度
+      st.phase+=dt*Math.min(22,7+st.spd*0.05);
+      const sn=Math.sin(st.phase), h=Math.abs(sn);
+      hopT=h*6; ty=1+0.10*(h-0.35); tx=1-0.08*(h-0.35);
+      rock=sn*4.5; leanT=Phaser.Math.Clamp(vx/200,-1,1)*7;
     } else {
       st.phase=0;
-      const br=Math.sin(this.time.now*0.004+st.seed); // 待機呼吸
-      ty=1+br*0.025; tx=1-br*0.018;
+      const br=Math.sin(now*0.004+st.seed); // 待機呼吸 + 很慢的左右晃
+      ty=1+br*0.03; tx=1-br*0.02; rock=Math.sin(now*0.0017+st.seed*1.3)*1.2;
     }
-    st.hop+=(hopT-st.hop)*Math.min(1,dt*(dash?30:22));
-    // 彈簧（略欠阻尼 → 會晃一兩下，Q 彈感）
+    st.hop+=(hopT-st.hop)*Math.min(1,dt*(dash||knock?30:24));
+    // 彈簧（略欠阻尼 → 會晃一兩下，Q 彈感）；前傾也是彈簧（衝完會晃回來）
     const K=520, C=15, sdt=Math.min(dt,0.033);
     st.vsx+=((tx-st.sx)*K-st.vsx*C)*sdt; st.sx+=st.vsx*sdt;
     st.vsy+=((ty-st.sy)*K-st.vsy*C)*sdt; st.sy+=st.vsy*sdt;
-    st.lean+=(leanT-st.lean)*Math.min(1,dt*12);
-    st.size+=((o.sizeMul||1)-st.size)*Math.min(1,dt*8);
+    st.vlean+=((leanT-st.lean)*300-st.vlean*17)*sdt; st.lean=Phaser.Math.Clamp(st.lean+st.vlean*sdt,-55,55);
+    st.rock+=(rock-st.rock)*Math.min(1,dt*20);
     // 熟度：60% 以上微顫、85% 以上劇烈發抖
-    let jx=0, ang=st.lean;
+    let jx=0, ang=st.lean+st.rock;
     const heat=o.heat||0;
-    if(heat>85){ jx=Math.sin(this.time.now*0.061+st.seed)*1.1+Math.sin(this.time.now*0.097+st.seed*2)*0.6; ang+=Math.sin(this.time.now*0.045+st.seed)*5; }
-    else if(heat>60){ ang+=Math.sin(this.time.now*0.02+st.seed)*2.5; }
-    const base=o.base*st.size;
-    const turn=Math.max(0.12,Math.abs(st.faceDisp)); // 轉身時寬度先縮再展開
-    const hopPx=4;
+    if(heat>85){ jx=Math.sin(now*0.061+st.seed)*1.1+Math.sin(now*0.097+st.seed*2)*0.6; ang+=Math.sin(now*0.045+st.seed)*5; }
+    else if(heat>60){ ang+=Math.sin(now*0.02+st.seed)*2.5; }
+    const ar=ang*Math.PI/180;
     sp.setFlipX(st.faceDisp<0);
-    sp.setScale(base*st.sx*turn, base*st.sy);
-    sp.setAngle(ang);
-    sp.setPosition(x+jx, y-st.hop*hopPx);
-    // 地面陰影：離地越高越小越淡
+    sp.setScale(base*st.sx*this._animTurn(st), base*st.sy);
+    sp.setAngle(ang+spin);
+    // 腳底當支點：身體中心 = 腳底 + 轉過角度的半身高（pf=0 時繞中心，騰空翻滾用）
+    sp.setPosition(x+jx+pf*L*st.sy*Math.sin(ar), y-st.hop+pf*L*(1-st.sy*Math.cos(ar)));
+    // 依腳的 y 排前後：站在下面（靠近鏡頭）的人蓋住上面的人
+    const dz=9.05+0.9*Phaser.Math.Clamp((gy-(G.y-30))/(G.h+90),0,1)+(o.top?0.004:0);
+    if(Math.abs(sp.depth-dz)>0.002) sp.setDepth(dz);
+    // 衝撞：前面一道「推」的氣浪 + 後面三條速度線（每幀重畫在 _poseLayer）
+    if(dash){
+      const k=Math.sin(pr*Math.PI);
+      if(k>0.05){
+        const g=this._poseFx(), a0=Math.atan2(dash.dy,dash.dx), R=Hh*0.5, cx=sp.x-dash.dx*R*0.25, cy=sp.y-dash.dy*R*0.25;
+        g.lineStyle(2+4*k,0xffffff,0.8*k); g.beginPath(); g.arc(cx,cy,R*1.05,a0-0.8,a0+0.8); g.strokePath();
+        g.lineStyle(2,0xffe9a8,0.55*k); g.beginPath(); g.arc(cx,cy,R*1.05+7,a0-0.5,a0+0.5); g.strokePath();
+        const nx=-dash.dy, ny=dash.dx;
+        for(let i=-1;i<=1;i++){
+          const ox=sp.x+nx*i*R*0.5-dash.dx*R*(0.9+0.15*Math.abs(i)), oy=sp.y+ny*i*R*0.5-dash.dy*R*(0.9+0.15*Math.abs(i)), len=(i?16:26)*k+6;
+          g.lineStyle(i?2:3,0xffffff,0.5*k); g.lineBetween(ox,oy,ox-dash.dx*len,oy-dash.dy*len);
+        }
+      }
+    }
+    // 地面陰影（兩層：外圈淡、裡面深）：離地越高越小越淡，留在地上不跟著跳
     if(o.shadow&&o.shadow.scene){
-      const dw=sp.width*base, lift=Math.min(1,st.hop/3);
-      o.shadow.fillStyle(0x000000,0.32-lift*0.14);
-      o.shadow.fillEllipse(x, y+sp.height*base*0.40, dw*(0.55-lift*0.15), dw*(0.17-lift*0.05));
+      const dw=sp.width*base, lift=Math.min(1,st.hop/12);
+      o.shadow.fillStyle(0x000000,0.13-lift*0.05);
+      o.shadow.fillEllipse(x, gy+1, dw*(0.76-lift*0.18), dw*(0.25-lift*0.06));
+      o.shadow.fillStyle(0x000000,0.30-lift*0.13);
+      o.shadow.fillEllipse(x, gy, dw*(0.52-lift*0.16), dw*(0.16-lift*0.05));
     }
   }
   // 頓幀期間：其他東西都停住，但受擊者要立刻呈現「閃白＋壓扁」那一格
@@ -4765,8 +4840,8 @@ class GameScene extends Phaser.Scene {
     try{
       const fz=(sp,st)=>{
         if(!sp||!sp.scene||!sp.visible||!st) return;
-        const b=(sp.baseScale||0.25)*st.size;
-        sp.setScale(b*st.sx*Math.max(0.12,Math.abs(st.faceDisp)), b*st.sy);
+        const b=(sp.baseScale||0.25)*st.size*(st.psp||1);
+        sp.setScale(b*st.sx*this._animTurn(st), b*st.sy);
         this._applyFlash(sp,st,0);
       };
       fz(this.playerSprite,this.pAnim);
@@ -4777,11 +4852,11 @@ class GameScene extends Phaser.Scene {
   _applyFlash(sp,st,dt){
     if(!sp||!sp.scene||!st) return;
     if(st.flash>0){
-      if(!sp.tintFill) st.preTint=sp.tintTopLeft;
+      if(!sp.tintFill) st.preTint=[sp.tintTopLeft,sp.tintTopRight,sp.tintBottomLeft,sp.tintBottomRight];
       st.flash-=dt; st.flashing=true; sp.setTintFill(0xffffff);
     } else if(st.flashing){
       st.flashing=false; // 閃白結束：還原原本染色（暈眩中 AI 不會每幀重設染色）
-      if(sp.tintFill) sp.setTint(st.preTint!==undefined?st.preTint:0xffffff);
+      if(sp.tintFill){ const t=st.preTint; if(t&&t.length===4) sp.setTint(t[0],t[1],t[2],t[3]); else sp.setTint(0xffffff); }
     }
   }
   // ── 打擊感：頓幀 + 受擊閃白/擠壓 + 衝擊星 + 重擊音 ─────────────
@@ -4790,7 +4865,7 @@ class GameScene extends Phaser.Scene {
     try{
       const pw=Math.max(0.3,o.power||1);
       if(this.netRole==='host'&&this._netEv&&o.x!==undefined) this._netEv.push({k:'h',x:Math.round(o.x),y:Math.round(o.y),dx:+(o.dx||0).toFixed(2),dy:+(o.dy||0).toFixed(2),p:+pw.toFixed(1),v:this._animId(o.anim),s:o.star===false?0:1}); // 客戶端也要有打擊感
-      if(o.anim) this._charImpact(o.anim,o.dx||0,o.dy||0,pw);
+      if(o.anim){ this._charImpact(o.anim,o.dx||0,o.dy||0,pw); if(pw<0.8) this._charKnock(o.anim,o.dx||0,o.dy||0,0.8); }
       if(o.anim&&this.netRole!=='client'){ const v=o.anim===this.pAnim?this:this.enemies.find(e=>e.anim===o.anim); if(v){ const a=v._aw||(v._aw={}); a.took=(a.took||0)+1; } } // 被打幾下（結算獎項）
       const fr=o.freeze!==undefined?o.freeze:Math.round(35+pw*30);
       if(o.shake!==false) this._addTrauma(fr>0?Math.min(0.8,0.45+pw*0.2):0.12); // 命中一定有感的震動（跟你無關的互推不震）
@@ -4833,7 +4908,7 @@ class GameScene extends Phaser.Scene {
     if(!sprite) return;
     const t=heat/100;
     // 熟度抖動改由 _animChar 處理；變色只做淡淡的暖色，熱度改用火焰特效表現（角色不會被染黑）
-    sprite.setTint(Phaser.Display.Color.GetColor(255, Math.round(255-t*70), Math.round(255-t*110)));
+    this._litTint(sprite,heat);
     if(heat>85){
       if(sweatTxt) sweatTxt.setVisible(true).setPosition(sprite.x+16,sprite.y-20).setText('😱');
       // 90%+ 紅光脈動
@@ -5987,7 +6062,7 @@ class GameScene extends Phaser.Scene {
           if(!_rep) this._xferHeat(null,e); e._lastHitBy='player'; e._lastHitT=this.time.now; if(this.stats) this.stats.hits++;
           if(!_rep&&this._outHit(e.x,e.y,mx,my)) this._addScore(null,1,e.x,e.y);
           else if(!_rep) this._tip('inhit',e.x,e.y,'往中間撞不加分','把人往烤盤邊緣撞才 +0.5 分（中間有洞時往洞推也算）；往中間撞只是推開他。');
-          this._charImpact(this.pAnim,mx,my,0.45); this.pAnim.flash=0; // 攻擊方也小震一下（不閃白）
+          this._charBump(this.pAnim,mx,my); // 攻擊方：撞到的回彈
           if(charBst>1.8)this.showPop('🔥 脆了！飛出去！');
           else if(resist<1)this.showPop('💪 撐住了！');
           else this.showPop('💥 撞飛！');
@@ -6195,7 +6270,7 @@ class GameScene extends Phaser.Scene {
       }
     }
     // 玩家動態：轉身/跳步/前傾/Q 彈/陰影（取代舊的假側面、假背面貼圖）
-    if(this.shadowLayer&&this.shadowLayer.scene) this.shadowLayer.clear();
+    if(this.shadowLayer&&this.shadowLayer.scene) this.shadowLayer.clear(); if(this._poseLayer&&this._poseLayer.scene) this._poseLayer.clear();
     if(this.playerSprite){
       const ds=(isDash&&this.dashState)?this.dashState:null;
       this._animChar(this.playerSprite,this.pAnim,this.p.x,this.p.y,dt,{
@@ -6203,7 +6278,7 @@ class GameScene extends Phaser.Scene {
         faceX:ds?ds.dx:this.lastDir.x, moving:isMoving,
         dash:ds?{prog:ds.dist/(ds.maxDist||1),dx:ds.dx,dy:ds.dy}:null,
         sizeMul:((this.ultState&&this.ultState.type==='pork')?1.45:1)*(this.activeEffects.garlic>0?1.6:1), // 豬肉大絕 / 大蒜：變超大
-        shadow:this.shadowLayer});
+        shadow:this.shadowLayer, top:true});
     }
     this.updateHeatFx(this.playerSprite,this.heat,this.sweatTxt);
     this._applyFlash(this.playerSprite,this.pAnim,dt);
@@ -6492,7 +6567,7 @@ class GameScene extends Phaser.Scene {
             this._hitFeel({x:(this.p.x+e.x)/2,y:(this.p.y+e.y)/2,dx:pnx,dy:pny,power:cBst*_juicyRes,anim:this.pAnim});
             this._xferHeat(e,null); if(this.stats) this.stats.pushed++;
             if(!e.remote||this._outHit(this.p.x,this.p.y,pnx,pny)) this._addScore(e,1); this._pHitBy=e; this._pHitT=this.time.now;
-            this._charImpact(e.anim,pnx,pny,0.4); e.anim.flash=0;
+            this._charBump(e.anim,pnx,pny);
             if(this.activeEffects.juicy>0) this.showPop('💧 多汁彈開！');
             else if(cBst>1.8) this.showPop('🔥 脆了！被 '+e.label+' 推飛！');
             else         this.showPop('💥 被 '+e.label+' 推開！');
@@ -6502,7 +6577,7 @@ class GameScene extends Phaser.Scene {
             const cBst=(this.fx&&this.fx.heatKnock)?(0.55+(eRef.heat||0)/100*2.0):Math.min(1.5,1+(eRef.heat||0)/100*0.8);
             // AI 互推：碰撞點也噴油
             this._spawnCollisionOil((e.x+eRef.x)/2,(e.y+eRef.y)/2);
-            this._hitFeel({x:(e.x+eRef.x)/2,y:(e.y+eRef.y)/2,dx:pnx,dy:pny,power:0.5,anim:eRef.anim,freeze:0,shake:false});
+            this._hitFeel({x:(e.x+eRef.x)/2,y:(e.y+eRef.y)/2,dx:pnx,dy:pny,power:0.5,anim:eRef.anim,freeze:0,shake:false}); this._charBump(e.anim,pnx,pny);
             this._xferHeat(e,eRef); eRef._lastHitBy=e.label; eRef._lastHitT=this.time.now; if(!e.remote||this._outHit(eRef.x,eRef.y,pnx,pny)) this._addScore(e,1);
             this.tweens.add({targets:eRef,
               x:eRef.x+pnx*pForce*cBst,y:eRef.y+pny*pForce*cBst,
@@ -6570,7 +6645,7 @@ class GameScene extends Phaser.Scene {
       if(this.enemySprites[i]){
         this.enemySprites[i].setPosition(e.x,e.y).setVisible(true);
         const t=e.heat/100;
-        this.enemySprites[i].setTint(Phaser.Display.Color.GetColor(255, Math.round(255-t*70), Math.round(255-t*110)));
+        this._litTint(this.enemySprites[i],e.heat);
         if(this.enemyFx[i]){
           const _eae=e.activeEffects||{};
           const _icons=[];
@@ -6611,7 +6686,8 @@ class GameScene extends Phaser.Scene {
     this.enemies.forEach((e,i)=>{
       const sp=this.enemySprites[i];
       if(!e.alive||!sp||!sp.visible) return;
-      this._animChar(sp,e.anim,e.x,e.y,dt,{base:sp.baseScale||0.23,heat:e.heat,shadow:this.shadowLayer,sizeMul:(e.activeEffects&&e.activeEffects.garlic>0)?1.6:1});
+      const _dz=(e.charging&&!((e.stunTimer||0)>0))?((e._dashT>0)?{prog:1-e._dashT/0.22,dx:e._ddx||0,dy:e._ddy||0}:{prog:1-(e.chargeTime||0)/0.32,dx:e.chDx||0,dy:e.chDy||0}):null; // AI / 遠端真人衝撞也有姿勢
+      this._animChar(sp,e.anim,e.x,e.y,dt,{base:sp.baseScale||0.23,heat:e.heat,shadow:this.shadowLayer,sizeMul:(e.activeEffects&&e.activeEffects.garlic>0)?1.6:1,dash:_dz});
       if(e.remote){ if(!e._tag||!e._tag.scene) e._tag=this.add.text(0,0,'👤 '+e.label,{fontSize:'12px',color:'#9fe0ff',fontFamily:'sans-serif',fontStyle:'bold',stroke:'#000',strokeThickness:3}).setOrigin(0.5).setDepth(23);
         e._tag.setPosition(e.x,e.y-(this._crown===e?66:54)).setVisible(true); }
       this._applyFlash(sp,e.anim,dt);
