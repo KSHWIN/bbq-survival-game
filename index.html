@@ -5742,9 +5742,20 @@ class GameScene extends Phaser.Scene {
     this.add.text(PX,PY-PH/2+88,(title||'')+(reason?'　'+reason:''),{fontSize:'18px',color:win?'#88ffaa':'#ffb0a0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+1);
     // 計分規則（加權）
     const _lm=!!(this.fx&&this.fx.respawn);
-    { const rt=this.add.text(PX,PY-PH/2+118,_lm?'往外撞中 +0.5　擊落 +3　🎯快熟 +2　⚔復仇 +2　👑擊落第一名 +2\n🍶助攻 +1　👻鬼魂 +0.5 / +1　存活 +3　⚡最後 10 秒全部 ×2':'計分：撞中 ×1　擊落 ×3　👑擊落第一名 +2　活到最後 +3　⚡最後 10 秒 ×2',
-      {fontSize:'12px',color:'#ffcf8a',fontFamily:'sans-serif',backgroundColor:'#2a1608',padding:{x:8,y:3},align:'center',lineSpacing:2}).setOrigin(0.5).setDepth(D+1);
-      if(rt.width>PW-28) rt.setScale((PW-28)/rt.width); } // 以前這行比面板寬，兩邊被切掉
+    // 分數來源圖表（2026-11 試玩：算式要一個字一個字讀，太慢）：每人一條堆疊橫條，大家用同一把尺（最高分 = 滿格），
+    // 顏色 = 分數哪裡來的。[條上寫的字(或函式), 顏色, 條上字的顏色, 這項幾分, 圖例]；順序固定、顏色跟著項目不跟名次
+    const SEG=[
+      ['撞中',0x3987e5,'#ffffff',b=>b.hitPts||0,'撞中 +'+(_lm?'0.5':'1')],
+      ['擊落',0xd95926,'#ffffff',b=>(b.ko||0)*3,'擊落 +3'],
+      [b=>(b.tgt?'🎯':'')+(b.rev?'⚔':'')+(b.crn?'👑':''),0x199e70,'#0d0703',b=>((b.tgt||0)+(b.rev||0)+(b.crn||0))*2,_lm?'🎯⚔👑 加分 +2':'👑 擊落第一名 +2'],
+      ['⚡',0xc98500,'#0d0703',b=>b.dbl||0,'⚡ 最後 10 秒 ×2'],
+      [b=>(b.ast?'🍶':'')+((b.gh||b.gko)?'👻':''),0xd55181,'#ffffff',b=>(b.ast||0)+(b.gh||0)*0.5+(b.gko||0),'🍶 助攻・👻 鬼魂'],
+      ['存活',0x008300,'#ffffff',b=>b.surv||0,'存活 +3']];
+    { const ly=PY-PH/2+118, chip=10, gap=13, lg=this.add.graphics().setDepth(D+1);
+      const its=SEG.filter((s,j)=>_lm||j!==4).map(s=>({s,t:this.add.text(0,ly,s[4],{fontSize:'12px',color:'#ffcf8a',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1)}));
+      const tw=its.reduce((a,o)=>a+chip+5+o.t.width,0)+gap*(its.length-1), sc=Math.min(1,(PW-36)/tw); let x=PX-tw*sc/2;
+      its.forEach(o=>{ lg.fillStyle(o.s[1],1); lg.fillRoundedRect(x,ly-chip*sc/2,chip*sc,chip*sc,2); o.t.setScale(sc).setX(x+(chip+5)*sc); x+=(chip+5+o.t.width+gap)*sc; }); }
+    this.add.text(PX+PW/2-16,PY-PH/2+20,'🖱 指到名字 → 看算式',{fontSize:'11px',color:'#9a8a78',fontFamily:'sans-serif'}).setOrigin(1,0.5).setDepth(D+1);
     const fmt=v=>Math.round(v*10)/10;
     const formula=(r)=>{ const b=r.bd||{}, parts=[];
       if(b.hit) parts.push('撞中 '+b.hit+(_lm?'×0.5':'')+'='+fmt(b.hitPts||0));
@@ -5767,6 +5778,10 @@ class GameScene extends Phaser.Scene {
     if(_T&&_T.n) this.add.text(PX-PW/2+18,PY-PH/2+20,'第 '+_T.n+' 局',{fontSize:'14px',color:'#ffcf8a',fontFamily:'sans-serif',fontStyle:'bold',backgroundColor:'#3a1c0c',padding:{x:8,y:3}}).setOrigin(0,0.5).setDepth(D+1);
     // 排行榜（前 5 名；你不在前 5 就多列一行）
     const rows=board.slice(0,5); if(rank>5) rows.push(me);
+    const _segOf=r=>{ const b=r.bd||{}; return SEG.map(s=>({s,v:s[3](b),nm:typeof s[0]==='function'?s[0](b):s[0]})).filter(o=>o.v>0); };
+    const _max=Math.max(1,...rows.map(r=>Math.max(r.score||0,_segOf(r).reduce((a,o)=>a+o.v,0))));
+    const tip=this.add.text(0,0,'',{fontSize:'13px',color:'#ffe9b0',fontFamily:'sans-serif',backgroundColor:'rgba(0,0,0,0.94)',padding:{x:9,y:6}}).setOrigin(0.5,0).setDepth(D+6).setVisible(false);
+    this._resChart=[];
     rows.forEach((r,i)=>{
       const y=PY-PH/2+152+i*46, pos=board.indexOf(r)+1;
       const col=r.me?'#ffe066':(r.alive?'#ffffff':'#999999');
@@ -5782,8 +5797,27 @@ class GameScene extends Phaser.Scene {
       this.add.text(PX+70,y,(_lm?'出局 '+r.deaths+' 次':''),{fontSize:'13px',color:'#9a8a78',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1);
       { const w=this.multiplay?_wOf(r):0; if(w>0) this.add.text(PX+142,y,'🏆×'+w,{fontSize:'14px',color:'#ffd84a',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(D+1); }
       this.add.text(PX+PW/2-36,y,fmt(r.score)+' 分',{fontSize:'20px',color:col,fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(1,0.5).setDepth(D+1);
-      { const ft=this.add.text(PX-PW/2+68,y+19,formula(r),{fontSize:'13px',color:r.me?'#ffe9b0':'#c9b8a0',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1);
-        if(ft.width>PW-104) ft.setScale((PW-104)/ft.width); } // 項目多的時候縮一點，不要超出面板
+      { const x0=PX-PW/2+68, by=y+12, BH=15, BW=PW-104, segs=_segOf(r);
+        this._resChart.push({name:r.name,score:r.score,segs:segs.map(o=>({nm:o.nm,v:o.v,w:Math.round(o.v/_max*BW)}))});
+        if(!segs.length) this.add.text(x0,by+BH/2,'沒有得分',{fontSize:'12px',color:'#8a7a68',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1);
+        else{
+          this.add.rectangle(x0,by,BW,BH,0xffffff,0.05).setOrigin(0,0).setDepth(D+1); // 淡淡的滿格軌道：一眼看出離最高分多遠
+          const g=this.add.graphics().setDepth(D+1), labs=[]; let cx=x0;
+          segs.forEach((o,j)=>{ o.x=cx; o.w=o.v/_max*BW; cx+=o.w; o.last=j===segs.length-1;
+            const room=o.w-(o.last?0:2)-7; // 條上的字：放得下就寫「項目 分數」，不然只寫分數，再不然不寫（圖例 + 滑鼠算式補）
+            const lt=this.add.text(o.x+4,by+BH/2,o.nm+' '+fmt(o.v),{fontSize:'11px',color:o.s[2],fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0,0.5).setDepth(D+2).setAlpha(0);
+            if(lt.width>room) lt.setText(''+fmt(o.v));
+            if(lt.width>room) lt.destroy(); else labs.push(lt); });
+          const end=cx, draw=p=>{ if(!g.scene) return; g.clear(); const lim=x0+(end-x0)*p;
+            segs.forEach(o=>{ const w=Math.min(o.w-(o.last?0:2),lim-o.x); if(w<=0.5) return; g.fillStyle(o.s[1],1); // 段跟段之間留 2px 縫
+              if(o.last&&w>6) g.fillRoundedRect(o.x,by,w,BH,{tl:0,bl:0,tr:4,br:4}); else g.fillRect(o.x,by,w,BH); }); };
+          const pr={p:0}; draw(0);
+          this.tweens.add({targets:pr,p:1,delay:120+i*80,duration:420,ease:'Cubic.easeOut',onUpdate:()=>draw(pr.p),
+            onComplete:()=>{ draw(1); labs.forEach(l=>{ if(l.scene) this.tweens.add({targets:l,alpha:1,duration:140}); }); }});
+        }
+        const z=this.add.zone(PX,y+9,PW-40,44).setDepth(D+1).setInteractive(); // 詳細算式：滑鼠指到這一列才出現
+        z.on('pointerover',()=>{ if(!tip.scene) return; tip.setScale(1).setText(formula(r)); if(tip.width>PW-24) tip.setScale((PW-24)/tip.width); tip.setPosition(PX,y+32).setVisible(true); });
+        z.on('pointerout',()=>{ if(tip.scene) tip.setVisible(false); }); }
     });
     { const rv=boardIn?(boardIn[0]&&boardIn[0].rv):this._rivalText(); // 冤家：互相擊落最多次的一對
       if(rv) this.add.text(PX,PY+PH/2-140,rv,{fontSize:'15px',color:'#ff9a8a',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+1); }
