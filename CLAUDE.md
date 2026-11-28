@@ -15,6 +15,17 @@
 - 連線伺服器：`server.js`（socket.io，部署在 Render Singapore `https://bbq-sg.onrender.com`，舊 Oregon 服務可刪，push 到 master 會自動重新部署；免費方案會休眠）
 - 發布：GitHub Pages（https://kshwin.github.io/bbq-survival-game/），push 到 master 約 1 分鐘生效
 
+## 手機版（2026-11，iPhone 為主；**電腦版畫面和操作完全不變**）
+- 同一個網址自動判斷：`window.BBQ_TOUCH` = `matchMedia('(hover: none) and (pointer: coarse)')`（觸控筆電仍算電腦）；`?mobile=1` / `?mobile=0` 可以強制。手機時 `<html class="bbq-touch">`，**所有手機 CSS 都以 `html.bbq-touch` 開頭**（在 `<style id="bbq-touch-css">`）；只給手機 / 電腦看的元素用 `.tc-only` / `.pc-only`（`.tc-only` 在電腦是 `html:not(.bbq-touch) .tc-only{display:none !important}`，不能只寫 `.tc-only{display:none}`，會輸給別的 class）。
+- **觸控層 `#tc`**（最後一個 `<script>`，`if(!window.BBQ_TOUCH) return;`）：左邊浮動搖桿（8 方向）、右邊 A 衝撞 / S 技能 / D 大絕（有冷卻圈、大絕滿了金色「放！」、鬼魂時 A =「按住蓄力」）、左上 ✕（按兩下 = Esc）/ ?（= H，連線時隱藏）、右上 😀 表情選單、DOM 版時間 / 分數 / 熟度（從 `timerTxt` / `scoreTxt` / `heatTxt` 抄）。**做法是對 window 發合成的 `KeyboardEvent`（補上 `keyCode`）→ `GKEYS` 和 Phaser 按鍵都吃得到，遊戲邏輯一行都沒改**。`tick()` 每 0.1 秒決定要不要顯示（大廳隱藏 + Game 在跑 + 沒 `_resultShown` + 沒 `_introOpen`）。測試鉤子 `window._bbqTouch`。
+- 文字：`bbqTK(電腦字, 手機字)`（提示裡的「按 A / Enter / 任意鍵 / 滑鼠指到」都要走這個）。結算算式：手機點名字出現、放開後留 3 秒。
+- 直的也能玩（畫面在上、搖桿在下，像 Game Boy），有小提示「↻ 手機轉橫，畫面更大」；橫的時候搖桿 / 按鈕放在兩邊黑邊。
+- **白畫面防護（iPhone 按「單人遊玩」變白 —— 原因沒有在真機上確認，推測是 WebGL 畫布太大被 iOS 砍掉）**：手機 `_bbqZoom()` 上限 1.5（畫布 1440×1020；以前沒有 viewport meta 時是 2400×1700 + 抗鋸齒）、`antialiasGL:false`、手機不因為 resize 重建遊戲；`BBQ_GFX` 畫質階梯（`localStorage bbq_gfx`：0 = 1.5 倍 WebGL、1 = 1 倍 WebGL、2 = Canvas；`?gfx=N` 可指定）；`bbqBootMark()` 在開遊戲時寫 `localStorage bbq_boot`，畫出 90 幀才清掉 → 下次開啟發現沒清掉就自動降一級；`webglcontextlost` 也會降級 + 提示。錯誤會用 `bbqToast()` 直接顯示在畫面上，首頁左上有一行小字（`#tc-diag`：畫質 / 螢幕大小 / WebGL 畫布大小）方便使用者截圖回報。
+- iOS 注意：`touch-action` 放在 `html`（`pan-x pan-y` 擋兩指縮放，iOS 不理 `user-scalable=no`）+ `#game` / `#tc`（`none`）；不要用 `vh` / `inset`（用 `%` 和 left/top/right/bottom）；輸入框字要 ≥16px 不然會自動放大；聲音要在 `touchend` / `click` 才能 resume；靜音鍵會把 WebAudio 關掉。
+- 大廳 / 等待室手機版面在 `/* ── 手機版 第二階段`（橫的高度只有約 340px：首頁縮小、表單縮小、等待室整張可捲 + 「開烤」黏在底部、按鈕放大到 38–44px）。
+- 還沒做（第三階段，要真機）：效能實測、手機當房主（建議房主用電腦）、Phaser 畫面裡的字在手機上偏小（結算、賽前設定）。
+- 測試（`bbqtools`）：`mobtouch.js`（觸控層全流程；`LAND=1` 橫、`ENG=webkit`）、`mobmp.js`（電腦房主 + 手機客人：邀請連結 → 搖桿 / A / 表情傳到房主 → 結算；也檢查電腦沒有手機的東西）、`mobwr.js`（等待室版面，`ROLE=guest`）、`mobshot.js`（`SCR=home|create|join|how`）。Playwright 用 `devices['iPhone 13 landscape']`；WebKit 裡點擊用 `page.evaluate(()=>el.click())`。補丁腳本留在 `bbqtools/mob/p1.py`–`p3.py`。
+
 ## 目前的遊戲規則（2026-11 定案）
 - **預設模式：三條命計分賽**（場地效果 `respawn`，預設開）。一局 60 秒，或只剩一人時結束；**比分數**。
   - 出局 -1 ❤，3 秒後回場（2 秒無敵，有「⬇ 你在這裡」光柱）。命用完 → **鬼魂**：沿烤盤外圈走、**按住 A 蓄力**丟**炭火彈**（越久越遠，約 1.3 秒丟到對面，放開才丟；`_ghostChargeStep` / `_rimAim(gp,ch)`；別的鬼魂蓄力時大家看得到小準心；遠端用 input 的 `ah`、快照 `ga`；AI 用 `_rimWalk` 沿周長走 + `_rimNeed` 算蓄力；測試 `ghostaim.js`。**鬼魂也有少量分數**：炸中 +0.5、炸出去 +1（`_ghostPts`，明細 `gh`/`gko`）。1 秒預告、炸飛 + 熟度 +15%、冷卻 6 秒）；炸彈炸下一個人 → 復活一次（1 條命）。鬼魂不能得分。

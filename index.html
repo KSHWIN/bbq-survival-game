@@ -2,11 +2,25 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" /><meta name="mobile-web-app-capable" content="yes" /><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>烤肉求生</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Huninn&display=swap" rel="stylesheet">
   <style>html,body{overflow:hidden;margin:0;padding:0;} #game{width:100vw;height:100vh;}</style>
   <script>
+    // 手機 / 平板（主要用手指、沒有滑鼠）→ 手機版：<html class="bbq-touch">。電腦（含觸控筆電）完全不受影響。?mobile=1 / ?mobile=0 可以強制
+    window.BBQ_TOUCH=(function(){ try{ const q=new URLSearchParams(location.search).get('mobile'); if(q==='1') return true; if(q==='0') return false;
+      return !!(window.matchMedia&&matchMedia('(hover: none) and (pointer: coarse)').matches); }catch(e){ return false; } })();
+    if(window.BBQ_TOUCH) document.documentElement.classList.add('bbq-touch');
+    function bbqTK(pc,touch){ return window.BBQ_TOUCH?touch:pc; } // 畫面上的字：電腦寫「方向鍵」，手機寫「搖桿」
+    // 手機畫質等級（0 正常 / 1 省記憶體 / 2 最保守）。上次開遊戲開到一半整頁掛掉（留著 bbq_boot 記號）→ 自動降一級。?gfx=0/1/2 可以強制
+    window.BBQ_GFX=0; window.BBQ_CRASHED=false;
+    if(window.BBQ_TOUCH){ try{ const LS=localStorage, q=new URLSearchParams(location.search).get('gfx');
+      let lv=+(LS.getItem('bbq_gfx')||0)||0;
+      if(LS.getItem('bbq_boot')){ LS.removeItem('bbq_boot'); if(q===null){ lv=Math.min(2,lv+1); window.BBQ_CRASHED=true; } }
+      if(q!==null&&q!=='') lv=Math.max(0,Math.min(2,+q||0));
+      LS.setItem('bbq_gfx',lv); window.BBQ_GFX=lv; }catch(e){} }
     const GKEYS={};
     window.addEventListener('keydown',e=>{GKEYS[e.code]=true;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))e.preventDefault();},{passive:false});
     window.addEventListener('keyup',e=>{GKEYS[e.code]=false;});
@@ -463,6 +477,150 @@ const TITLE_BG = "data:image/webp;base64,UklGRtxRAgBXRUJQVlA4INBRAgBwLgqdASoABgA
 @media (max-width: 720px) { .wr-set-grid { grid-template-columns:1fr 1fr; } .wr-head { flex-wrap:wrap; } .wr-invite-wrap { flex-wrap:wrap; gap:12px; } #screen-waiting .wr-waiting-layout { grid-template-columns:1fr; } }
 @media (prefers-reduced-motion: reduce) { #lobby-overlay *, #lobby-overlay *::before, #lobby-overlay *::after { animation:none !important; } }
   </style>
+<style id="bbq-touch-css">
+/* ══ 手機版（2026-11）：除了下面這一行「預設藏起來」，其他每一條都掛在 html.bbq-touch 底下 → 電腦完全不套用 ══ */
+#tc, #tc-toast, #tc-diag { display:none; }
+html:not(.bbq-touch) .tc-only { display:none !important; }
+html.bbq-touch { background:#0a0400; -webkit-text-size-adjust:100%; text-size-adjust:100%; touch-action:pan-x pan-y; } /* 可以捲、不能兩指放大 / 點兩下放大 */
+html.bbq-touch body { position:fixed; left:0; top:0; right:0; bottom:0; width:auto; height:auto; overscroll-behavior:none;
+  -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; }
+html.bbq-touch input { -webkit-user-select:text; user-select:text; font-size:16px; } /* 小於 16px iPhone 會自動放大整頁 */
+html.bbq-touch #game { position:fixed; left:0; top:0; right:0; bottom:0; width:auto; height:auto; touch-action:none; } /* 100vh 在 iPhone 會比看得到的範圍高 */
+html.bbq-touch #lobby-overlay { touch-action:pan-y; }
+html.bbq-touch .pc-only { display:none !important; }
+/* 直的拿：畫面在上面、按鈕在下面（像掌機）；橫的拿：畫面置中、按鈕在兩邊黑邊 */
+@media (orientation:portrait) { html.bbq-touch #game { top:env(safe-area-inset-top,0px); bottom:auto; height:70.84vw; } }
+html.bbq-touch #tc { position:fixed; left:0; top:0; right:0; bottom:0; z-index:9000; pointer-events:none; font-family:'Huninn','PingFang TC',sans-serif; color:#fff4d6; --u:1px; }
+html.bbq-touch #tc.on { display:block; }
+#tc > * { position:absolute; pointer-events:auto; touch-action:none; }
+#tc-joy { left:0; bottom:0; width:40%; top:36%; }
+#tc-base { position:absolute; left:calc(env(safe-area-inset-left,0px) + var(--u)*84); top:calc(100% - env(safe-area-inset-bottom,0px) - var(--u)*82);
+  width:calc(var(--u)*116); height:calc(var(--u)*116); transform:translate(-50%,-50%); border-radius:50%; pointer-events:none; opacity:.6; transition:opacity .15s;
+  background:radial-gradient(circle, rgba(255,244,214,.08) 0 54%, rgba(255,244,214,.2) 55% 100%); border:2px solid rgba(255,244,214,.5); box-shadow:0 0 0 2px rgba(42,18,6,.55); }
+#tc-joy.act #tc-base { opacity:1; }
+#tc-knob { position:absolute; left:50%; top:50%; width:calc(var(--u)*52); height:calc(var(--u)*52); margin:calc(var(--u)*-26) 0 0 calc(var(--u)*-26);
+  border-radius:50%; background:#fff4d6; border:3px solid #2a1206; box-shadow:0 3px 0 rgba(0,0,0,.45); }
+#tc-btns { right:calc(env(safe-area-inset-right,0px) + 8px); bottom:calc(env(safe-area-inset-bottom,0px) + 8px); width:calc(var(--u)*166); height:calc(var(--u)*170); pointer-events:none; }
+.tc-b { position:absolute; border-radius:50%; border:3px solid #2a1206; box-shadow:0 4px 0 rgba(0,0,0,.5); display:flex; flex-direction:column; align-items:center; justify-content:center;
+  pointer-events:auto; touch-action:none; overflow:hidden; color:#1a0d05; line-height:1; opacity:.92; }
+.tc-b b { position:relative; z-index:1; font-family:'Bungee','Huninn',sans-serif; font-weight:400; font-size:calc(var(--u)*26); }
+.tc-b small { position:relative; z-index:1; margin-top:2px; font-size:calc(var(--u)*12.5); font-weight:700; white-space:nowrap; }
+.tc-b i { position:absolute; left:0; top:0; right:0; bottom:0; border-radius:50%; pointer-events:none; background:conic-gradient(rgba(10,4,0,.7) var(--cd,0deg), transparent 0); } /* 冷卻 = 黑色扇形，轉完就能按 */
+.tc-b.cd b, .tc-b.cd small { color:#fff4d6; text-shadow:0 1px 2px #000; }
+.tc-b.dn { transform:translateY(3px) scale(.94); box-shadow:0 1px 0 rgba(0,0,0,.5); }
+.tc-b.off { filter:grayscale(.85) brightness(.55); }
+#tc-a { width:calc(var(--u)*88); height:calc(var(--u)*88); right:0; bottom:calc(var(--u)*6); background:#58b4ff; }
+#tc-a b { font-size:calc(var(--u)*32); }
+#tc-s { width:calc(var(--u)*66); height:calc(var(--u)*66); right:calc(var(--u)*96); bottom:0; background:#ffb020; }
+#tc-d { width:calc(var(--u)*66); height:calc(var(--u)*66); right:calc(var(--u)*8); bottom:calc(var(--u)*102); background:#cf95ff; }
+#tc-d.full { box-shadow:0 0 0 3px #ffe066, 0 0 18px 5px rgba(255,224,102,.85); animation:tcPulse .6s ease-in-out infinite alternate; }
+@keyframes tcPulse { to { transform:scale(1.09); } }
+#tc-tl, #tc-tr { display:flex; gap:6px; pointer-events:none; top:calc(env(safe-area-inset-top,0px) + 6px); flex-direction:column; }
+#tc-tl { left:calc(env(safe-area-inset-left,0px) + 6px); align-items:flex-start; }
+#tc-tr { right:calc(env(safe-area-inset-right,0px) + 6px); align-items:flex-end; }
+#tc-tl > *, #tc-tr > * { pointer-events:auto; }
+.tc-row { display:flex; gap:6px; }
+.tc-m { all:unset; box-sizing:border-box; min-width:44px; height:44px; padding:0 9px; border-radius:12px; background:rgba(42,18,6,.85); border:2px solid rgba(255,233,196,.55);
+  color:#ffe9c4; font-size:19px; font-weight:700; display:flex; align-items:center; justify-content:center; touch-action:none; white-space:nowrap; }
+.tc-m.warn { background:#b3261a; border-color:#fff; color:#fff; font-size:14px; }
+.tc-stat { background:rgba(10,4,0,.72); border-radius:10px; padding:3px 9px; font-weight:700; white-space:nowrap; text-shadow:0 1px 0 #000; pointer-events:none !important; line-height:1.15; }
+.tc-stat:empty { display:none; }
+#tc-time { font-family:'Bungee','Huninn',sans-serif; font-weight:400; font-size:calc(var(--u)*30); color:#ffcc66; }
+#tc-time.x2 { color:#ffe066; font-size:calc(var(--u)*22); }
+#tc-score { font-size:calc(var(--u)*18); color:#ffd84a; }
+#tc-heat { font-size:calc(var(--u)*18); color:#fff4d6; }
+#tc-heat.h1 { color:#ffcc00; }
+#tc-heat.h2 { color:#ff7a4d; }
+#tc-emo { display:none; position:absolute; top:50px; right:0; grid-template-columns:44px 44px; gap:6px; padding:6px; border-radius:14px; background:rgba(10,4,0,.8); }
+#tc-emo.open { display:grid; }
+#tc-emo .tc-m { font-size:24px; padding:0; }
+#tc-rot { display:none; left:50%; top:calc(env(safe-area-inset-top,0px) + 70.84vw + 58px); transform:translateX(-50%); pointer-events:none !important;
+  background:rgba(42,18,6,.9); border:2px solid #ffd23f; border-radius:999px; padding:5px 14px; font-size:14px; font-weight:700; white-space:nowrap; }
+@media (orientation:portrait) {
+  html.bbq-touch #tc-tl, html.bbq-touch #tc-tr { top:calc(env(safe-area-inset-top,0px) + 70.84vw + 6px); flex-direction:row; align-items:center; }
+  html.bbq-touch #tc-tr { flex-direction:row-reverse; }
+  html.bbq-touch #tc-joy { top:calc(env(safe-area-inset-top,0px) + 70.84vw + 56px); width:50%; }
+  html.bbq-touch #tc-base { left:50%; top:calc(100% - env(safe-area-inset-bottom,0px) - 9vh - var(--u)*88); }
+  html.bbq-touch #tc-btns { bottom:calc(env(safe-area-inset-bottom,0px) + 9vh); right:calc(env(safe-area-inset-right,0px) + 14px); }
+  html.bbq-touch #tc-rot.show { display:block; }
+  html.bbq-touch #tc-tl, html.bbq-touch #tc-tr, html.bbq-touch .tc-row { gap:5px; }
+  html.bbq-touch .tc-stat { padding:3px 6px; }
+  html.bbq-touch #tc-time { font-size:calc(var(--u)*22); }
+  html.bbq-touch #tc-time.x2, html.bbq-touch #tc-score, html.bbq-touch #tc-heat { font-size:calc(var(--u)*15); }
+}
+html.bbq-touch #tc-toast { display:block; position:fixed; left:50%; top:calc(env(safe-area-inset-top,0px) + 8px); transform:translateX(-50%); z-index:100000; box-sizing:border-box; max-width:92vw;
+  background:#2a1206; border:2px solid #ffd23f; color:#fff4d6; border-radius:12px; padding:8px 12px; font:14px/1.45 'Huninn',sans-serif; word-break:break-word; opacity:0; pointer-events:none; transition:opacity .2s; }
+html.bbq-touch #tc-toast.show { opacity:1; pointer-events:auto; }
+html.bbq-touch #tc-toast.err { border-color:#ff6a5a; }
+html.bbq-touch #tc-diag { display:block; position:absolute; left:calc(env(safe-area-inset-left,0px) + 8px); top:calc(env(safe-area-inset-top,0px) + 3px); z-index:6;
+  font:10px/1.2 monospace; color:rgba(255,233,196,.6); pointer-events:none; text-shadow:0 1px 0 #000; }
+
+/* ── 手機版 第二階段：大廳 / 表單 / 等待室 ── */
+html.bbq-touch #lobby-overlay { left:0; top:0; right:0; bottom:0; box-sizing:border-box; /* 瀏海 / 圓角 / 底部橫條讓開 */
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px); }
+html.bbq-touch #lobby-overlay::before, html.bbq-touch .lobby-embers, html.bbq-touch .ld-shade, html.bbq-touch #screen-landing.lobby-card { left:0; top:0; right:0; bottom:0; } /* 舊 iPhone 不認得 inset */
+html.bbq-touch #screen-landing.lobby-card { padding-top:env(safe-area-inset-top,0px); max-height:none; }
+html.bbq-touch .lobby-card { min-width:0; }
+html.bbq-touch .ld-cast i::after { display:none; }
+/* 怎麼玩：窄螢幕每一條規則改成「標題 + 往後縮排的一段字」（原本是 flex，按鍵圖示會把一句話切成好幾欄）*/
+html.bbq-touch .ld-how { box-sizing:border-box; width:min(640px,94%); max-height:calc(100% - 16px); padding:14px 14px 12px; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+html.bbq-touch .ld-how h2 { margin-bottom:8px; font-size:1.3rem; }
+html.bbq-touch .lobby-rules { padding:10px 12px; font-size:.9rem; }
+html.bbq-touch .lobby-rules > div { display:block; padding-left:5.1em; text-indent:-5.1em; }
+html.bbq-touch .lobby-rules > div > b { display:inline-block; width:5.1em; text-indent:0; }
+html.bbq-touch .lobby-rules kbd { text-indent:0; }
+html.bbq-touch .lobby-rules .lobby-keys.tc-only { padding-left:0; text-indent:0; text-align:center; line-height:2; }
+/* 表單 */
+html.bbq-touch .wd-form { max-height:calc(100% - 12px); overflow-y:auto; -webkit-overflow-scrolling:touch; }
+html.bbq-touch .wd-back { padding:9px 20px; }
+/* 等待室：整張木牌可以上下捲，「開烤」黏在最下面（不用捲到底才按得到）；按鈕放大到手指按得到 */
+html.bbq-touch #screen-waiting { max-height:calc(100% - 10px); -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+html.bbq-touch #screen-waiting .wr-go, html.bbq-touch #wr-waiting-msg { position:sticky; bottom:0; z-index:3; }
+html.bbq-touch #wr-waiting-msg { background:rgba(42,18,6,.94); border:2px solid var(--ink); border-radius:12px; padding:8px; }
+html.bbq-touch #screen-waiting .wr-toggle:not(.wr-switch):not(.wr-step) { min-height:38px; }
+html.bbq-touch #screen-waiting .wr-step { width:38px; height:38px; }
+html.bbq-touch #screen-waiting .wr-switch::after { content:''; position:absolute; left:-8px; right:-8px; top:-9px; bottom:-9px; }
+html.bbq-touch .wr-leave { min-width:44px; height:44px; font-size:1rem; }
+html.bbq-touch .wr-invite { min-height:44px; }
+@media (orientation:landscape) and (max-height:480px) {
+  /* 橫的拿（高度只有 340 左右）：首頁縮小、角色排排站變小 */
+  html.bbq-touch .ld-kicker, html.bbq-touch .ld-tag { display:none; }
+  html.bbq-touch .ld-hero { margin-top:6px; }
+  html.bbq-touch .ld-logo { font-size:2.5rem; }
+  html.bbq-touch .ld-ribbon { margin-top:2px; padding:1px 26px 2px; font-size:.72rem; }
+  html.bbq-touch .ld-menu { margin-top:8px; gap:7px; width:min(440px,62%); }
+  html.bbq-touch .ld-main { font-size:1.25rem; padding:8px 10px; }
+  html.bbq-touch .ld-main small { display:inline; margin:0 0 0 10px; }
+  html.bbq-touch .ld-host, html.bbq-touch .ld-join { padding-top:7px; padding-bottom:7px; font-size:1rem; }
+  html.bbq-touch .ld-sub { gap:6px; flex-wrap:nowrap; }
+  html.bbq-touch .ld-sub button { padding:7px 11px; font-size:.8rem; white-space:nowrap; }
+  html.bbq-touch .ld-cast { height:56px; }
+  html.bbq-touch .ld-cast i { width:46px; height:46px; margin:0 -3px 3px; }
+  html.bbq-touch .wd-form { padding:12px 26px 10px; }
+  html.bbq-touch .wd-title { font-size:1.5rem; margin-bottom:8px; }
+  html.bbq-touch .wd-form .lobby-input { padding:7px 12px; margin-bottom:7px; }
+  html.bbq-touch .wd-form .lobby-error { min-height:12px; font-size:.8rem; }
+  html.bbq-touch .wd-form .lobby-invite { margin-bottom:7px; padding-top:4px; padding-bottom:4px; }
+  html.bbq-touch .wd-btn { padding:7px 10px; font-size:1.2rem; }
+  html.bbq-touch .wd-back { margin-top:8px; padding:6px 18px; }
+  html.bbq-touch #screen-waiting.lobby-card-wide { padding:8px 16px 8px !important; }
+  html.bbq-touch .wr-head { margin:0 0 8px; }
+  html.bbq-touch .wr-title { font-size:1.35rem; }
+  html.bbq-touch #screen-waiting .wr-waiting-layout { gap:12px; margin-bottom:8px; }
+  html.bbq-touch .wr-char-detail .wr-portrait { width:68px; height:68px; }
+  html.bbq-touch .wr-char-detail .wr-portrait img { width:60px; height:60px; }
+  html.bbq-touch #screen-waiting .wr-go { margin-top:8px; padding:7px; font-size:1.2rem; }
+}
+@media (orientation:portrait) {
+  html.bbq-touch #screen-waiting.lobby-card-wide { width:100% !important; padding:12px 10px 10px !important; }
+  html.bbq-touch .wr-head { gap:8px; padding-left:2px; margin-bottom:10px; }
+  html.bbq-touch .wr-title { font-size:1.5rem; }
+  html.bbq-touch .wr-invite-wrap { gap:8px; }
+  html.bbq-touch #screen-waiting .wr-code { font-size:1.35rem; min-width:6.2em; }
+  html.bbq-touch .wr-char-detail .wr-portrait { width:76px; height:76px; }
+  html.bbq-touch .wr-char-detail .wr-portrait img { width:66px; height:66px; }
+}
+</style>
 </head>
 <body>
 <!-- ── Lobby Overlay ─────────────────────────────── -->
@@ -501,7 +659,8 @@ const TITLE_BG = "data:image/webp;base64,UklGRtxRAgBXRUJQVlA4INBRAgBwLgqdASoABgA
       <div><b>💥 推飛</b>越熟的人越容易被推飛——先把對手撞熱，再一口氣推出去</div>
       <div><b>⚡ 大絕</b>搶場上的能量球，吃滿 3 顆按 <kbd>D</kbd> 放大絕</div>
       <div><b>🎁 變數</b>道具和場地事件會隨機出現，看到提示就閃或去搶</div>
-      <div class="lobby-keys"><kbd>←↑↓→</kbd> 移動　<kbd>A</kbd> 推擠　<kbd>S</kbd> 技能　<kbd>D</kbd> 大絕　<kbd>1</kbd>–<kbd>4</kbd> 表情　<kbd>H</kbd> 說明</div>
+      <div class="lobby-keys tc-only">🕹 左邊搖桿移動　<kbd>A</kbd> 衝撞　<kbd>S</kbd> 技能　<kbd>D</kbd> 大絕　😀 表情</div>
+      <div class="lobby-keys pc-only"><kbd>←↑↓→</kbd> 移動　<kbd>A</kbd> 推擠　<kbd>S</kbd> 技能　<kbd>D</kbd> 大絕　<kbd>1</kbd>–<kbd>4</kbd> 表情　<kbd>H</kbd> 說明</div>
     </div>
     <button class="ld-btn ld-host" onclick="Lobby.toggleHow(false)">知道了！</button>
     </div>
@@ -1743,7 +1902,7 @@ class SelectScene extends Phaser.Scene {
     // ── 烤盤（地圖）──
     const mapY0=gy0+2*CH+GY+20;
     this.add.text(gx0+2,mapY0,'🔥 選擇烤盤',{fontSize:'16px',color:'#ffcf4a',fontFamily:FF,stroke:'#1a0800',strokeThickness:4}).setOrigin(0,0.5).setDepth(3);
-    this.add.text(gx0+5*CW+4*GX,mapY0,'鍵盤 1–4 也可以選',{fontSize:'11px',color:'#c9a27a',fontFamily:FF,stroke:'#1a0800',strokeThickness:3}).setOrigin(1,0.5).setDepth(3);
+    this.add.text(gx0+5*CW+4*GX,mapY0,bbqTK('鍵盤 1–4 也可以選',''),{fontSize:'11px',color:'#c9a27a',fontFamily:FF,stroke:'#1a0800',strokeThickness:3}).setOrigin(1,0.5).setDepth(3);
     const LW=134,LH=112,LG=(5*CW+4*GX-4*LW)/3, ly=mapY0+16+LH/2;
     const DCOLS=[0x6ad04a,0x9ad04a,0xffa020,0xff5a20,0xff2a10];
     this.lvCards=[];
@@ -1824,7 +1983,7 @@ class SelectScene extends Phaser.Scene {
     this.time.delayedCall(300,()=>this._startSelBGM());
 
     // ── 底部：操作說明 + 按鈕 ──
-    this.add.text(24,H-62,'操作　←↑↓→ 移動 ・ A 推擠 ・ S 技能 ・ D 大絕 ・ H 說明',{fontSize:'14px',color:'#ffe9c4',fontFamily:FF,stroke:'#000',strokeThickness:3}).setOrigin(0,0.5).setDepth(6);
+    this.add.text(24,H-62,bbqTK('操作　←↑↓→ 移動 ・ A 推擠 ・ S 技能 ・ D 大絕 ・ H 說明','操作　🕹 左邊搖桿移動 ・ 右邊按鈕 A 衝撞 ・ S 技能 ・ D 大絕'),{fontSize:'14px',color:'#ffe9c4',fontFamily:FF,stroke:'#000',strokeThickness:3}).setOrigin(0,0.5).setDepth(6);
     const guide=this.add.text(24,H-32,'📖 道具 & 場地事件說明',{fontSize:'13px',color:'#ffd23f',fontFamily:FF,backgroundColor:'#2a1206',padding:{x:10,y:5}}).setOrigin(0,0.5).setDepth(6).setInteractive({useHandCursor:true});
     guide.on('pointerover',()=>guide.setColor('#ffffff')); guide.on('pointerout',()=>guide.setColor('#ffd23f'));
     guide.on('pointerdown',()=>this._showItemGuide());
@@ -2470,6 +2629,7 @@ class GameScene extends Phaser.Scene {
     this.enemyCC={stun:0,slow:0};
     const AC=window.AudioContext||window.webkitAudioContext;
     this.ac=AC?new AC():null;
+    bbqBootMark();
     this.startBGM();
     this.events.once('shutdown',()=>{
       { const _tk=window.BBQMusic&&BBQMusic.tok; setTimeout(()=>{ if(window.BBQMusic&&BBQMusic.tok===_tk&&BBQMusic.want==='game') BBQMusic.play('menu'); },120); } // 離開遊戲（不是重開）→ 回選單音樂
@@ -3379,7 +3539,7 @@ class GameScene extends Phaser.Scene {
     this._pOut=true; this._ghostT=999; this.heat=0; this.dashState=null; this.abilityActive=null; this._stillT=0;
     if(this.ultState){ Object.values(this.ultState).forEach(v=>{ if(v&&v.destroy&&v.scene) v.destroy(); }); this.ultState=null; }
     this._gp=this._rimProject(this.p.x,this.p.y); this.p.x=this._gp.x; this.p.y=this._gp.y; this._ghostCD=2; this._gChg=false; this._gCh=0;
-    this._banner('👻 你變成鬼魂了','方向鍵沿外圈走，按住 A 蓄力（越久丟越遠）；炸中 +0.5、炸出去 +1 還能復活');
+    this._banner('👻 你變成鬼魂了',bbqTK('方向鍵','搖桿')+'沿外圈走，按住 A 蓄力（越久丟越遠）；炸中 +0.5、炸出去 +1 還能復活');
     this._refreshScoreTxt(); this._checkLivesEnd();
   }
   _revivePlayer(){
@@ -4348,7 +4508,7 @@ class GameScene extends Phaser.Scene {
     if(this.wind&&this.wind.on&&this.wind.str>0&&!this._netGhost&&!((this._localDash||0)>0)){ const _w=this.wind, _wx=_w.x*_w.str*dt, _wy=_w.y*_w.str*dt; if(inGrill(this.p.x+_wx,this.p.y+_wy,14)){ this.p.x+=_wx; this.p.y+=_wy; } }
     if(this.wind&&this.wind.on){ this._windParts(dt); this.drawWind(); }
     if(_gCore>0&&!this._netGhost){ const _cx=G.x+G.w/2,_cy=G.y+G.h/2,_dx=this.p.x-_cx,_dy=this.p.y-_cy,_d=Math.hypot(_dx,_dy)||1; if(_d<_gCore+4){ this.p.x=_cx+_dx/_d*(_gCore+4); this.p.y=_cy+_dy/_d*(_gCore+4); } }
-    this._netStuck=!!en.sk; if(en.gh&&!this._netGhost) this._banner('👻 你變成鬼魂了','方向鍵沿外圈走，按住 A 蓄力（越久丟越遠）；炸中 +0.5、炸出去 +1 還能復活'); this._netGhost=!!en.gh;
+    this._netStuck=!!en.sk; if(en.gh&&!this._netGhost) this._banner('👻 你變成鬼魂了',bbqTK('方向鍵','搖桿')+'沿外圈走，按住 A 蓄力（越久丟越遠）；炸中 +0.5、炸出去 +1 還能復活'); this._netGhost=!!en.gh;
     if(en.pc>0.05) this._dashLock=Math.max(this._dashLock||0,this.time.now+en.pc*1000-150);
     // 對位置：跟「自己送出第 q 個按鍵、再過 qa 秒」那時的位置比（不是跟現在比）。
     // 以前直接拉向房主的位置 → 房主的位置一定比你慢（網路延遲）→ 一直被往回拉，角色很難動。
@@ -4461,7 +4621,7 @@ class GameScene extends Phaser.Scene {
     ['ONE','TWO','THREE','FOUR'].forEach((k,i)=>{ this.input.keyboard.on('keydown-'+k,()=>this._emoteKey(i+1)); this.input.keyboard.on('keydown-NUMPAD_'+k,()=>this._emoteKey(i+1)); }); // 快捷表情
     if(!window._bbqIntroSeen&&!this.multiplay) this._showIntro(true);
     // 連線模式沒有說明卡：開場用橫幅提示按鍵（每個人自己顯示，不廣播）
-    if(this.multiplay) this.time.delayedCall(700,()=>{ if(this.sys&&this.sys.isActive()) this._banner('🎮 操作方式','↑↓←→ 移動・A 衝撞・S 技能・D 大絕（集滿 3 格）・1–4 表情',true); });
+    if(this.multiplay) this.time.delayedCall(700,()=>{ if(this.sys&&this.sys.isActive()) this._banner('🎮 操作方式',bbqTK('↑↓←→ 移動・A 衝撞・S 技能・D 大絕（集滿 3 格）・1–4 表情','🕹 左邊搖桿移動・A 衝撞・S 技能・D 大絕（集滿 3 格）・😀 表情'),true); });
   }
   _addTrauma(a,cap){ const c=cap||1; const t=this._trauma||0; if(t>=c) return; this._trauma=Math.min(c,t+a); } // cap：連續事件的震動上限
   _updateShake(delta){
@@ -4496,7 +4656,8 @@ class GameScene extends Phaser.Scene {
   // 底部常駐按鍵列（在烤盤下方，不擋畫面）
   _buildKeyBar(){
     const y=H-21; // 最底部；烤盤正下方留給訊息列
-    const items=[['←↑↓→','移動'],['A','推擠'],['S',(this.charData&&this.charData.ability)||'技能'],['D','大絕'],['1–4','表情'],['H','說明']];
+    const items=window.BBQ_TOUCH?[['🕹','移動'],['A','衝撞'],['S',(this.charData&&this.charData.ability)||'技能'],['D','大絕'],['😀','表情']]
+      :[['←↑↓→','移動'],['A','推擠'],['S',(this.charData&&this.charData.ability)||'技能'],['D','大絕'],['1–4','表情'],['H','說明']];
     const cont=this.add.container(0,0).setDepth(30);
     const g=this.add.graphics(); cont.add(g);
     const parts=[]; let total=0;
@@ -4540,7 +4701,7 @@ class GameScene extends Phaser.Scene {
     // 按鍵
     y+=_gt.height+16;
     const g=add(this.add.graphics().setDepth(D+1));
-    const keys=[['←↑↓→','移動'],['A','推擠／衝撞'],['S','技能：'+((this.charData&&this.charData.ability)||'')],['D','大絕（集滿才能用）']];
+    const keys=[[bbqTK('←↑↓→','🕹 搖桿'),'移動'],['A','推擠／衝撞'],['S','技能：'+((this.charData&&this.charData.ability)||'')],['D','大絕（集滿才能用）']];
     const colW=(PW-40)/2;
     keys.forEach(([k,l],i)=>{
       const cx=PX-PW/2+20+(i%2)*colW+16, cy=y+Math.floor(i/2)*40;
@@ -4569,7 +4730,7 @@ class GameScene extends Phaser.Scene {
       T(cx+30,cy-10,name,16,'#ffffff',{fontStyle:'bold'}).setOrigin(0,0.5);
       T(cx+30,cy+11,desc,14,'#d9c7b0').setOrigin(0,0.5);
     });
-    const foot=T(PX,PY+PH/2-26,first?'按任意鍵開始（遊戲中按 H 可以再看一次）':'按任意鍵繼續',18,'#ffdd66',{fontStyle:'bold'}).setOrigin(0.5);
+    const foot=T(PX,PY+PH/2-26,first?bbqTK('按任意鍵開始（遊戲中按 H 可以再看一次）','點一下畫面開始（遊戲中按左上「?」可以再看一次）'):bbqTK('按任意鍵繼續','點一下畫面繼續'),18,'#ffdd66',{fontStyle:'bold'}).setOrigin(0.5);
     const t0=performance.now();
     const blink=window.setInterval(()=>{ if(foot.scene) foot.setAlpha(foot.alpha>0.6?0.35:1); },450);
     const close=()=>{
@@ -5755,7 +5916,7 @@ class GameScene extends Phaser.Scene {
       const its=SEG.filter((s,j)=>_lm||j!==4).map(s=>({s,t:this.add.text(0,ly,s[4],{fontSize:'12px',color:'#ffcf8a',fontFamily:'sans-serif'}).setOrigin(0,0.5).setDepth(D+1)}));
       const tw=its.reduce((a,o)=>a+chip+5+o.t.width,0)+gap*(its.length-1), sc=Math.min(1,(PW-36)/tw); let x=PX-tw*sc/2;
       its.forEach(o=>{ lg.fillStyle(o.s[1],1); lg.fillRoundedRect(x,ly-chip*sc/2,chip*sc,chip*sc,2); o.t.setScale(sc).setX(x+(chip+5)*sc); x+=(chip+5+o.t.width+gap)*sc; }); }
-    this.add.text(PX+PW/2-16,PY-PH/2+20,'🖱 指到名字 → 看算式',{fontSize:'11px',color:'#9a8a78',fontFamily:'sans-serif'}).setOrigin(1,0.5).setDepth(D+1);
+    this.add.text(PX+PW/2-16,PY-PH/2+20,bbqTK('🖱 指到名字 → 看算式','👆 點名字 → 看算式'),{fontSize:'11px',color:'#9a8a78',fontFamily:'sans-serif'}).setOrigin(1,0.5).setDepth(D+1);
     const fmt=v=>Math.round(v*10)/10;
     const formula=(r)=>{ const b=r.bd||{}, parts=[];
       if(b.hit) parts.push('撞中 '+b.hit+(_lm?'×0.5':'')+'='+fmt(b.hitPts||0));
@@ -5817,7 +5978,9 @@ class GameScene extends Phaser.Scene {
         }
         const z=this.add.zone(PX,y+9,PW-40,44).setDepth(D+1).setInteractive(); // 詳細算式：滑鼠指到這一列才出現
         z.on('pointerover',()=>{ if(!tip.scene) return; tip.setScale(1).setText(formula(r)); if(tip.width>PW-24) tip.setScale((PW-24)/tip.width); tip.setPosition(PX,y+32).setVisible(true); });
-        z.on('pointerout',()=>{ if(tip.scene) tip.setVisible(false); }); }
+        z.on('pointerout',()=>{ if(!tip.scene) return; if(!window.BBQ_TOUCH){ tip.setVisible(false); return; }
+          const k=tip._k=(tip._k||0)+1; window.setTimeout(()=>{ if(tip.scene&&tip._k===k) tip.setVisible(false); },3000); });
+        if(window.BBQ_TOUCH) z.on('pointerover',()=>{ tip._k=(tip._k||0)+1; }); }
     });
     { const rv=boardIn?(boardIn[0]&&boardIn[0].rv):this._rivalText(); // 冤家：互相擊落最多次的一對
       if(rv) this.add.text(PX,PY+PH/2-140,rv,{fontSize:'15px',color:'#ff9a8a',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+1); }
@@ -5848,7 +6011,7 @@ class GameScene extends Phaser.Scene {
       const bx=PX+(i-(btns.length-1)/2)*(_bw+12), by=PY+PH/2-64;
       const b=this.add.rectangle(bx,by,_bw,52,col,1).setStrokeStyle(2,0xffcc77).setDepth(D+1).setInteractive({useHandCursor:true});
       const t1=this.add.text(bx,by-8,label,{fontSize:'19px',color:'#ffffff',fontFamily:'sans-serif',fontStyle:'bold'}).setOrigin(0.5).setDepth(D+2);
-      const t2=this.add.text(bx,by+14,'（'+key+'）',{fontSize:'12px',color:'#ffdcb0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+2);
+      const t2=this.add.text(bx,by+14,bbqTK('（'+key+'）',''),{fontSize:'12px',color:'#ffdcb0',fontFamily:'sans-serif'}).setOrigin(0.5).setDepth(D+2);
       b.on('pointerover',()=>b.setScale(1.05)); b.on('pointerout',()=>b.setScale(1));
       b.on('pointerdown',()=>go(what));
       if(what==='rematch') _rb={b,t1,t2};
@@ -5857,7 +6020,7 @@ class GameScene extends Phaser.Scene {
       const rf=()=>{ if(!_rb.b.scene||this._leaving) return; const h=_isH(), ok=_rmOk();
         _rb.b.setFillStyle(h?0xff6600:0x3a3a3a,1).setAlpha(h&&!ok?0.55:1);
         _rb.t1.setText(h?'▶ 再來一局':'⏳ 等房主開下一局').setFontSize(h?19:17);
-        _rb.t2.setText(h?(ok?'（Enter）同樣的人直接開打':'…'):'不用按，會自動開始'); };
+        _rb.t2.setText(h?(ok?bbqTK('（Enter）','')+'同樣的人直接開打':'…'):'不用按，會自動開始'); };
       rf(); this.time.addEvent({delay:250,loop:true,callback:rf});
     }
     // 用鍵盤事件（快速點按也收得到）
@@ -6366,7 +6529,7 @@ class GameScene extends Phaser.Scene {
       ];
       const d=DIRS[Math.floor(Math.random()*DIRS.length)];
       this.tilt={x:d.x,y:d.y,force:130,rot:d.rot,state:'warn',timer:1.5,dur:3.0,lbl:d.lbl,hold:d.hold};
-      this._evt('tilt',G.x+G.w/2,G.y+G.h/2,'⚠ 廚師翻面','烤盤要翻了！按反方向鍵撐住，不然會一路滑出去');
+      this._evt('tilt',G.x+G.w/2,G.y+G.h/2,'⚠ 廚師翻面','烤盤要翻了！'+bbqTK('按反方向鍵','搖桿往反方向推')+'撐住，不然會一路滑出去');
       this._addTrauma(0.15);
       this.tiltTimer=this.tiltInterval();
     }
@@ -7914,7 +8077,7 @@ class GameScene extends Phaser.Scene {
         const _swAimGfx=this.add.graphics().setDepth(24);
         this.ultState={type:'shrimp',timer:8,phase:'aim',aimTimer:1.5,aimGfx:_swAimGfx};
         this.cameras.main.shake(120,0.008);
-        this.showPop('🦐 衝擊海浪！1.5 秒內用方向鍵瞄準！');
+        this.showPop('🦐 衝擊海浪！1.5 秒內用'+bbqTK('方向鍵','搖桿')+'瞄準！');
         break;}
       case 'beef':{
         const _bDx=this.lastDir.x||(this.lastDir.y?0:1);
@@ -7924,7 +8087,7 @@ class GameScene extends Phaser.Scene {
         this.ultState={type:'beef',timer:8,phase:'aim',aimTimer:1.5,
           dx:_bDx/_bDn,dy:_bDy/_bDn,aimGfx:_bAimGfx,hitSet:new Set()};
         this.cameras.main.shake(150,0.010);
-        this.showPop('🥩 鐵板衝鋒！方向鍵瞄準，1.5 秒後衝！');
+        this.showPop('🥩 鐵板衝鋒！'+bbqTK('方向鍵','搖桿')+'瞄準，1.5 秒後衝！');
         break;}
       case 'mushroom':{
         // 孢子迷霧：持續擴散10秒，敵人接觸累積1.8秒後定身
@@ -7962,7 +8125,7 @@ class GameScene extends Phaser.Scene {
           this.tweens.add({targets:go,r:1,delay:wi*25,duration:380,ease:'Quad.easeOut',
             onUpdate:()=>{wfx.clear();wfx.lineStyle(3*(1-go.r),0xaaffff,1-go.r);wfx.strokeCircle(W/2+Math.cos(ang)*W*0.52,H/2+Math.sin(ang)*H*0.52,go.r*55);},
             onComplete:()=>wfx.destroy()});}
-        this.showPop('🪽 火海轟炸！方向鍵移動準心，[S]投彈！');
+        this.showPop('🪽 火海轟炸！'+bbqTK('方向鍵','搖桿')+'移動準心，[S]投彈！');
         break;}
       case 'tofu':{
         // 吸熱冰封：熟度上限200%＋強力吸熱＋凍結 (5秒)
@@ -9113,8 +9276,21 @@ let gameInstance = null;
 function _bbqZoom(){
   const fit=Math.min(window.innerWidth/W, window.innerHeight/H);
   const z=fit*(window.devicePixelRatio||1);
+  if(window.BBQ_TOUCH){ // 手機：直拿橫拿算出來一樣（轉向不用重建畫布），上限壓低（小螢幕 1.5、平板 2）省記憶體；畫質等級 ≥1 → 固定 1
+    if((window.BBQ_GFX|0)>=1) return 1;
+    const a=Math.max(window.innerWidth,window.innerHeight), b=Math.min(window.innerWidth,window.innerHeight);
+    const zt=Math.min(a/W,b/H)*(window.devicePixelRatio||1);
+    return Math.max(1, Math.min(b>=600?2:1.5, Math.round(zt*100)/100));
+  }
   return Math.max(1, Math.min(2.5, Math.round(z*100)/100));
 }
+// 手機：開遊戲前留一個記號，畫面順利跑了 90 幀才擦掉。整頁掛掉（iPhone 變白畫面）記號就留著 → 下次載入自動降畫質
+function bbqBootMark(){
+  if(!window.BBQ_TOUCH) return;
+  window._bbqBootN=90; try{ localStorage.setItem('bbq_boot',''+Date.now()); }catch(e){}
+}
+function bbqBootClear(){ window._bbqBootN=0; try{ localStorage.removeItem('bbq_boot'); }catch(e){} }
+if(window.BBQ_TOUCH){ window.addEventListener('pagehide',bbqBootClear); document.addEventListener('visibilitychange',()=>{ if(document.hidden) bbqBootClear(); }); }
 function bbqFitCam(scene){
   const z=window.BBQ_Z||1;
   scene.cameras.main.setZoom(z).centerOn(W/2,H/2);
@@ -9136,7 +9312,7 @@ window.addEventListener('resize',()=>{
   // 視窗大小變很多時重建畫布（在大廳/選角畫面才重建，遊戲中不打斷）
   clearTimeout(_bbqResizeT);
   _bbqResizeT=setTimeout(()=>{
-    if(!gameInstance) return;
+    if(!gameInstance||window.BBQ_TOUCH) return; // 手機轉向、網址列收起來都會觸發 resize：不重建（倍率本來就跟方向無關）
     const nz=_bbqZoom();
     if(Math.abs(nz-(window.BBQ_Z||1))<0.15) return;
     const inGame=gameInstance.scene.isActive('Game')||gameInstance.scene.isActive('Team');
@@ -9148,8 +9324,11 @@ function createGame(){
   if(gameInstance){gameInstance.destroy(true);gameInstance=null;}
   window.BBQ_Z=_bbqZoom();
   const _gw=Math.round(W*window.BBQ_Z), _gh=Math.round(H*window.BBQ_Z);
+  const _T=!!window.BBQ_TOUCH, _lv=window.BBQ_GFX|0;
+  bbqBootMark();
   gameInstance=new Phaser.Game({
-    type:Phaser.AUTO,
+    type:(_T&&_lv>=2)?Phaser.CANVAS:Phaser.AUTO, // 手機最保守那一級不用 WebGL
+    ...(_T?{render:{antialiasGL:false}}:{}),      // 手機不開多重取樣（省顯示記憶體；貼圖還是平滑的）
     input:{keyboard:{capture:[38,40,37,39,32,83,82,27]}},
     width:_gw, height:_gh,
     // 畫布本身就是高解析度；FIT 只做最後的置中與微調
@@ -9159,6 +9338,11 @@ function createGame(){
     parent:'game',
   });
   window._phaserGame=gameInstance;
+  if(_T){ const g=gameInstance;
+    g.events.on('postrender',()=>{ if(window._bbqBootN>0&&--window._bbqBootN===0) bbqBootClear(); });
+    g.events.once('ready',()=>{ try{ if(g.canvas) g.canvas.addEventListener('webglcontextlost',()=>{ // 顯示卡把畫面收走了 → 下次用省記憶體的畫質
+      try{ localStorage.setItem('bbq_gfx',''+Math.max(1,_lv)); }catch(e){} if(window.bbqToast) bbqToast('⚠ 畫面中斷了（手機記憶體不夠）。重新整理網頁會自動改用省記憶體畫質',true,12000); }); }catch(e){} });
+  }
 }
 
 </script>
@@ -9241,7 +9425,7 @@ const Lobby = {
     if (rc.length !== 6 || !jc) return;
     this.showJoin(); jc.value = rc;
     const iv = document.getElementById('join-invite');
-    if (iv) { iv.style.display = ''; iv.innerHTML = '🎟 朋友邀你進房 <b>' + rc + '</b><br>' + (nk ? '正在帶你進去…' : '輸入暱稱，按 Enter 就進去'); }
+    if (iv) { iv.style.display = ''; iv.innerHTML = '🎟 朋友邀你進房 <b>' + rc + '</b><br>' + (nk ? '正在帶你進去…' : bbqTK('輸入暱稱，按 Enter 就進去','輸入暱稱就能進去')); }
     if (nk) this.joinRoom(); else { const jn = document.getElementById('join-nickname'); if (jn) setTimeout(() => jn.focus(), 60); }
   },
   _setTally(t) { window.MP.tally = t; this._updatePlayerList(window.MP.players || []); },
@@ -9603,6 +9787,143 @@ const Lobby = {
 };
 try { Lobby._initTitle(); } catch (e) { console.error('[title]', e); }
 try { Lobby._initInvite(); } catch (e) { console.error('[invite]', e); }
+</script>
+<script>
+// ══ 手機版觸控層（2026-11）：只有 BBQ_TOUCH（手機 / 平板）才建立，電腦整段跳過 ══
+// 做法：螢幕上的搖桿 / 按鈕送「假的鍵盤事件」→ 遊戲邏輯、連線都不用改（對遊戲來說就是有人在按鍵盤）
+(function(){
+  if(!window.BBQ_TOUCH) return;
+  const $=id=>document.getElementById(id);
+  const KC={ArrowLeft:37,ArrowUp:38,ArrowRight:39,ArrowDown:40,KeyA:65,KeyS:83,KeyD:68,KeyH:72,Escape:27,Digit1:49,Digit2:50,Digit3:51,Digit4:52};
+  const KN={KeyA:'a',KeyS:'s',KeyD:'d',KeyH:'h',Digit1:'1',Digit2:'2',Digit3:'3',Digit4:'4'};
+  const held={};
+  function key(code,down){ down=!!down; if(!!held[code]===down) return; held[code]=down;
+    let e; try{ e=new KeyboardEvent(down?'keydown':'keyup',{code:code,key:KN[code]||code,bubbles:true,cancelable:true}); }catch(_){ return; }
+    const kc=KC[code]; try{ Object.defineProperty(e,'keyCode',{get:()=>kc}); Object.defineProperty(e,'which',{get:()=>kc}); }catch(_){}
+    window.dispatchEvent(e); }
+  function tapKey(code){ key(code,true); setTimeout(()=>key(code,false),80); }
+  function releaseAll(){ Object.keys(held).forEach(c=>key(c,false)); }
+
+  // ── 畫面元件 ──
+  const tc=document.createElement('div'); tc.id='tc';
+  tc.innerHTML='<div id="tc-joy"><div id="tc-base"><div id="tc-knob"></div></div></div>'+
+    '<div id="tc-btns"><div class="tc-b" id="tc-d" data-k="KeyD"><i></i><b>D</b><small>大絕</small></div>'+
+    '<div class="tc-b" id="tc-s" data-k="KeyS"><i></i><b>S</b><small>技能</small></div>'+
+    '<div class="tc-b" id="tc-a" data-k="KeyA"><i></i><b>A</b><small>衝撞</small></div></div>'+
+    '<div id="tc-tl"><div class="tc-row"><button class="tc-m" id="tc-x" aria-label="離開">✕</button><button class="tc-m" id="tc-q" aria-label="說明">?</button></div>'+
+    '<div class="tc-stat" id="tc-time"></div><div class="tc-stat" id="tc-score"></div></div>'+
+    '<div id="tc-tr"><button class="tc-m" id="tc-e" aria-label="表情">😀</button><div class="tc-stat" id="tc-heat"></div><div id="tc-emo"></div></div>'+
+    '<div id="tc-rot">↻ 手機轉橫，畫面更大</div>';
+  document.body.appendChild(tc);
+  const toastEl=document.createElement('div'); toastEl.id='tc-toast'; document.body.appendChild(toastEl);
+  let toastT=0, lastMsg='', lastAt=0;
+  function toast(msg,err,ms){ const n=Date.now(); if(msg===lastMsg&&n-lastAt<8000) return; lastMsg=msg; lastAt=n;
+    toastEl.textContent=msg; toastEl.classList.toggle('err',!!err); toastEl.classList.add('show');
+    clearTimeout(toastT); toastT=setTimeout(()=>toastEl.classList.remove('show'),ms||5000); }
+  toastEl.addEventListener('click',()=>toastEl.classList.remove('show'));
+  window.bbqToast=toast;
+
+  // 手機沒有 F12：程式出錯直接顯示在畫面上（截圖就能回報）
+  window.addEventListener('error',e=>{ if(!e||!e.message) return; toast('⚠ 程式錯誤：'+e.message+(e.lineno?'（第 '+e.lineno+' 行）':''),true,10000); });
+  window.addEventListener('unhandledrejection',e=>{ const r=e&&e.reason; toast('⚠ 程式錯誤：'+((r&&r.message)||r||''),true,10000); });
+  if(typeof Phaser==='undefined') toast('⚠ 遊戲引擎沒載到（網路不穩？）請重新整理網頁',true,15000);
+  else if(window.BBQ_CRASHED) toast('上次遊戲沒開成功，這次自動降低畫質再試（畫質 '+window.BBQ_GFX+'）',false,8000);
+
+  // 大小：以短邊 375 為基準
+  let U=1;
+  function fit(){ U=Math.max(.8,Math.min(1.45,Math.min(window.innerWidth,window.innerHeight)/375)); tc.style.setProperty('--u',U+'px'); }
+  fit(); window.addEventListener('resize',fit); window.addEventListener('orientationchange',()=>setTimeout(fit,300));
+
+  // ── 搖桿：手指放哪裡，搖桿就出現在哪裡；拉太遠底座會跟著手指 ──
+  const joy=$('tc-joy'), base=$('tc-base'), knob=$('tc-knob'); let jid=null, cx=0, cy=0;
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  function jDir(dx,dy){ const r=46*U, d=Math.hypot(dx,dy); let L=false,R=false,Up=false,Dn=false;
+    if(d>r*0.3){ const k=(Math.round(Math.atan2(dy,dx)/(Math.PI/4))+8)%8; // 0 右、2 下、4 左、6 上（8 個方向）
+      R=k===0||k===1||k===7; L=k>=3&&k<=5; Dn=k>=1&&k<=3; Up=k>=5; }
+    key('ArrowLeft',L); key('ArrowRight',R); key('ArrowUp',Up); key('ArrowDown',Dn); }
+  function jMove(e){ const b=joy.getBoundingClientRect(), r=46*U; let dx=e.clientX-b.left-cx, dy=e.clientY-b.top-cy; const d=Math.hypot(dx,dy);
+    if(d>r*1.3){ const k=(d-r*1.3)/d; cx+=dx*k; cy+=dy*k; base.style.left=cx+'px'; base.style.top=cy+'px'; dx=e.clientX-b.left-cx; dy=e.clientY-b.top-cy; }
+    const d2=Math.hypot(dx,dy), m=d2>r?r/d2:1; knob.style.transform='translate('+(dx*m)+'px,'+(dy*m)+'px)'; jDir(dx,dy); }
+  function jReset(){ jid=null; base.style.left=''; base.style.top=''; knob.style.transform=''; joy.classList.remove('act'); jDir(0,0); }
+  joy.addEventListener('pointerdown',e=>{ if(jid!==null) return; jid=e.pointerId; try{ joy.setPointerCapture(jid); }catch(_){}
+    const b=joy.getBoundingClientRect(), m=46*U+8; cx=clamp(e.clientX-b.left,m,Math.max(m,b.width-m)); cy=clamp(e.clientY-b.top,m,Math.max(m,b.height-m));
+    base.style.left=cx+'px'; base.style.top=cy+'px'; joy.classList.add('act'); jMove(e); e.preventDefault(); });
+  joy.addEventListener('pointermove',e=>{ if(e.pointerId===jid) jMove(e); });
+  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>joy.addEventListener(ev,e=>{ if(e.pointerId===jid) jReset(); }));
+
+  // ── A / S / D：按住 = 按著鍵（鬼魂蓄力要用），最短按 70ms 免得點太快遊戲沒看到 ──
+  const B={};
+  tc.querySelectorAll('.tc-b').forEach(b=>{ const code=b.dataset.k; let pid=null, t0=0; B[code]={el:b,cdEl:b.querySelector('i'),sm:b.querySelector('small'),cd:-1,txt:''};
+    b.addEventListener('pointerdown',e=>{ if(pid!==null) return; pid=e.pointerId; try{ b.setPointerCapture(pid); }catch(_){} t0=performance.now(); b.classList.add('dn'); key(code,true); e.preventDefault(); });
+    const up=e=>{ if(e.pointerId!==pid) return; pid=null; b.classList.remove('dn'); const w=70-(performance.now()-t0);
+      if(w>0) setTimeout(()=>{ if(pid===null) key(code,false); },w); else key(code,false); };
+    b.addEventListener('pointerup',up); b.addEventListener('pointercancel',up); b._rel=()=>{ pid=null; b.classList.remove('dn'); }; });
+
+  // ── 小按鈕：離開（按兩下）、說明、表情 ──
+  const xb=$('tc-x'); let xT=0;
+  const xOff=()=>{ xT=0; xb.textContent='✕'; xb.classList.remove('warn'); };
+  xb.addEventListener('pointerdown',e=>{ e.preventDefault(); const n=Date.now();
+    if(xT&&n-xT<2500){ xOff(); tapKey('Escape'); }
+    else{ xT=n; xb.textContent='再按一次離開'; xb.classList.add('warn'); setTimeout(()=>{ if(xT===n) xOff(); },2500); } });
+  $('tc-q').addEventListener('pointerdown',e=>{ e.preventDefault(); tapKey('KeyH'); });
+  const emo=$('tc-emo');
+  (typeof BBQ_EMOTES!=='undefined'?BBQ_EMOTES:['😂','😡','👍','😭']).forEach((ch,i)=>{ const b=document.createElement('button'); b.className='tc-m'; b.textContent=ch;
+    b.addEventListener('pointerdown',e=>{ e.preventDefault(); tapKey('Digit'+(i+1)); emo.classList.remove('open'); }); emo.appendChild(b); });
+  $('tc-e').addEventListener('pointerdown',e=>{ e.preventDefault(); emo.classList.toggle('open'); });
+
+  // ── 擋掉手機瀏覽器的手勢：長按放大鏡 / 選字、兩指縮放、右鍵選單 ──
+  ['touchstart','touchmove'].forEach(ev=>tc.addEventListener(ev,e=>e.preventDefault(),{passive:false}));
+  document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
+  document.addEventListener('contextmenu',e=>{ const t=e.target; if(!(t&&t.closest&&t.closest('input'))) e.preventDefault(); });
+  function allUp(){ releaseAll(); jReset(); tc.querySelectorAll('.tc-b').forEach(b=>b._rel&&b._rel()); }
+  window.addEventListener('blur',allUp); document.addEventListener('visibilitychange',()=>{ if(document.hidden) allUp(); });
+
+  // ── 聲音：iPhone 規定要在「手指放開 / 點擊」的當下才准出聲。遊戲的音效是進場景才建立的 → 每次點擊順便叫醒 ──
+  const wake=()=>{ try{ const acs=[window._gameAC]; if(typeof gameInstance!=='undefined'&&gameInstance&&gameInstance.scene) gameInstance.scene.getScenes(true).forEach(s=>acs.push(s.ac));
+    acs.forEach(a=>{ if(a&&a.state==='suspended'&&a.resume) a.resume().catch(()=>{}); }); if(window.BBQMusic) BBQMusic.unlock(); }catch(_){} };
+  ['touchend','click'].forEach(ev=>window.addEventListener(ev,wake,{capture:true,passive:true}));
+
+  // ── 首頁左下角一行小字：出問題時截圖這行就知道手機用哪種畫質 ──
+  const diag=document.createElement('div'); diag.id='tc-diag'; const land=$('screen-landing'); if(land) land.appendChild(diag);
+  function diagUpd(){ let r=''; try{ const g=typeof gameInstance!=='undefined'&&gameInstance; if(g&&g.renderer&&g.canvas) r=' · '+(g.renderer.type===2?'WebGL':'Canvas')+' '+g.canvas.width+'×'+g.canvas.height; }catch(_){}
+    const t='📱 手機版 · 畫質 '+(window.BBQ_GFX|0)+' · '+window.innerWidth+'×'+window.innerHeight+'@'+(Math.round((window.devicePixelRatio||1)*10)/10)+r+(window.BBQ_CRASHED?' · 上次沒開成功':'');
+    if(diag.textContent!==t) diag.textContent=t; }
+
+  // ── 每 0.1 秒看一次遊戲狀態：要不要顯示按鈕、冷卻轉到哪、時間 / 分數 / 熟度（放大寫在畫面外，手機上遊戲裡的字太小）──
+  const timeEl=$('tc-time'), scoreEl=$('tc-score'), heatEl=$('tc-heat'), qb=$('tc-q'), rot=$('tc-rot');
+  let wasOn=false, hinted=false, n=0;
+  const setT=(el,t)=>{ if(el._t!==t){ el._t=t; el.textContent=t; } };
+  function setCd(code,frac,txt,cls){ const o=B[code]; frac=clamp(frac||0,0,1); const dg=Math.round(frac*360);
+    if(o.cd!==dg){ o.cd=dg; o.cdEl.style.setProperty('--cd',dg+'deg'); o.el.classList.toggle('cd',dg>0); }
+    if(o.txt!==txt){ o.txt=txt; o.sm.textContent=txt; }
+    if(o.cls!==cls){ o.el.classList.remove('off','full'); if(cls) o.el.classList.add(cls); o.cls=cls; } }
+  function gameScene(){ try{ const g=typeof gameInstance!=='undefined'&&gameInstance; if(!g||!g.scene||!g.scene.isActive('Game')) return null; return g.scene.getScene('Game'); }catch(_){ return null; } }
+  function tick(){
+    if((n++%10)===0) diagUpd();
+    const ov=$('lobby-overlay'), s=(ov&&!ov.classList.contains('hidden'))?null:gameScene();
+    const on=!!(s&&!s._resultShown&&!s._introOpen&&s.timerTxt);
+    if(on!==wasOn){ wasOn=on; tc.classList.toggle('on',on); emo.classList.remove('open'); xOff();
+      if(!on) allUp(); else{ fit(); if(!hinted){ hinted=true; rot.classList.add('show'); setTimeout(()=>rot.classList.remove('show'),6000); } } }
+    if(!on) return;
+    try{
+      const ghost=!!(s._pOut||s._netGhost);
+      if(ghost){ setCd('KeyA',(s._ghostCD||0)/6,'按住蓄力',''); setCd('KeyS',0,'技能','off'); setCd('KeyD',0,'大絕','off'); }
+      else{
+        setCd('KeyA',(s.pushCD||0)/1.2,'衝撞','');
+        const ac=s.abilityCD||0; setCd('KeyS',ac>0?ac/(s.abilityCDMax||ac||1):0,ac>0?Math.ceil(ac)+' 秒':'技能','');
+        const um=s.ultMax||3, uc=Math.min(um,Math.floor(s.ultCharge||0)), full=(s.ultCharge||0)>=um;
+        setCd('KeyD',full?0:1-(s.ultCharge||0)/um,full?'放！':uc+'/'+um,full?'full':'');
+      }
+      const tt=(s.timerTxt.text||'').replace(/\s+/g,' '); setT(timeEl,tt); timeEl.classList.toggle('x2',tt.indexOf('⚡')>=0);
+      const st=(s.scoreTxt&&s.scoreTxt.text)||'', m=st.match(/🏆\s*([\d.]+)/), hp=(st.match(/❤/g)||[]).length;
+      setT(scoreEl,'🏆 '+(m?m[1]:'0')+(st.indexOf('👻')>=0?' 👻':hp?' '+'❤'.repeat(hp):''));
+      const hv=parseFloat(s.heatTxt&&s.heatTxt.text); if(ghost||isNaN(hv)) setT(heatEl,''); else{ setT(heatEl,'🔥 '+Math.round(hv)+'%'); heatEl.className='tc-stat'+(hv>=80?' h2':hv>=50?' h1':''); }
+      qb.style.display=s.multiplay?'none':'';
+    }catch(_){}
+  }
+  setInterval(tick,100);
+  window._bbqTouch={key:key,tick:tick,held:held}; // 測試用
+})();
 </script>
 </body>
 </html>
